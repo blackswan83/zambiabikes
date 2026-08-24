@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Join the Club — Zambia Bikes</title>
+<meta name="description" content="Ask to join Zambia Bikes — the kids' mountain-biking club founded by Armand and Arthur. Free to join, every request personally reviewed by the Grown-Up Crew and confirmed with a parent or guardian.">
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="page-join">
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="site-header">
+  <div class="container header-inner">
+    <a class="brand" href="index.html" aria-label="Zambia Bikes — home">
+      <svg class="brand-mark" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+        <defs>
+          <linearGradient id="bmSky" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#FFE9A8"/><stop offset="1" stop-color="#E8791D"/>
+          </linearGradient>
+          <clipPath id="bmDisc"><circle cx="32" cy="32" r="28"/></clipPath>
+        </defs>
+        <circle cx="32" cy="32" r="31" fill="#0C2E1C"/>
+        <circle cx="32" cy="32" r="28" fill="url(#bmSky)"/>
+        <g clip-path="url(#bmDisc)">
+          <circle cx="32" cy="26" r="9" fill="#FFF3C4"/>
+          <path d="M 2 46 Q 18 38 34 44 T 62 43 L 62 64 L 2 64 Z" fill="#0C2E1C"/>
+          <path d="M 20 44 C 19.5 38 19.6 34 19 30 C 15 28.6 11.4 25.6 10 22 C 13 24.2 16.2 25.7 19 26 C 18.2 23.6 16.6 21.6 14.6 19.6 C 17.6 21 19.8 23 21.2 25 C 21.6 21.6 21 18.4 19.8 15.4 C 22.4 18.2 23.7 21.7 24 25 C 25.8 22.8 28.4 21.4 32 21 C 29.4 23.2 27.2 25.4 25.8 27.8 C 28.8 27.4 31.4 27.8 33.6 29 C 30.6 29.4 27.6 30.4 25.4 31.6 C 24.8 35.6 24.8 39.6 25.4 44 Z" fill="#0C2E1C"/>
+        </g>
+      </svg>
+      <span class="brand-word">Zambia<em>Bikes</em></span>
+    </a>
+    <button class="nav-toggle" aria-expanded="false" aria-controls="site-nav" aria-label="Open menu">
+      <span class="nav-toggle-bars"></span>
+    </button>
+    <nav class="site-nav" id="site-nav" aria-label="Main">
+      <a href="index.html">Home</a>
+      <a href="tours.html">Tours &amp; Events</a>
+      <a href="game.html">Play the Game</a>
+      <a href="about.html">Our Story</a>
+      <a href="safety.html">Parents &amp; Safety</a>
+      <a class="btn btn--copper btn--nav" href="join.html" aria-current="page">Join the Club</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+  <!-- ============ PAGE HERO ============ -->
+  <section class="page-hero">
+    <div class="container">
+      <p class="kicker">Become a member</p>
+      <h1>Ask to <em>join</em> the club</h1>
+      <p class="lede">Membership is free, and it starts with one small form. Every single request
+      is read by a real grown-up — nothing on this page is automatic.</p>
+    </div>
+    <div class="hero-hills" aria-hidden="true"><svg viewBox="0 0 1440 90" preserveAspectRatio="none" focusable="false"><path d="M0 60 Q 240 20 480 52 T 960 46 T 1440 40 L 1440 90 L 0 90 Z" fill="#FFF9EE"/></svg></div>
+  </section>
+
+  <!-- ============ THE FORM ============ -->
+  <section class="section">
+    <div class="container">
+
+      <div class="callout callout--safety reveal" style="margin-bottom:2.2rem">
+        <h2>🛡️ First, the club promise</h2>
+        <p style="margin-bottom:0">Every sign-up is a <strong>request</strong>. Armand and Arthur's
+        Grown-Up Crew reads each one, checks it with your parent or guardian, and only then unlocks
+        your membership. No surprises, no strangers, no exceptions.</p>
+      </div>
+
+      <div class="section-head">
+        <p class="kicker">The membership form</p>
+        <h2>Five minutes now, a whole <em>season</em> of riding later</h2>
+        <p class="lede">Fill this in together with your parent or guardian. We only ask for a rider's
+        first name and age — the contact details are theirs, not yours.</p>
+      </div>
+
+      <div class="join-layout">
+
+        <div class="form-card reveal">
+          <div data-request-status></div>
+          <form id="join-form" data-join-form>
+            <div class="field-row">
+              <div class="field">
+                <label for="jf-rider">Rider first name <span class="req">*</span></label>
+                <input id="jf-rider" name="rider" type="text" required maxlength="20" autocomplete="off" placeholder="Just your first name">
+              </div>
+              <div class="field">
+                <label for="jf-age">Rider age <span class="req">*</span></label>
+                <select id="jf-age" name="age" required>
+                  <option value="">Pick your age…</option>
+                  <option>6</option><option>7</option><option>8</option><option>9</option>
+                  <option>10</option><option>11</option><option>12</option><option>13</option>
+                  <option>14</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="jf-parent">Parent or guardian full name <span class="req">*</span></label>
+              <input id="jf-parent" name="parentName" type="text" required maxlength="60" autocomplete="name">
+            </div>
+
+            <div class="field">
+              <label for="jf-email">Parent or guardian email <span class="req">*</span></label>
+              <input id="jf-email" name="parentEmail" type="email" required maxlength="80" autocomplete="email" placeholder="Where we send the confirmation">
+            </div>
+
+            <div class="field">
+              <label for="jf-province">Where in Zambia do you ride?</label>
+              <select id="jf-province" name="province">
+                <option value="">Pick a province…</option>
+                <option>Central</option>
+                <option>Copperbelt</option>
+                <option>Eastern</option>
+                <option>Luapula</option>
+                <option>Lusaka</option>
+                <option>Muchinga</option>
+                <option>Northern</option>
+                <option>North-Western</option>
+                <option>Southern</option>
+                <option>Western</option>
+                <option>Outside Zambia</option>
+              </select>
+            </div>
+
+            <fieldset class="field" style="border:0;padding:0;margin:0 0 1.15rem;min-width:0">
+              <legend style="font-family:var(--font-display);font-weight:600;font-size:0.98rem;padding:0;margin-bottom:0.35rem">How's your riding right now?</legend>
+              <div class="radio-chips">
+                <label><input type="radio" name="level" value="starting">🌱 Just starting</label>
+                <label><input type="radio" name="level" value="trails">🚲 Comfortable on trails</label>
+                <label><input type="radio" name="level" value="downhill">⛰️ Ready for downhill</label>
+              </div>
+            </fieldset>
+
+            <div class="field">
+              <label for="jf-about">Tell us about you <span style="font-weight:400;color:var(--ink-soft)">(optional)</span></label>
+              <textarea id="jf-about" name="about" maxlength="500" placeholder="What do you love about bikes and being outdoors? Favourite animal? Dream trail? The Grown-Up Crew reads every word (and shares the best bits with Armand and Arthur). First names only in here — no surnames, schools or addresses, please."></textarea>
+            </div>
+
+            <label class="checkbox-row">
+              <input type="checkbox" required>
+              <span>My parent or guardian is filling this in with me, or has read it and said yes. <span class="req">*</span></span>
+            </label>
+            <label class="checkbox-row">
+              <input type="checkbox" required>
+              <span>We agree to <a href="#club-rules">the Club Rules</a> — helmets always, kind words only, leave no trace. <span class="req">*</span></span>
+            </label>
+
+            <button type="submit" class="btn btn--copper btn--big" style="width:100%">Send my request 🚵</button>
+
+            <div class="form-note">
+              <p><strong>What happens next:</strong> your request is prepared right here, and your parent or
+              guardian sends it to the Grown-Up Crew with one tap. A real adult reads it, then replies
+              within 3 days to confirm — only then is membership unlocked.</p>
+              <p>Membership costs nothing — now and always. Tours carry a small fee for guides and snacks (see <a href="tours.html">Tours &amp; Events</a>), and no kid is ever turned away over money. No newsletters, no spam — just the one confirmation email.</p>
+            </div>
+          </form>
+          <noscript>
+            <div class="form-note">
+              <p>This form needs JavaScript to send. No problem — just email
+              <a href="mailto:hello@zambiabikes.org">hello@zambiabikes.org</a> with the rider's first
+              name and age plus a parent or guardian's name and email, and the Grown-Up Crew will take
+              it from there.</p>
+            </div>
+          </noscript>
+        </div>
+
+        <aside class="join-side" aria-label="About membership">
+          <div class="card reveal">
+            <span class="card-emoji" aria-hidden="true">🧭</span>
+            <h3>What happens next</h3>
+            <ol class="steps">
+              <li>
+                <h4>Your request is ready</h4>
+                <p>You fill it in together, and your parent or guardian sends it to the Crew with one tap — never published, never shared.</p>
+              </li>
+              <li>
+                <h4>A grown-up reviews it</h4>
+                <p>Within 3 days, a real adult from the Crew reads your request. No robots deciding anything.</p>
+              </li>
+              <li>
+                <h4>Your parent gets an email</h4>
+                <p>We confirm everything with your parent or guardian before your membership is unlocked.</p>
+              </li>
+              <li>
+                <h4>First ride + member patch</h4>
+                <p>You pick a tour, we save your spot, and your First Ride patch is waiting at the finish.</p>
+              </li>
+            </ol>
+          </div>
+
+          <div class="card reveal">
+            <span class="card-emoji" aria-hidden="true">🎒</span>
+            <h3>Membership is…</h3>
+            <ul class="pill-list">
+              <li>Completely free — now and always</li>
+              <li>First pick of spots on every tour</li>
+              <li>Zambia Rush bragging rights at every club showdown</li>
+              <li>Member patches, drawn by Arthur himself</li>
+              <li>Trail-care days: plant trees, fix trails, ride home proud</li>
+            </ul>
+          </div>
+        </aside>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CLUB RULES ============ -->
+  <section class="section section--alt" id="club-rules">
+    <div class="container">
+      <div class="section-head section-head--center">
+        <p class="kicker">The fine print, kid-sized</p>
+        <h2>The Club <em>Rules</em></h2>
+        <p class="lede">Six rules. That's all. Armand and Arthur wrote them, the Grown-Up Crew
+        approved them, and every member rides by them.</p>
+      </div>
+      <div class="card-grid card-grid--3">
+        <article class="card reveal">
+          <span class="card-emoji" aria-hidden="true">🪖</span>
+          <h3>Helmets always</h3>
+          <p>No helmet, no ride. Not even to the end of the driveway. This one is carved in stone.</p>
+        </article>
+        <article class="card reveal">
+          <span class="card-emoji" aria-hidden="true">👯</span>
+          <h3>Buddy system</h3>
+          <p>Nobody rides alone. You always have a buddy in sight, and the sweep rider has you both.</p>
+        </article>
+        <article class="card reveal">
+          <span class="card-emoji" aria-hidden="true">👂</span>
+          <h3>Listen to guides</h3>
+          <p>When a guide says stop, we stop. They know the trail, the weather and the wildlife.</p>
+        </article>
+        <article class="card reveal">
+          <span class="card-emoji" aria-hidden="true">💛</span>
+          <h3>Kind words only</h3>
+          <p>We cheer the fastest rider and the newest one exactly the same. Teasing isn't our sport.</p>
+        </article>
+        <article class="card reveal">
+          <span class="card-emoji" aria-hidden="true">🌳</span>
+          <h3>Leave no trace</h3>
+          <p>Every wrapper comes home in your pocket. We leave the trail better than we found it.</p>
+        </article>
+        <article class="card reveal">
+          <span class="card-emoji" aria-hidden="true">🎉</span>
+          <h3>Have big fun</h3>
+          <p>Whoop on the downhills. Celebrate the mud. Fun is an official club rule, not a bonus.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PARENTS BAND ============ -->
+  <section class="section section--forest">
+    <div class="container" style="text-align:center">
+      <p class="kicker">For the grown-ups</p>
+      <h2>Parents, this club runs on <em>your</em> trust</h2>
+      <p class="lede" style="margin-inline:auto">Vetted membership, guided rides, and a strict no-chat
+      internet policy — everything we do is built so you can say yes with a calm heart. Read exactly
+      how we keep riders safe, on the trail and online.</p>
+      <div class="hero-ctas" style="justify-content:center">
+        <a class="btn btn--ghost btn--big" href="safety.html">Read our safety promises</a>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="container footer-grid">
+    <div>
+      <div class="footer-brand">
+        <img src="assets/logo.svg" alt="Zambia Bikes badge" width="64" height="64">
+        <span class="brand-word">Zambia<em>Bikes</em></span>
+      </div>
+      <p class="footer-tag">Ride wild. Ride kind. Ride Zambia.</p>
+      <p>A kids' mountain-bike club and free game, founded in 2026 by two best friends
+      and guarded by their Grown-Up Crew.</p>
+    </div>
+    <nav aria-label="Footer">
+      <h3>Explore</h3>
+      <ul class="footer-links">
+        <li><a href="index.html">Home</a></li>
+        <li><a href="tours.html">Tours &amp; Events</a></li>
+        <li><a href="game.html">Zambia Rush</a></li>
+        <li><a href="about.html">Our Story</a></li>
+        <li><a href="safety.html">Parents &amp; Safety</a></li>
+        <li><a href="join.html">Join the Club</a></li>
+      </ul>
+    </nav>
+    <div>
+      <h3>The Club Promise</h3>
+      <div class="footer-pledge">
+        <p>🛡️ Every member is vetted by real grown-ups before joining.</p>
+        <p>💬 No chat, no direct messages, no strangers — on the site or in the game.</p>
+        <p>✉️ Questions? <a href="mailto:hello@zambiabikes.org">hello@zambiabikes.org</a></p>
+      </div>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <div class="container">
+      <span>© <span data-year>2026</span> Zambia Bikes — built with muddy hands by Armand &amp; Arthur (both 10) and the Grown-Up Crew.</span>
+      <span>Made in Zambia 🇿🇲</span>
+    </div>
+  </div>
+</footer>
+
+<script src="js/tours-data.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
