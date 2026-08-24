@@ -5,7 +5,14 @@
    no chat, no accounts, ghosts instead of strangers.
    ========================================================================== */
 
-import * as THREE from "./vendor/three.module.min.js";
+import * as THREE from "three";
+import { Sky } from "./vendor/addons/objects/Sky.js";
+import { Water } from "./vendor/addons/objects/Water.js";
+import { EffectComposer } from "./vendor/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "./vendor/addons/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "./vendor/addons/postprocessing/UnrealBloomPass.js";
+import { OutputPass } from "./vendor/addons/postprocessing/OutputPass.js";
+import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
 
 (function () {
   "use strict";
@@ -210,7 +217,38 @@ import * as THREE from "./vendor/three.module.min.js";
   renderer.shadowMap.enabled = !lightMode;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-  var camera = new THREE.PerspectiveCamera(68, 16 / 9, 0.1, 1600);
+  var camera = new THREE.PerspectiveCamera(68, 16 / 9, 0.1, 4200);
+
+  /* ---------- post-processing (full detail only): bloom + FXAA ---------- */
+
+  var composer = null, cRenderPass = null;
+  function initComposer() {
+    if (composer) { composer.dispose(); composer = null; }
+    if (lightMode) return;
+    var pr = Math.min(window.devicePixelRatio || 1, 1.6);
+    composer = new EffectComposer(renderer);
+    composer.setPixelRatio(pr);
+    composer.setSize(960, 540);
+    cRenderPass = new RenderPass(new THREE.Scene(), camera);
+    composer.addPass(cRenderPass);
+    composer.addPass(new UnrealBloomPass(new THREE.Vector2(960, 540), 0.14, 0.45, 1.0));
+    composer.addPass(new OutputPass());
+    var fxaa = new FXAAPass();
+    fxaa.setSize(960 * pr, 540 * pr);
+    composer.addPass(fxaa);
+  }
+  initComposer();
+
+  function renderFrame(sc) {
+    renderer.toneMappingExposure = sc.exposure;
+    if (composer) {
+      cRenderPass.scene = sc.scene;
+      cRenderPass.camera = camera;
+      composer.render();
+    } else {
+      renderer.render(sc.scene, camera);
+    }
+  }
 
   /* canvas-drawn textures for sprites */
   function radialSprite(inner, outer, size) {
@@ -345,6 +383,109 @@ import * as THREE from "./vendor/three.module.min.js";
       g.stroke();
     }
   }, true);
+
+  /* ---------- procedural normal maps (FBM height -> sobel normals) ---------- */
+
+  function makeNormalTexture(size, octaves, strength, seed) {
+    function hn(ix, iz) {
+      var h = (ix * 374761393 + iz * 668265263 + seed * 2246822519) | 0;
+      h = Math.imul(h ^ (h >>> 13), 1274126177);
+      return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+    }
+    function vn(x, z) {
+      var ix = Math.floor(x), iz = Math.floor(z);
+      var fx = x - ix, fz = z - iz;
+      var u = fx * fx * (3 - 2 * fx), v = fz * fz * (3 - 2 * fz);
+      /* wrap the lattice so the texture tiles */
+      var m = size >> 3;
+      function w(a) { return ((a % m) + m) % m; }
+      var a = hn(w(ix), w(iz)), b = hn(w(ix + 1), w(iz));
+      var c = hn(w(ix), w(iz + 1)), d = hn(w(ix + 1), w(iz + 1));
+      return a * (1 - u) * (1 - v) + b * u * (1 - v) + c * (1 - u) * v + d * u * v;
+    }
+    var H = new Float32Array(size * size);
+    for (var z = 0; z < size; z++) {
+      for (var x = 0; x < size; x++) {
+        var h = 0, amp = 1, f = 1 / 16;
+        for (var o = 0; o < octaves; o++) {
+          h += amp * vn(x * f, z * f);
+          amp *= 0.55; f *= 2;
+        }
+        H[z * size + x] = h;
+      }
+    }
+    var c2 = document.createElement("canvas");
+    c2.width = c2.height = size;
+    var g = c2.getContext("2d");
+    var img = g.createImageData(size, size);
+    for (z = 0; z < size; z++) {
+      for (x = 0; x < size; x++) {
+        var xm = (x - 1 + size) % size, xp = (x + 1) % size;
+        var zm = (z - 1 + size) % size, zp = (z + 1) % size;
+        var dx = (H[z * size + xp] - H[z * size + xm]) * strength;
+        var dz = (H[zp * size + x] - H[zm * size + x]) * strength;
+        var inv = 1 / Math.sqrt(dx * dx + dz * dz + 1);
+        var i4 = (z * size + x) * 4;
+        img.data[i4] = Math.round(((-dx * inv) * 0.5 + 0.5) * 255);
+        img.data[i4 + 1] = Math.round(((-dz * inv) * 0.5 + 0.5) * 255);
+        img.data[i4 + 2] = Math.round((inv * 0.5 + 0.5) * 255);
+        img.data[i4 + 3] = 255;
+      }
+    }
+    g.putImageData(img, 0, 0);
+    var tx = new THREE.CanvasTexture(c2);
+    tx.wrapS = THREE.RepeatWrapping;
+    tx.wrapT = THREE.RepeatWrapping;
+    tx.colorSpace = THREE.NoColorSpace;
+    return tx;
+  }
+
+  var terrainNormalTex = makeNormalTexture(256, 5, 2.6, 5);
+  var waterNormalTex = makeNormalTexture(256, 4, 3.4, 11);
+
+  /* ---------- leaf clusters for organic tree canopies ---------- */
+
+  var leafTex = canvasTexture(256, 256, function (g, w, h) {
+    g.clearRect(0, 0, w, h);
+    var rnd = (function () { var s2 = 17; return function () { s2 = (s2 * 16807) % 2147483647; return s2 / 2147483647; }; })();
+    for (var i = 0; i < 190; i++) {
+      /* cluster leaves toward the middle, thin out at the edge */
+      var a = rnd() * 6.28, r = Math.pow(rnd(), 0.6) * 110;
+      var x = w / 2 + Math.cos(a) * r, y = h / 2 + Math.sin(a) * r * 0.82;
+      var v = 175 + Math.floor(rnd() * 80);
+      g.fillStyle = "rgba(" + Math.floor(v * 0.82) + "," + v + "," + Math.floor(v * 0.6) + "," + (0.75 + rnd() * 0.25) + ")";
+      g.save();
+      g.translate(x, y);
+      g.rotate(rnd() * 6.28);
+      g.beginPath();
+      g.ellipse(0, 0, 4 + rnd() * 9, 2.5 + rnd() * 4.5, 0, 0, 6.284);
+      g.fill();
+      g.restore();
+    }
+  });
+
+  /* 3 crossed vertical cards + 1 horizontal card, centered on origin */
+  var canopyCardGeo = (function () {
+    var pos = [], uv = [], idx = [];
+    function quad(verts) {
+      var b = pos.length / 3;
+      verts.forEach(function (v) { pos.push(v[0], v[1], v[2]); });
+      uv.push(0, 0, 1, 0, 1, 1, 0, 1);
+      idx.push(b, b + 1, b + 2, b, b + 2, b + 3);
+    }
+    for (var k = 0; k < 3; k++) {
+      var a = (k / 3) * Math.PI;
+      var cx = Math.cos(a), sz = Math.sin(a);
+      quad([[-cx, -1, -sz], [cx, -1, sz], [cx, 1, sz], [-cx, 1, -sz]]);
+    }
+    quad([[-1, 0.25, -1], [1, 0.25, -1], [1, 0.25, 1], [-1, 0.25, 1]]);
+    var g2 = new THREE.BufferGeometry();
+    g2.setAttribute("position", new THREE.BufferAttribute(new Float32Array(pos), 3));
+    g2.setAttribute("uv", new THREE.BufferAttribute(new Float32Array(uv), 2));
+    g2.setIndex(idx);
+    g2.computeVertexNormals();
+    return g2;
+  })();
 
   /* ---------- sky dome + layered horizon ridges ---------- */
 
@@ -573,20 +714,58 @@ import * as THREE from "./vendor/three.module.min.js";
     var wc = getWorld(id);
     var world = wc.world;
     var T = world.def.theme;
+    var sceneLeafMats = [];
+    function addSway(mat, amp, freq) {
+      mat.onBeforeCompile = function (shader) {
+        shader.uniforms.uZbTime = { value: 0 };
+        shader.vertexShader = "uniform float uZbTime;\n" + shader.vertexShader.replace(
+          "#include <begin_vertex>",
+          "#include <begin_vertex>\n#ifdef USE_INSTANCING\n{ vec4 zbp = instanceMatrix * vec4(0.0,0.0,0.0,1.0); " +
+          "float zbs = sin(uZbTime*" + freq.toFixed(3) + " + zbp.x*0.37 + zbp.z*0.29); " +
+          "transformed.x += zbs * max(0.0, transformed.y) * " + amp.toFixed(3) + "; " +
+          "transformed.z += cos(uZbTime*" + (freq * 0.8).toFixed(3) + " + zbp.x*0.31) * max(0.0, transformed.y) * " + (amp * 0.6).toFixed(3) + "; }\n#endif"
+        );
+        mat.userData.swayShader = shader;
+      };
+      sceneLeafMats.push(mat);
+    }
     var scene = new THREE.Scene();
     scene.background = new THREE.Color(T.fog);
     scene.fog = new THREE.Fog(T.fog, T.fogNear, lightMode ? T.fogFar * 0.75 : T.fogFar);
 
-    /* sky dome + two hazy horizon ridges, all camera-following for an endless world */
-    var dome = buildSkyDome(T);
-    scene.add(dome);
+    var sunDirEarly = new THREE.Vector3(T.sunPos[0], T.sunPos[1], T.sunPos[2]).normalize();
+    var exposure = lightMode ? 1.12 : (T.exposure || 0.65);
+
+    /* sky: physically-based scattering (full) or the gradient dome (light) */
+    var dome = null, skyObj = null;
+    if (lightMode) {
+      dome = buildSkyDome(T);
+      scene.add(dome);
+    } else {
+      skyObj = new Sky();
+      skyObj.scale.setScalar(2000);
+      var su = skyObj.material.uniforms;
+      su.turbidity.value = T.turbidity || 4;
+      su.rayleigh.value = T.rayleigh || 1.5;
+      su.mieCoefficient.value = T.mieCoeff || 0.005;
+      su.mieDirectionalG.value = T.mieG || 0.8;
+      su.sunPosition.value.copy(sunDirEarly);
+      if (su.cloudCoverage) {
+        su.cloudCoverage.value = T.cloudCover !== undefined ? T.cloudCover : 0.35;
+        su.cloudDensity.value = 0.5;
+        su.cloudScale.value = 0.00035;
+      }
+      scene.add(skyObj);
+    }
     var fogC = new THREE.Color(T.fog);
     var ridgeFar = buildRidge(640, 90, 120, fogC.clone().lerp(new THREE.Color(0x223322), 0.10), world.def.seed % 10);
     var ridgeNear = buildRidge(520, 90, 80, fogC.clone().lerp(new THREE.Color(0x1A2A1A), 0.22), (world.def.seed % 10) + 3);
     scene.add(ridgeFar, ridgeNear);
 
-    scene.add(new THREE.HemisphereLight(T.sky, T.hemiGround || T.dirtDark, T.hemiI || 0.95));
-    var sun = new THREE.DirectionalLight(T.sun, T.sunI || 1.35);
+    /* physical-sky exposure is low, so lights compensate to keep the ground lit */
+    var lightBoost = lightMode ? 1 : Math.min(2.4, 1.05 / exposure);
+    scene.add(new THREE.HemisphereLight(T.sky, T.hemiGround || T.dirtDark, (T.hemiI || 0.95) * lightBoost));
+    var sun = new THREE.DirectionalLight(T.sun, (T.sunI || 1.35) * lightBoost);
     sun.position.set(T.sunPos[0], T.sunPos[1], T.sunPos[2]);
     scene.add(sun);
     scene.add(sun.target);
@@ -599,15 +778,18 @@ import * as THREE from "./vendor/three.module.min.js";
       sun.shadow.bias = -0.0004;
       sun.shadow.normalBias = 1.2;
     }
-    var sunDir = new THREE.Vector3(T.sunPos[0], T.sunPos[1], T.sunPos[2]).normalize();
-    var amb = new THREE.AmbientLight(T.ambient, T.ambI || 0.35);
+    var sunDir = sunDirEarly;
+    var amb = new THREE.AmbientLight(T.ambient, (T.ambI || 0.35) * lightBoost);
     scene.add(amb);
 
-    /* sun disc */
-    var sunSp = new THREE.Sprite(new THREE.SpriteMaterial({ map: sunTex, transparent: true, depthWrite: false, fog: false }));
-    sunSp.scale.set(220, 220, 1);
-    sunSp.position.copy(sunDir).multiplyScalar(700);
-    scene.add(sunSp);
+    /* sun disc sprite (light mode only — the physical sky draws its own sun) */
+    var sunSp = null;
+    if (lightMode) {
+      sunSp = new THREE.Sprite(new THREE.SpriteMaterial({ map: sunTex, transparent: true, depthWrite: false, fog: false }));
+      sunSp.scale.set(220, 220, 1);
+      sunSp.position.copy(sunDir).multiplyScalar(700);
+      scene.add(sunSp);
+    }
 
     /* ---- terrain mesh with painted vertex colors ---- */
     var nx = world.nx, nz = world.nz, step = world.step;
@@ -651,8 +833,12 @@ import * as THREE from "./vendor/three.module.min.js";
     var detailMap = terrainDetailTex.clone();
     detailMap.needsUpdate = true;
     detailMap.repeat.set(((nx - 1) * step) / 15, ((nz - 1) * step) / 15);
+    var terrainNrm = terrainNormalTex.clone();
+    terrainNrm.needsUpdate = true;
+    terrainNrm.repeat.set(((nx - 1) * step) / 15, ((nz - 1) * step) / 15);
     var terrain = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
-      vertexColors: true, map: detailMap, roughness: 0.97, metalness: 0
+      vertexColors: true, map: detailMap, normalMap: terrainNrm,
+      normalScale: new THREE.Vector2(0.55, 0.55), roughness: 0.97, metalness: 0
     }));
     terrain.receiveShadow = true;
     scene.add(terrain);
@@ -662,24 +848,31 @@ import * as THREE from "./vendor/three.module.min.js";
     var parts = {};  /* type -> array of {geo, mat, yOff, sMul} pieces */
     function piece(g2, m2, y2, s2) { return { geo: g2, mat: m2, y: y2 || 0, s: s2 || 1 }; }
     var trunkM = lam(T.trunk), canM = lam(T.canopy), can2M = lam(T.canopy2), rockM = lam(T.rock);
+    /* leaf-card canopies: alpha-tested crossed cards read as organic foliage */
+    var leafM = new THREE.MeshLambertMaterial({ map: leafTex, alphaTest: 0.42, side: THREE.DoubleSide, color: T.canopy });
+    var leafM2 = new THREE.MeshLambertMaterial({ map: leafTex, alphaTest: 0.42, side: THREE.DoubleSide, color: T.canopy2 });
+    addSway(leafM, 0.05, 1.2);
+    addSway(leafM2, 0.06, 1.45);
 
     parts.miombo = [
-      piece(new THREE.CylinderGeometry(0.14, 0.22, 3.4, 6), trunkM, 1.7),
-      piece(new THREE.SphereGeometry(2.0, 8, 6).scale(1, 0.55, 1), canM, 3.6),
-      piece(new THREE.SphereGeometry(1.3, 7, 5).scale(1, 0.5, 1), can2M, 3.0, 0.9)
+      piece(new THREE.CylinderGeometry(0.14, 0.24, 3.4, 7), trunkM, 1.7),
+      piece(canopyCardGeo.clone().scale(2.3, 1.5, 2.3), leafM, 3.9),
+      piece(canopyCardGeo.clone().scale(1.5, 1.1, 1.5), leafM2, 3.1, 0.9),
+      piece(new THREE.SphereGeometry(0.9, 6, 5), lam(T.canopy), 3.6)
     ];
     parts.baobab = [
-      piece(new THREE.CylinderGeometry(0.9, 1.5, 5.2, 8), trunkM, 2.6),
-      piece(new THREE.SphereGeometry(2.4, 8, 6).scale(1, 0.42, 1), can2M, 5.6),
-      piece(new THREE.CylinderGeometry(0.16, 0.3, 1.6, 5), trunkM, 5.6, 1)
+      piece(new THREE.CylinderGeometry(0.9, 1.5, 5.2, 9), trunkM, 2.6),
+      piece(new THREE.CylinderGeometry(0.16, 0.3, 1.6, 5), trunkM, 5.6, 1),
+      piece(canopyCardGeo.clone().scale(2.6, 0.9, 2.6), leafM2, 6.0)
     ];
     parts.acacia = [
       piece(new THREE.CylinderGeometry(0.12, 0.2, 2.8, 6), trunkM, 1.4),
-      piece(new THREE.ConeGeometry(2.4, 0.8, 8), canM, 3.0)
+      piece(canopyCardGeo.clone().scale(2.6, 0.55, 2.6), leafM, 3.1),
+      piece(new THREE.ConeGeometry(2.2, 0.5, 8), canM, 2.95)
     ];
     parts.palm = [
       piece(new THREE.CylinderGeometry(0.12, 0.2, 3.6, 6), trunkM, 1.8),
-      piece(new THREE.ConeGeometry(1.5, 1.2, 6).scale(1, -1, 1), canM, 4.1)
+      piece(canopyCardGeo.clone().scale(1.7, 0.9, 1.7), leafM, 4.0)
     ];
     parts.bush = [piece(new THREE.SphereGeometry(0.8, 7, 5).scale(1, 0.6, 1), can2M, 0.45)];
     parts.fern = [piece(new THREE.ConeGeometry(0.55, 1.1, 5), canM, 0.5)];
@@ -758,6 +951,7 @@ import * as THREE from "./vendor/three.module.min.js";
       var gMat = new THREE.MeshLambertMaterial({
         map: grassTex, alphaTest: 0.45, side: THREE.DoubleSide, color: 0xffffff
       });
+      addSway(gMat, 0.13, 1.9);
       var count = lightMode ? 800 : 2400;
       var gim = new THREE.InstancedMesh(gGeo, gMat, count);
       var lcg = world.def.seed ^ 0x9E3779B9;
@@ -936,12 +1130,28 @@ import * as THREE from "./vendor/three.module.min.js";
       wf.add(waterB);
       wf.waterTexA = waterTexA; wf.waterTexB = waterTexB;
 
-      /* plunge pool + expanding foam rings */
-      var pool = new THREE.Mesh(new THREE.CircleGeometry(13, 22),
-        new THREE.MeshBasicMaterial({ color: 0xDFF3EE, transparent: true, opacity: 0.85, depthWrite: false }));
-      pool.rotation.x = -Math.PI / 2;
-      pool.position.set(0, -5.6, 4);
-      wf.add(pool);
+      /* plunge pool: real reflective water in full detail, flat disc in light */
+      if (!lightMode) {
+        var poolWater = new Water(new THREE.CircleGeometry(14, 26), {
+          textureWidth: 256, textureHeight: 256,
+          waterNormals: waterNormalTex,
+          sunDirection: sunDir.clone(),
+          sunColor: 0xffffff,
+          waterColor: 0x18453C,
+          distortionScale: 1.5,
+          fog: true
+        });
+        poolWater.rotation.x = -Math.PI / 2;
+        poolWater.position.set(0, -5.6, 4);
+        wf.add(poolWater);
+        wf.water = poolWater;
+      } else {
+        var pool = new THREE.Mesh(new THREE.CircleGeometry(13, 22),
+          new THREE.MeshBasicMaterial({ color: 0xDFF3EE, transparent: true, opacity: 0.85, depthWrite: false }));
+        pool.rotation.x = -Math.PI / 2;
+        pool.position.set(0, -5.6, 4);
+        wf.add(pool);
+      }
       wf.rings = [];
       for (var qi = 0; qi < 3; qi++) {
         var ring = new THREE.Mesh(new THREE.RingGeometry(1, 1.4, 22),
@@ -1013,7 +1223,8 @@ import * as THREE from "./vendor/three.module.min.js";
 
     var cached = {
       scene: scene, coinMesh: coinMesh, clouds: clouds, wf: wf,
-      dome: dome, ridges: [ridgeFar, ridgeNear], sunSp: sunSp, sun: sun, sunDir: sunDir, birds: birds
+      dome: dome, sky: skyObj, ridges: [ridgeFar, ridgeNear], sunSp: sunSp, sun: sun, sunDir: sunDir,
+      birds: birds, exposure: exposure, swayMats: sceneLeafMats.slice()
     };
     sceneCache[id] = cached;
     return cached;
@@ -1492,10 +1703,11 @@ import * as THREE from "./vendor/three.module.min.js";
 
   /* keep sky, horizon, sun disc and shadow frustum glued to the action */
   function followEnvironment(sc, fx, fy, fz) {
-    sc.dome.position.copy(camera.position);
+    if (sc.dome) sc.dome.position.copy(camera.position);
+    if (sc.sky) sc.sky.position.copy(camera.position);
     sc.ridges[0].position.set(camera.position.x, camera.position.y - 55, camera.position.z);
     sc.ridges[1].position.set(camera.position.x, camera.position.y - 55, camera.position.z);
-    sc.sunSp.position.copy(camera.position).addScaledVector(sc.sunDir, 700);
+    if (sc.sunSp) sc.sunSp.position.copy(camera.position).addScaledVector(sc.sunDir, 700);
     sc.sun.position.set(fx, fy, fz).addScaledVector(sc.sunDir, 220);
     sc.sun.target.position.set(fx, fy, fz);
   }
@@ -1547,7 +1759,12 @@ import * as THREE from "./vendor/three.module.min.js";
         bird.userData.wr.rotation.y = -flap;
       }
     }
+    for (i = 0; i < sc.swayMats.length; i++) {
+      var sm = sc.swayMats[i];
+      if (sm.userData.swayShader) sm.userData.swayShader.uniforms.uZbTime.value = t;
+    }
     if (sc.wf) {
+      if (sc.wf.water) sc.wf.water.material.uniforms.time.value += dt * 0.55;
       sc.wf.waterTexA.offset.y += 1.05 * dt;
       sc.wf.waterTexB.offset.y += 1.65 * dt;
       for (i = 0; i < sc.wf.mists.length; i++) {
@@ -1662,6 +1879,8 @@ import * as THREE from "./vendor/three.module.min.js";
     /* rebuild scenes + renderer quality with the new detail level */
     Object.keys(sceneCache).forEach(disposeScene);
     renderer.setPixelRatio(lightMode ? 1 : Math.min(window.devicePixelRatio || 1, 1.6));
+    renderer.shadowMap.enabled = !lightMode;
+    initComposer();
     refreshMenu();
   });
 
@@ -1804,7 +2023,7 @@ import * as THREE from "./vendor/three.module.min.js";
       var st0 = { x: gp.x, y: gp.y, z: gp.z, yaw: gp.yaw, vx: 0, vz: 0, offTrail: false, onGround: true };
       updateCamera(st0, dt, b.wc.world);
       followEnvironment(b.sc, gp.x, gp.y, gp.z);
-      renderer.render(b.sc.scene, camera);
+      renderFrame(b.sc);
       return;
     }
 
@@ -1835,7 +2054,7 @@ import * as THREE from "./vendor/three.module.min.js";
       updateCamera(run.st, dt, world);
       followEnvironment(sc, run.st.x, run.st.y, run.st.z);
       updateHUD(run.st, world);
-      renderer.render(sc.scene, camera);
+      renderFrame(sc);
       return;
     }
 
@@ -1864,7 +2083,7 @@ import * as THREE from "./vendor/three.module.min.js";
       updateCamera(run.st, dt, world);
       followEnvironment(sc, run.st.x, run.st.y, run.st.z);
       updateHUD(run.st, world);
-      renderer.render(sc.scene, camera);
+      renderFrame(sc);
 
       if (run.st.finished) {
         run.endT += dt;
@@ -1874,7 +2093,7 @@ import * as THREE from "./vendor/three.module.min.js";
     }
 
     if (mode === "pause" || mode === "results") {
-      renderer.render(sc.scene, camera);
+      renderFrame(sc);
     }
   }
 

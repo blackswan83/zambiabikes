@@ -45,19 +45,23 @@ two layers:
   bike physics (pedal, brake, steer, bunny-hop, crash-on-hard-landing,
   respawn at the last gate), trail-following AI riders, and Ghost Code
   packing. Runs headless under node for tests (`module.exports`).
-- **`js/game3d.js`** — the Three.js renderer + UI: ACES filmic tone mapping,
-  real-time PCF soft shadows that follow the rider, a gradient sky dome with
-  layered hazy horizon ridges, detail-textured terrain with worn tire ruts,
-  per-instance colour-varied instanced vegetation (miombo, baobabs, acacias,
-  rocks) plus thousands of alpha-card grass tufts, fluffy flat-bottomed
-  clouds and cirrus, wheeling bird flocks, low-poly wildlife (elephants,
-  giraffes, zebras, antelope), a fully animated Mosi Falls set piece
-  (scrolling water layers, spray particles, foam rings, sun shafts, rainbow
-  and a distance-based rumble), an articulated rider with crank-driven
-  pedalling legs, banking chase camera with landing dips, dust, vignette,
-  HUD, menus and a Detail: full/light toggle (light = no shadows, fewer
-  props, for older devices). All textures are generated procedurally on a
-  canvas — the game ships zero image assets.
+- **`js/game3d.js`** — the Three.js renderer + UI. Full detail runs a
+  physically-based pipeline: the three.js `Sky` shader (real Rayleigh/Mie
+  atmospheric scattering with animated procedural clouds, tuned per track —
+  morning forest, low sunset, bright canyon light), an EffectComposer chain
+  (UnrealBloom on true HDR highlights + FXAA + OutputPass), ACES filmic tone
+  mapping with per-track exposure, PCF soft shadows that follow the rider,
+  normal-mapped PBR terrain (FBM height → sobel normal map, all generated on
+  canvas) with worn tire ruts, organic leaf-card tree canopies that cast
+  leafy shadows and sway in the wind along with the grass (a vertex-shader
+  injection), a real reflective `Water` plunge pool under the animated Mosi
+  Falls (plus spray, foam rings, sun shafts, rainbow and a distance-based
+  rumble), per-instance colour-varied vegetation, wheeling bird flocks,
+  low-poly wildlife, an articulated rider with crank-driven pedalling legs,
+  a banking chase camera with landing dips, and hazy layered horizon
+  ridges. The Detail: light toggle falls back to the cheap pipeline (gradient
+  sky dome, no composer/shadows/water, fewer props) for older devices. All
+  textures are generated procedurally — the game ships zero image assets.
 
 Three 3D mountains: **Miombo Meander** (1.25 km), **Baobab Ridge** (1.5 km,
 sunset), **Mosi Falls Drop** (1.75 km canyon). Armand and Arthur's ghosts

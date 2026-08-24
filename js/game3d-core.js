@@ -52,6 +52,7 @@
       theme: {
         sky: 0xBFE8F2, skyLow: 0xFFF6D9, fog: 0xD8EFDC, fogNear: 60, fogFar: 420,
         sun: 0xFFF7DC, sunPos: [140, 220, -160], ambient: 0x9CC5A8,
+        turbidity: 4, rayleigh: 1.4, mieCoeff: 0.003, mieG: 0.78, cloudCover: 0.42, exposure: 0.52,
         grass: 0x4E9B58, grassDry: 0x7FAE5A, dirt: 0x8A6238, dirtDark: 0x6B4826, rock: 0x8B8570,
         trunk: 0x5A4028, canopy: 0x2F7A44, canopy2: 0x57944B, accent: 0xE8791D,
         water: 0x6FBFB4
@@ -62,9 +63,10 @@
       seed: 20261010, length: 1500, slope: 0.13, wobble: 1.0, kickerEvery: 110,
       desc: "Sunset savanna, big kickers",
       theme: {
-        sky: 0xFFC969, skyLow: 0xF7B733, fog: 0xF2B268, fogNear: 80, fogFar: 480,
-        sun: 0xFFE9B0, sunPos: [-40, 90, 420], ambient: 0xD9B08C,
+        sky: 0xFFC969, skyLow: 0xF7B733, fog: 0xE09B55, fogNear: 80, fogFar: 480,
+        sun: 0xFFE9B0, sunPos: [-200, 70, -280], ambient: 0xD9B08C,
         sunI: 1.6, hemiI: 1.05, ambI: 0.45, hemiGround: 0x7A5A30, cloudTint: 0xFFD9C0,
+        turbidity: 7, rayleigh: 1.7, mieCoeff: 0.0035, mieG: 0.8, cloudCover: 0.22, exposure: 0.46,
         grass: 0xA8933E, grassDry: 0xC2A94E, dirt: 0x7E4A20, dirtDark: 0x5E3616, rock: 0x8A6A4C,
         trunk: 0x6E4A26, canopy: 0x6E5A2A, canopy2: 0x8A6F33, accent: 0xE8791D,
         water: 0xE8A45C
@@ -77,6 +79,7 @@
       theme: {
         sky: 0xC6ECEF, skyLow: 0xEAF9F4, fog: 0xCDE9E2, fogNear: 45, fogFar: 380,
         sun: 0xF6FFF0, sunPos: [180, 260, -60], ambient: 0x8FB8A8,
+        turbidity: 3, rayleigh: 1.0, mieCoeff: 0.003, mieG: 0.76, cloudCover: 0.5, exposure: 0.55,
         grass: 0x3F8A50, grassDry: 0x5E9B58, dirt: 0x74583A, dirtDark: 0x54402A, rock: 0x6E6A5E,
         trunk: 0x4E3A24, canopy: 0x2A6E48, canopy2: 0x3F8A50, accent: 0x2A9D8F,
         water: 0xBFE8E2
