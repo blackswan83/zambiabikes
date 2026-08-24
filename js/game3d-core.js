@@ -64,7 +64,7 @@
       theme: {
         sky: 0xFFC969, skyLow: 0xF7B733, fog: 0xF2B268, fogNear: 80, fogFar: 480,
         sun: 0xFFE9B0, sunPos: [-40, 90, 420], ambient: 0xD9B08C,
-        sunI: 1.6, hemiI: 1.05, ambI: 0.45, hemiGround: 0x7A5A30,
+        sunI: 1.6, hemiI: 1.05, ambI: 0.45, hemiGround: 0x7A5A30, cloudTint: 0xFFD9C0,
         grass: 0xA8933E, grassDry: 0xC2A94E, dirt: 0x7E4A20, dirtDark: 0x5E3616, rock: 0x8A6A4C,
         trunk: 0x6E4A26, canopy: 0x6E5A2A, canopy2: 0x8A6F33, accent: 0xE8791D,
         water: 0xE8A45C

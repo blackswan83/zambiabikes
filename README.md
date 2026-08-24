@@ -45,11 +45,19 @@ two layers:
   bike physics (pedal, brake, steer, bunny-hop, crash-on-hard-landing,
   respawn at the last gate), trail-following AI riders, and Ghost Code
   packing. Runs headless under node for tests (`module.exports`).
-- **`js/game3d.js`** — the Three.js renderer + UI: vertex-color-painted
-  terrain, instanced miombo trees / baobabs / acacias / rocks, low-poly
-  wildlife (elephants, giraffes, zebras, antelope), an animated Mosi Falls
-  waterfall with mist and a rainbow, the bike + rider rig, ghost riders with
-  name tags, chase camera, dust, HUD, menus and a Detail: full/light toggle.
+- **`js/game3d.js`** — the Three.js renderer + UI: ACES filmic tone mapping,
+  real-time PCF soft shadows that follow the rider, a gradient sky dome with
+  layered hazy horizon ridges, detail-textured terrain with worn tire ruts,
+  per-instance colour-varied instanced vegetation (miombo, baobabs, acacias,
+  rocks) plus thousands of alpha-card grass tufts, fluffy flat-bottomed
+  clouds and cirrus, wheeling bird flocks, low-poly wildlife (elephants,
+  giraffes, zebras, antelope), a fully animated Mosi Falls set piece
+  (scrolling water layers, spray particles, foam rings, sun shafts, rainbow
+  and a distance-based rumble), an articulated rider with crank-driven
+  pedalling legs, banking chase camera with landing dips, dust, vignette,
+  HUD, menus and a Detail: full/light toggle (light = no shadows, fewer
+  props, for older devices). All textures are generated procedurally on a
+  canvas — the game ships zero image assets.
 
 Three 3D mountains: **Miombo Meander** (1.25 km), **Baobab Ridge** (1.5 km,
 sunset), **Mosi Falls Drop** (1.75 km canyon). Armand and Arthur's ghosts

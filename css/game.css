@@ -19,6 +19,15 @@
 
 #game-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 
+/* subtle cinematic vignette over the 3D view */
+.stage-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(10, 22, 14, 0.34) 100%);
+}
+
 /* ---------- overlays ---------- */
 
 .overlay {
