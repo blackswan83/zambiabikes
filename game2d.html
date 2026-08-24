@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Zambia Rush — the Free Game — Zambia Bikes</title>
-<meta name="description" content="Zambia Rush is the free downhill mountain-bike game from Zambia Bikes. Pedal, jump and backflip through miombo forest, baobab ridges and the Mosi Falls canyon — then race your friends' ghosts. No chat, ever.">
+<title>Zambia Rush Classic (2D) — Zambia Bikes</title>
+<meta name="description" content="Zambia Rush Classic is the original 2D version of the free Zambia Bikes downhill game — it runs on any device. Pedal, jump and backflip through miombo forest, baobab ridges and the Mosi Falls canyon — then race your friends' ghosts. No chat, ever.">
 <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -54,10 +54,10 @@
   <section class="page-hero">
     <div class="container">
       <p class="kicker">Free to play · No chat · No ads · No downloads</p>
-      <h1>Zambia <em>Rush</em> 🎮</h1>
-      <p class="lede">Our own downhill game — now a full 3D mountain. Pick your line, pump the kickers,
-      jump the drops and dodge thousand-year-old baobabs from the miombo forest to the thundering
-      Mosi Falls canyon, with the ghosts of Armand, Arthur and your friends riding beside you.</p>
+      <h1>Zambia Rush <em>Classic</em> 🎮</h1>
+      <p class="lede">The original side-scrolling Zambia Rush — light enough to run on any device, with
+      backflips the 3D version is still jealous of. Got a beefier computer? Ride the full
+      <a href="game.html">3D mountain here</a>.</p>
     </div>
     <div class="hero-hills" aria-hidden="true"><svg viewBox="0 0 1440 90" preserveAspectRatio="none" focusable="false"><path d="M0 60 Q 240 20 480 52 T 960 46 T 1440 40 L 1440 90 L 0 90 Z" fill="#FFF9EE"/></svg></div>
   </section>
@@ -82,12 +82,11 @@
 
         <div class="touch-controls" id="touch-controls" hidden>
           <div class="tc-cluster">
-            <button type="button" class="tc-btn" id="tc-left" aria-label="Steer left">◀</button>
-            <button type="button" class="tc-btn" id="tc-right" aria-label="Steer right">▶</button>
+            <button type="button" class="tc-btn" id="tc-left" aria-label="Spin backwards">⟲</button>
+            <button type="button" class="tc-btn" id="tc-right" aria-label="Spin forwards">⟳</button>
           </div>
           <div class="tc-cluster">
-            <button type="button" class="tc-btn tc-btn--brake" id="tc-brake" aria-label="Brake">▼</button>
-            <button type="button" class="tc-btn tc-btn--hop" id="tc-hop" aria-label="Jump">⤒</button>
+            <button type="button" class="tc-btn tc-btn--brake" id="tc-brake" aria-label="Brake / tuck">▼</button>
             <button type="button" class="tc-btn tc-btn--pedal" id="tc-pedal" aria-label="Pedal">▲</button>
           </div>
         </div>
@@ -111,7 +110,6 @@
               <label class="ghost-toggle"><input type="checkbox" id="ghost-toggle" checked> Race the ghosts 👻</label>
               <button type="button" class="btn btn--ghost btn--small" id="btn-howto">How to play</button>
               <button type="button" class="btn btn--ghost btn--small" id="btn-sound" aria-pressed="true">🔊 Sound on</button>
-              <button type="button" class="btn btn--ghost btn--small" id="btn-detail">✨ Detail: full</button>
             </div>
             <div class="menu-row">
               <button type="button" class="btn btn--copper btn--big" id="btn-start">Start the ride 🚵</button>
@@ -122,16 +120,15 @@
         <div class="overlay" id="screen-howto" hidden>
           <h2>How to <em>play</em></h2>
           <ul class="howto-list">
-            <li><span class="key">▲ / W</span> — pedal hard</li>
-            <li><span class="key">▼ / S</span> — brake</li>
-            <li><span class="key">◀ ▶ / A D</span> — steer down the mountain</li>
-            <li><span class="key">Space</span> — bunny-hop (jump!)</li>
+            <li><span class="key">Space</span> or <span class="key">▲ / W</span> — pedal hard on the ground</li>
+            <li><span class="key">▼ / S</span> — brake on the ground · tuck &amp; dive in the air</li>
+            <li><span class="key">◀ / A</span> — spin backwards (backflip!)</li>
+            <li><span class="key">▶ / D</span> — spin forwards (frontflip!)</li>
             <li><span class="key">P</span> or <span class="key">Esc</span> — pause</li>
           </ul>
-          <p style="max-width:46ch">Follow the dirt trail — it's the fast line — or cut your own
-          across the mountain. Hit the kickers for big air, collect copper coins, and don't hug the
-          baobabs: they always win. Checkpoint flags save your spot if you tumble. Fastest to the
-          finish arch wins!</p>
+          <p style="max-width:46ch">Land with your wheels matching the slope or you'll tumble.
+          Flips and big air earn points, copper coins add up, and a perfect landing gives you a
+          speed boost. Fastest time to the finish wins!</p>
           <button type="button" class="btn btn--copper" id="btn-howto-back">Got it!</button>
         </div>
 
@@ -145,13 +142,6 @@
           </div>
         </div>
 
-        <div class="overlay" id="webgl-fallback" hidden>
-          <h2>This device prefers the <em>classic</em> version</h2>
-          <p style="max-width:46ch">Zambia Rush 3D needs WebGL, which this browser doesn't have
-          switched on. No problem — the original 2D Zambia Rush is just as fast and runs anywhere.</p>
-          <a class="btn btn--copper btn--big" href="game2d.html">Play Zambia Rush Classic</a>
-        </div>
-
         <div class="overlay" id="screen-results" hidden>
           <div id="results-content"></div>
           <div class="menu-row" style="margin-top:0.6rem">
@@ -163,19 +153,17 @@
       </div>
 
       <p class="lede" style="text-align:center;margin-top:1.2rem">Keyboard on computers, buttons on
-      phones and tablets. Everything runs right here in your browser — nothing to install.
-      On an older device? Try <a href="game2d.html">Zambia Rush Classic</a>, the 2D version that
-      runs on anything.</p>
+      phones and tablets. Everything runs right here in your browser — nothing to install.</p>
 
       <div class="game-info-grid">
         <article class="card reveal">
           <span class="card-emoji">🎮</span>
           <h3>How it works</h3>
-          <p>Pick a mountain, pedal for speed and steer your own line down to the finish arch.
-          The carved dirt trail is the fast way — grass and rocks slow you down — and the kickers
-          are your launch ramps. Beat Arthur's ghost for silver, Armand's for gold.</p>
-          <p style="margin-bottom:0"><strong>Tip from Arthur:</strong> bunny-hop (Space) just before
-          a kicker's lip for extra air — and brake <em>before</em> the corner, never in it.</p>
+          <p>Pick a track, pedal for speed, and use hills as launch ramps. Match your wheels to the
+          slope when you land — tumble and you lose precious seconds. Beat Arthur's ghost for silver,
+          Armand's for gold.</p>
+          <p style="margin-bottom:0"><strong>Tip from Arthur:</strong> tuck (▼) in the air to dive
+          down fast and pump the back of each hill for free speed.</p>
         </article>
 
         <article class="card ghost-box reveal">
@@ -185,7 +173,7 @@
           parent or guardian to send it). Paste a friend's code below and their ghost rides beside you.
           Codes hold only riding data and a first name — nothing else, by design.</p>
           <label for="ghost-input" style="font-family:var(--font-display);font-weight:600">Paste a friend's Ghost Code</label>
-          <textarea id="ghost-input" spellcheck="false" placeholder="ZR3G1…"></textarea>
+          <textarea id="ghost-input" spellcheck="false" placeholder="ZRG1…"></textarea>
           <p style="margin:0.6rem 0 0"><button type="button" class="btn btn--forest btn--small" id="btn-import-ghost">Add this ghost</button>
           <span id="ghost-import-msg" role="status" style="font-size:0.9rem;font-weight:700;margin-left:0.5rem"></span></p>
           <ul class="ghost-list" id="ghost-list"></ul>
@@ -269,7 +257,6 @@
 
 <script src="js/tours-data.js"></script>
 <script src="js/main.js"></script>
-<script src="js/game3d-core.js"></script>
-<script type="module" src="js/game3d.js"></script>
+<script src="js/game.js"></script>
 </body>
 </html>

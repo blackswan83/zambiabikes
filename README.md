@@ -17,13 +17,16 @@ falls canyon.
 | --- | --- |
 | `index.html` | Home — animated hero, next-ride countdown, club overview |
 | `tours.html` | Tour & event calendar with "Request to join" flow |
-| `game.html` | **Zambia Rush** — the full game |
+| `game.html` | **Zambia Rush 3D** — the full 3D downhill game |
+| `game2d.html` | **Zambia Rush Classic** — the 2D version, runs on anything |
 | `join.html` | Membership request form (vetted, never automatic) |
 | `about.html` | The founders' story, values, the Grown-Up Crew |
 | `safety.html` | For parents: vetting, trail safety, online safety, privacy |
 
-No build step, no frameworks, no dependencies beyond Google Fonts. Open
-`index.html` or serve the folder statically (GitHub Pages works as-is).
+No build step and no CDN dependencies: Three.js is vendored into
+`js/vendor/` (MIT, license included), fonts come from Google Fonts. Serve
+the folder statically (GitHub Pages works as-is; the 3D game uses ES
+modules, so use `http://`, not `file://`).
 
 ```bash
 # local preview
@@ -31,26 +34,31 @@ python3 -m http.server 8000
 # → http://localhost:8000
 ```
 
-## The game — Zambia Rush
+## The game — Zambia Rush 3D
 
-`js/game.js` is a self-contained 2D physics engine + renderer:
+A Descenders-inspired third-person downhill simulator in Three.js, split in
+two layers:
 
-- **Deterministic seeded terrain** — three tracks built from layered sines,
-  gaussian kickers and tanh drop-offs, so every rider races the same hills.
-- **Fixed-timestep physics** (60 Hz) — pedal, brake/tuck, back/front flips,
-  landing-angle crashes, perfect-landing boosts, copper coins, trick scoring.
-- **AI ghosts** — Armand and Arthur's ghost runs are *simulated live* by AI
-  rider policies through the same physics, so their times are honestly
-  beatable. Gold medal = beat Armand.
-- **Ghost Codes** — kid-safe multiplayer without a server: export your best
-  run as a pasteable code (positions + first name only, nothing else),
-  friends import it and race your ghost. No chat, no accounts, no strangers.
-- **Local leaderboard**, touch controls, WebAudio synth SFX, pause-on-blur,
-  `prefers-reduced-motion` respected.
+- **`js/game3d-core.js`** — the renderer-independent simulation: seeded
+  heightfield mountains, a wandering trail spline carved into the terrain
+  with kickers and checkpoint gates, prop placement and collisions, arcade
+  bike physics (pedal, brake, steer, bunny-hop, crash-on-hard-landing,
+  respawn at the last gate), trail-following AI riders, and Ghost Code
+  packing. Runs headless under node for tests (`module.exports`).
+- **`js/game3d.js`** — the Three.js renderer + UI: vertex-color-painted
+  terrain, instanced miombo trees / baobabs / acacias / rocks, low-poly
+  wildlife (elephants, giraffes, zebras, antelope), an animated Mosi Falls
+  waterfall with mist and a rainbow, the bike + rider rig, ghost riders with
+  name tags, chase camera, dust, HUD, menus and a Detail: full/light toggle.
 
-The engine is testable headlessly (`node`): it exports
-`buildTrack / stepRider / simulateAI / packGhost / unpackGhost` via
-`module.exports` when no DOM is present.
+Three 3D mountains: **Miombo Meander** (1.25 km), **Baobab Ridge** (1.5 km,
+sunset), **Mosi Falls Drop** (1.75 km canyon). Armand and Arthur's ghosts
+are simulated through the same physics, so their times are honestly
+beatable — gold medal = beat Armand. **Ghost Codes** (`ZR3G1…`) give kid-safe
+multiplayer with no server: positions + a first name, nothing else. If a
+device has no WebGL, the page offers **Zambia Rush Classic** (`game2d.html`,
+engine in `js/game.js`) — the original 2D side-scroller with backflips,
+which shares the same design and its own `ZRG1…` ghost codes.
 
 ## Kid-safety design decisions
 

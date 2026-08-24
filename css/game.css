@@ -309,6 +309,7 @@
 .tc-btn:active, .tc-btn.is-down { background: rgba(232, 121, 29, 0.8); }
 .tc-btn--pedal { background: rgba(31, 122, 72, 0.7); }
 .tc-btn--brake { background: rgba(214, 69, 51, 0.55); }
+.tc-btn--hop { background: rgba(247, 183, 51, 0.55); }
 
 /* ---------- below-stage info ---------- */
 
