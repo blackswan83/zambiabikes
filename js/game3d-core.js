@@ -342,8 +342,11 @@
     };
   }
 
+  var DEFAULT_STATS = { pedal: 1, vcap: 1, brake: 1, steer: 1, roll: 1, rough: 1, landSoft: 0, hop: 1 };
+
   function stepRider3(st, inp, world, ev, taken) {
     var speed, i, f;
+    var S = st.stats || DEFAULT_STATS;
 
     st.hopCd -= DT;
 
@@ -384,23 +387,23 @@
 
       /* forces along the trail direction */
       speed += (-GRAV * f.y) * DT;                       /* slope: f.y<0 going down */
-      if (inp.pedal && speed < VCAP) speed += PEDAL_A * (speed < 6 ? 1.55 : 1) * st.power * DT;
-      if (inp.brake) { speed -= BRAKE_A * DT; if (speed < 0) speed = 0; }
+      if (inp.pedal && speed < VCAP * S.vcap) speed += PEDAL_A * S.pedal * (speed < 6 ? 1.55 : 1) * st.power * DT;
+      if (inp.brake) { speed -= BRAKE_A * S.brake * DT; if (speed < 0) speed = 0; }
       var offT = st.trailD > CARVE_R;
       st.offTrail = offT;
-      var drag = DRAG * (offT ? 2.4 : 1);
+      var drag = DRAG * (offT ? 1 + 1.4 * S.rough : 1);
       speed -= speed * Math.abs(speed) * drag * DT;
-      speed -= Math.sign(speed) * Math.min(Math.abs(speed), ROLL * (offT ? 2.2 : 1) * DT * 10);
+      speed -= Math.sign(speed) * Math.min(Math.abs(speed), ROLL * S.roll * (offT ? 1 + 1.2 * S.rough : 1) * DT * 10);
 
       /* steering, softer at speed */
-      st.yaw += steer * STEER_RATE / (1 + Math.abs(speed) / 16) * DT * (speed >= 0 ? 1 : -1);
+      st.yaw += steer * STEER_RATE * S.steer / (1 + Math.abs(speed) / 16) * DT * (speed >= 0 ? 1 : -1);
       st.lean += ((-steer * Math.min(1, Math.abs(speed) / 12) * 0.45) - st.lean) * Math.min(1, 8 * DT);
 
       st.vx = f.x * speed; st.vy = f.y * speed; st.vz = f.z * speed;
 
       /* hop */
       if (inp.hop && st.hopCd <= 0) {
-        st.vy += HOP_V;
+        st.vy += HOP_V * S.hop;
         st.hopCd = 0.55;
         st.onGround = false;
         st.airT = 0;
@@ -433,7 +436,7 @@
         var nl = normalAt(world, st.x, st.z);
         var impact = -(st.vx * nl.x + st.vy * nl.y + st.vz * nl.z);
         var wasBig = st.airT > 0.9;
-        if (impact > CRASH_IMPACT && !st.noCrash) {
+        if (impact > CRASH_IMPACT * (1 + S.landSoft) && !st.noCrash) {
           st.crashT = 1.0;
           st.crashes++;
           ev.push({ t: "crash", why: "landing" });
@@ -441,8 +444,9 @@
           /* keep the tangent component of velocity */
           var vn = st.vx * nl.x + st.vy * nl.y + st.vz * nl.z;
           st.vx -= nl.x * vn; st.vy -= nl.y * vn; st.vz -= nl.z * vn;
-          if (impact > 8.5) {
-            st.vx *= 0.75; st.vy *= 0.75; st.vz *= 0.75;
+          if (impact > 8.5 * (1 + 0.5 * S.landSoft)) {
+            var keep = 0.75 + 0.2 * S.landSoft;
+            st.vx *= keep; st.vy *= keep; st.vz *= keep;
             ev.push({ t: "land", q: "hard" });
           } else {
             ev.push({ t: "land", q: "clean" });
@@ -547,7 +551,8 @@
   function simulateAI3(world, style) {
     var st = newRider3(world);
     st.power = style.power;
-    st.noCrash = true;
+    if (style.stats) st.stats = style.stats;
+    st.noCrash = !style.allowCrash;
     var taken = new Array(world.coins.length);
     var samples = [];
     var ev = [];

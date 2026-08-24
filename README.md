@@ -19,6 +19,7 @@ falls canyon.
 | `tours.html` | Tour & event calendar with "Request to join" flow |
 | `game.html` | **Zambia Rush 3D** — the full 3D downhill game |
 | `game2d.html` | **Zambia Rush Classic** — the 2D version, runs on anything |
+| `garage.html` | **The Garage** — build and mod your bike in 3D |
 | `join.html` | Membership request form (vetted, never automatic) |
 | `about.html` | The founders' story, values, the Grown-Up Crew |
 | `safety.html` | For parents: vetting, trail safety, online safety, privacy |
@@ -62,6 +63,19 @@ two layers:
   ridges. The Detail: light toggle falls back to the cheap pipeline (gradient
   sky dome, no composer/shadows/water, fewer props) for older devices. All
   textures are generated procedurally — the game ships zero image assets.
+
+**The Garage** (`garage.html`, `js/garage.js`, catalog in `js/bikes.js`):
+a bike-builder for real MTB fans with an interactive 3D viewer (OrbitControls,
+studio lighting, PMREM reflections on metallic paint). 39 parts across nine
+categories — five frames (hardtail, trail FS, enduro, DH, dirt jumper), five
+forks up to a 200 mm dual-crown, three wheel sizes, four tire compounds, four
+drivetrains, three brake sets, seatposts, extras and paint. Every part carries
+real stat trade-offs (sprint, top speed, agility, rolling resistance,
+rough-line tolerance, landing armour, bunny-hop pop, weight in kg) that feed
+straight into the riding physics via `computeStats`; the equipped bike also
+changes the in-game model (wheel size, paint, dual-crown, shock, mudguard,
+bell — press B to ring it). Dream parts are **earned by riding** (finish
+tracks, beat ghosts, collect coins — tracked in `zr3_career`), never bought.
 
 Three 3D mountains: **Miombo Meander** (1.25 km), **Baobab Ridge** (1.5 km,
 sunset), **Mosi Falls Drop** (1.75 km canyon). Armand and Arthur's ghosts

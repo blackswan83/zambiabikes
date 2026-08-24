@@ -6,6 +6,7 @@
    ========================================================================== */
 
 import * as THREE from "three";
+import { mergeGeometries } from "./vendor/addons/utils/BufferGeometryUtils.js";
 import { Sky } from "./vendor/addons/objects/Sky.js";
 import { Water } from "./vendor/addons/objects/Water.js";
 import { EffectComposer } from "./vendor/addons/postprocessing/EffectComposer.js";
@@ -69,6 +70,9 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
 
   var profile = lsGet("zr_profile", { name: "", jersey: "#1F7A48" });
   if (!profile || typeof profile !== "object") profile = { name: "", jersey: "#1F7A48" };
+  var BIKES = window.ZB_BIKES;
+  var career = BIKES ? BIKES.loadCareer() : null;
+  function currentBikeCfg() { return BIKES ? BIKES.loadConfig(career) : null; }
   var bests = lsGet("zr3_best", {});
   if (!bests || typeof bests !== "object" || Array.isArray(bests)) bests = {};
   var scores = lsGet("zr3_scores", {});
@@ -118,6 +122,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     hop: function () { tone(420, 0.1, "triangle", 0, 660); },
     bigair: function () { tone(520, 0.18, "triangle", 0, 990); },
     gate: function () { tone(740, 0.09, "triangle"); },
+    bell: function () { tone(1610, 0.35, "triangle"); tone(2130, 0.5, "triangle", 0.09); },
     count: function (hi) { tone(hi ? 880 : 440, 0.14, "square"); },
     finish: function () { [523, 659, 784, 1047].forEach(function (f, i) { tone(f, 0.16, "triangle", i * 0.12); }); }
   };
@@ -140,6 +145,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
 
   document.addEventListener("keydown", function (e) {
     if (e.repeat) return;
+    if (e.code === "KeyB" && mode === "race" && run && run.hasBell) { SFX.bell(); return; }
     if (e.code === "KeyP" || e.code === "Escape") {
       if (mode === "race" || mode === "count") { pauseGame(); e.preventDefault(); }
       else if (mode === "pause") { resumeGame(); e.preventDefault(); }
@@ -464,6 +470,72 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     }
   });
 
+  /* ---------- a real baobab: bottle trunk + root-like branch crown ----------
+     Built once as a single merged geometry so hundreds can be instanced. */
+
+  function buildBaobabGeometry(seed) {
+    var s2 = seed;
+    function rnd() { s2 = (s2 * 16807) % 2147483647; return s2 / 2147483647; }
+    var geos = [];
+
+    /* swollen bottle trunk */
+    var profile = [
+      new THREE.Vector2(1.72, 0),
+      new THREE.Vector2(1.5, 0.5),
+      new THREE.Vector2(1.62, 1.5),
+      new THREE.Vector2(1.55, 2.7),
+      new THREE.Vector2(1.28, 3.9),
+      new THREE.Vector2(0.95, 4.9),
+      new THREE.Vector2(0.7, 5.5)
+    ];
+    var trunk = new THREE.LatheGeometry(profile, 12);
+    geos.push(trunk);
+    var crownCap = new THREE.SphereGeometry(0.7, 9, 6);
+    crownCap.translate(0, 5.5, 0);
+    geos.push(crownCap);
+
+    /* recursive tapering branches — the "roots in the sky" silhouette */
+    var up = new THREE.Vector3(0, 1, 0);
+    function branch(origin, dir, len, r, depth) {
+      var g = new THREE.CylinderGeometry(r * 0.42, r, len, 6, 1);
+      g.translate(0, len / 2, 0);
+      var q = new THREE.Quaternion().setFromUnitVectors(up, dir);
+      var m = new THREE.Matrix4().makeRotationFromQuaternion(q);
+      m.setPosition(origin.x, origin.y, origin.z);
+      g.applyMatrix4(m);
+      geos.push(g);
+      if (depth >= 2) return;
+      var tip = origin.clone().addScaledVector(dir, len * 0.96);
+      var kids = depth === 0 ? 3 : 2;
+      for (var k = 0; k < kids; k++) {
+        var d2 = dir.clone();
+        d2.x += (rnd() - 0.5) * 1.1;
+        d2.z += (rnd() - 0.5) * 1.1;
+        d2.y += 0.25 + rnd() * 0.55;
+        d2.normalize();
+        branch(tip, d2, len * (0.5 + rnd() * 0.18), r * 0.45, depth + 1);
+      }
+    }
+    var primaries = 7;
+    for (var i = 0; i < primaries; i++) {
+      var az = (i / primaries) * Math.PI * 2 + rnd() * 0.55;
+      var elev = 0.55 + rnd() * 0.55;                 /* 30–63 degrees up */
+      var dir = new THREE.Vector3(
+        Math.cos(az) * Math.cos(elev),
+        Math.sin(elev),
+        Math.sin(az) * Math.cos(elev)
+      ).normalize();
+      var origin = new THREE.Vector3(Math.cos(az) * 0.35, 5.15 + rnd() * 0.3, Math.sin(az) * 0.35);
+      branch(origin, dir, 1.9 + rnd() * 1.1, 0.34 + rnd() * 0.1, 0);
+    }
+
+    var merged = mergeGeometries(geos);
+    geos.forEach(function (g) { g.dispose(); });
+    return merged;
+  }
+
+  var baobabGeo = buildBaobabGeometry(20261010);
+
   /* 3 crossed vertical cards + 1 horizontal card, centered on origin */
   var canopyCardGeo = (function () {
     var pos = [], uv = [], idx = [];
@@ -546,12 +618,25 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
 
   function lam(color) { return new THREE.MeshLambertMaterial({ color: color }); }
 
-  function buildRiderMesh(jerseyHex) {
+  function buildRiderMesh(jerseyHex, bikeCfg) {
     var gp = new THREE.Group();
-    var dark = lam(0x241505), frameM = lam(0x2B1B10), jersey = lam(jerseyHex),
+    var paintHex = 0x2B1B10;
+    var wheelR = 0.34;
+    var isFS = false, isDC = false, hasBellV = false, hasGuard = false;
+    if (bikeCfg && BIKES) {
+      var pd = BIKES.getOption("paint", bikeCfg.paint);
+      if (pd) paintHex = new THREE.Color(pd.color).getHex();
+      var wd = BIKES.getOption("wheels", bikeCfg.wheels);
+      if (wd && wd.radius) wheelR = wd.radius;
+      isFS = bikeCfg.frame === "zambezi_fs" || bikeCfg.frame === "muchinga_enduro" || bikeCfg.frame === "mosi_dh";
+      isDC = bikeCfg.fork === "mosi_dc_200";
+      hasBellV = (bikeCfg.extras || []).indexOf("bell") >= 0;
+      hasGuard = (bikeCfg.extras || []).indexOf("mudguard") >= 0;
+    }
+    var dark = lam(0x241505), frameM = lam(paintHex), jersey = lam(jerseyHex),
       skin = lam(0x8C5A33), helmet = lam(0xE8791D), shorts = lam(0x43290F);
 
-    var wheelG = new THREE.TorusGeometry(0.34, 0.055, 8, 18);
+    var wheelG = new THREE.TorusGeometry(wheelR, 0.055, 8, 18);
     var hubG = new THREE.CylinderGeometry(0.05, 0.05, 0.08, 8);
     hubG.rotateZ(Math.PI / 2);
 
@@ -564,8 +649,8 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       w.add(t, spokes);
       return w;
     }
-    var wheelB = wheel(); wheelB.position.set(0, 0.34, -0.52);
-    var wheelF = wheel(); wheelF.position.set(0, 0.34, 0.52);
+    var wheelB = wheel(); wheelB.position.set(0, wheelR, -0.52);
+    var wheelF = wheel(); wheelF.position.set(0, wheelR, 0.52);
 
     function tube(a, b, r, m) {
       var d = new THREE.Vector3().subVectors(b, a);
@@ -590,6 +675,31 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     bars.position.set(0, 0.78, 0.4);
     var seat = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.05, 0.3), dark);
     seat.position.set(0, 0.68, -0.2);
+    if (isFS) {
+      var shock = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.17, 8), dark);
+      shock.position.set(0, 0.5, 0.02);
+      shock.rotation.x = 0.9;
+      gp.add(shock);
+    }
+    if (isDC) {
+      var dcCrown = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.03, 0.05), dark);
+      dcCrown.position.set(0, 0.76, 0.36);
+      gp.add(dcCrown);
+    }
+    if (hasGuard) {
+      var guard = new THREE.Mesh(new THREE.TorusGeometry(wheelR + 0.03, 0.02, 5, 10, Math.PI * 0.65), dark);
+      guard.position.set(0, wheelR, 0.52);
+      guard.rotation.z = Math.PI / 2;
+      guard.rotation.y = Math.PI / 2;
+      guard.rotation.x = Math.PI * 0.18;
+      guard.scale.x = 0.3;
+      gp.add(guard);
+    }
+    if (hasBellV) {
+      var bellV = new THREE.Mesh(new THREE.SphereGeometry(0.022, 8, 6), lam(0xD9A441));
+      bellV.position.set(-0.08, 0.8, 0.38);
+      gp.add(bellV);
+    }
 
     var crank = new THREE.Group();
     var pedL = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.03, 0.08), dark);
@@ -860,10 +970,11 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       piece(canopyCardGeo.clone().scale(1.5, 1.1, 1.5), leafM2, 3.1, 0.9),
       piece(new THREE.SphereGeometry(0.9, 6, 5), lam(T.canopy), 3.6)
     ];
+    /* baobabs get their own grey-copper bark, not the generic trunk brown */
+    var barkM = lam(0x8F7767);
     parts.baobab = [
-      piece(new THREE.CylinderGeometry(0.9, 1.5, 5.2, 9), trunkM, 2.6),
-      piece(new THREE.CylinderGeometry(0.16, 0.3, 1.6, 5), trunkM, 5.6, 1),
-      piece(canopyCardGeo.clone().scale(2.6, 0.9, 2.6), leafM2, 6.0)
+      piece(baobabGeo, barkM, 0),
+      piece(canopyCardGeo.clone().scale(2.2, 0.65, 2.2), leafM2, 7.1)
     ];
     parts.acacia = [
       piece(new THREE.CylinderGeometry(0.12, 0.2, 2.8, 6), trunkM, 1.4),
@@ -1383,7 +1494,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
 
   function attachRigs(scene, ghosts) {
     if (playerRig && playerRig.group.parent) playerRig.group.parent.remove(playerRig.group);
-    playerRig = buildRiderMesh(new THREE.Color(profile.jersey || "#1F7A48").getHex());
+    playerRig = buildRiderMesh(new THREE.Color(profile.jersey || "#1F7A48").getHex(), currentBikeCfg());
     enableRigShadows(playerRig);
     scene.add(playerRig.group);
     ghostRigs.forEach(function (r) { if (r.rig.group.parent) r.rig.group.parent.remove(r.rig.group); });
@@ -1421,6 +1532,9 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     var b = currentBundle();
     var world = b.wc.world;
     var st = CORE.newRider3(world);
+    var bikeCfg = currentBikeCfg();
+    var bikeStats = bikeCfg && BIKES ? BIKES.computeStats(bikeCfg) : null;
+    if (bikeStats) st.stats = bikeStats;
     /* dev spawn point, e.g. game.html#at=0.9 — handy for testing the finish */
     var devAt = /^#at=(0?\.[0-9]+)$/.exec(location.hash || "");
     var practice = !!devAt;
@@ -1455,7 +1569,9 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     run = {
       b: b, st: st, taken: taken,
       recorder: [], step: 0, ghosts: ghosts, countT: 2.7, endT: 0, lastBeep: 3,
-      practice: practice
+      practice: practice,
+      bikeName: bikeCfg && BIKES ? BIKES.riderNameForBike(bikeCfg) : "",
+      hasBell: !!(bikeCfg && (bikeCfg.extras || []).indexOf("bell") >= 0)
     };
     clearInput();
     acc = 0;
@@ -1507,6 +1623,32 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     var bronze = Math.round(silver * 1.35);
     var medal = timeMs <= gold ? "gold" : timeMs <= silver ? "silver" : timeMs <= bronze ? "bronze" : "none";
 
+    /* workshop career: real riding unlocks garage parts (never in practice) */
+    function lockedList() {
+      var out = [];
+      if (!BIKES) return out;
+      Object.keys(BIKES.CATALOG).forEach(function (cat) {
+        Object.keys(BIKES.CATALOG[cat].options).forEach(function (id) {
+          var def = BIKES.CATALOG[cat].options[id];
+          if (def.unlock && !BIKES.isUnlocked(def, career)) out.push(def.name);
+        });
+      });
+      return out;
+    }
+    var newlyUnlocked = [];
+    if (!run.practice && BIKES) {
+      var beforeLocked = lockedList();
+      career.runs = (career.runs || 0) + 1;
+      career.coins = (career.coins || 0) + st.coinCount;
+      career.finished[selTrack] = true;
+      if (st.coinCount > (career.maxCoinsRun || 0)) career.maxCoinsRun = st.coinCount;
+      var rank = BIKES.MEDAL_RANK;
+      if ((rank[medal] || 0) > (rank[career.medals[selTrack]] || 0)) career.medals[selTrack] = medal;
+      BIKES.saveCareer(career);
+      var afterLocked = lockedList();
+      newlyUnlocked = beforeLocked.filter(function (n) { return afterLocked.indexOf(n) < 0; });
+    }
+
     /* practice spawns (dev #at= hash) never count: no bests, no ghosts, no board */
     var prevBest = bests[selTrack] || Infinity;
     var isBest = !run.practice && timeMs < prevBest;
@@ -1518,7 +1660,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
 
     if (!run.practice) {
       var list = scores[selTrack] || [];
-      list.push({ name: name, timeMs: timeMs, score: st.score });
+      list.push({ name: name, timeMs: timeMs, score: st.score, bike: run.bikeName });
       list.sort(function (a, b2) { return a.timeMs - b2.timeMs; });
       scores[selTrack] = list.slice(0, 10);
       lsSet("zr3_scores", scores);
@@ -1544,7 +1686,9 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       "</div>" +
       (isBest ? '<p><span class="track-pill track-pill--trail">NEW PERSONAL BEST</span></p>' : "") +
       (run.practice ? '<p><span class="track-pill track-pill--easy">PRACTICE SPAWN — times don\'t count</span></p>' : "") +
-      '<p class="results-note">Armand: ' + fmtTime(wc.armand.timeMs) + " · Arthur: " + fmtTime(wc.arthur.timeMs) +
+      (newlyUnlocked.length ? '<p><span class="track-pill track-pill--hero">🔓 GARAGE UNLOCK: ' + newlyUnlocked.join(" · ") + "</span></p>" : "") +
+      '<p class="results-note">' + (run.bikeName ? "Bike: " + run.bikeName + " · " : "") +
+      "Armand: " + fmtTime(wc.armand.timeMs) + " · Arthur: " + fmtTime(wc.arthur.timeMs) +
       (st.crashes ? " · Crashes: " + st.crashes + " (helmets, always!)" : " · Clean run — no crashes!") + "</p>" +
       '<p class="results-note">Copy your Ghost Code below and hand it to a club friend — they can race you without any chat.</p>';
 
@@ -1828,6 +1972,13 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     });
     el.trackCards.innerHTML = html;
     el.riderName.value = profile.name;
+    var mb = $("menu-bike");
+    if (mb && BIKES) {
+      var mcfg = currentBikeCfg();
+      var mstats = BIKES.computeStats(mcfg);
+      mb.innerHTML = "🚲 Your bike: <strong>" + BIKES.riderNameForBike(mcfg) + "</strong> · " +
+        mstats.weightKg.toFixed(1) + ' kg · <a href="garage.html" style="color:var(--sun-soft)">tune it in the Garage 🔧</a>';
+    }
     el.ghostToggle.checked = !!ghostsOn;
     el.btnSound.textContent = muted ? "🔇 Sound off" : "🔊 Sound on";
     el.btnSound.setAttribute("aria-pressed", muted ? "false" : "true");
@@ -1978,7 +2129,8 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     }
     var html = "";
     list.forEach(function (r, i) {
-      html += '<li><span class="lb-rank">' + (i + 1) + '.</span><span>' + CORE.sanitizeName(r.name) + '</span><span class="lb-time">' + fmtTime(r.timeMs) + "</span></li>";
+      var bikeTag = r.bike ? ' <span style="font-weight:600;color:var(--ink-soft);font-size:0.82em">· ' + CORE.sanitizeName(r.bike) + "</span>" : "";
+      html += '<li><span class="lb-rank">' + (i + 1) + '.</span><span>' + CORE.sanitizeName(r.name) + bikeTag + '</span><span class="lb-time">' + fmtTime(r.timeMs) + "</span></li>";
     });
     el.lbList.innerHTML = html;
   }

@@ -107,12 +107,14 @@
                 <button type="button" class="jersey" data-jersey="#8E44AD" style="background:#8E44AD" aria-label="Purple jersey"></button>
               </span>
             </div>
+            <p class="gr-tag" id="menu-bike" style="margin:0"></p>
             <div class="track-cards" id="track-cards" role="group" aria-label="Choose a track"></div>
             <div class="menu-row">
               <label class="ghost-toggle"><input type="checkbox" id="ghost-toggle" checked> Race the ghosts 👻</label>
               <button type="button" class="btn btn--ghost btn--small" id="btn-howto">How to play</button>
               <button type="button" class="btn btn--ghost btn--small" id="btn-sound" aria-pressed="true">🔊 Sound on</button>
               <button type="button" class="btn btn--ghost btn--small" id="btn-detail">✨ Detail: full</button>
+              <a class="btn btn--ghost btn--small" href="garage.html">🔧 Garage</a>
             </div>
             <div class="menu-row">
               <button type="button" class="btn btn--copper btn--big" id="btn-start">Start the ride 🚵</button>
@@ -127,6 +129,7 @@
             <li><span class="key">▼ / S</span> — brake</li>
             <li><span class="key">◀ ▶ / A D</span> — steer down the mountain</li>
             <li><span class="key">Space</span> — bunny-hop (jump!)</li>
+            <li><span class="key">B</span> — ring your bell (if you fitted one in the Garage)</li>
             <li><span class="key">P</span> or <span class="key">Esc</span> — pause</li>
           </ul>
           <p style="max-width:46ch">Follow the dirt trail — it's the fast line — or cut your own
@@ -175,8 +178,11 @@
           <p>Pick a mountain, pedal for speed and steer your own line down to the finish arch.
           The carved dirt trail is the fast way — grass and rocks slow you down — and the kickers
           are your launch ramps. Beat Arthur's ghost for silver, Armand's for gold.</p>
-          <p style="margin-bottom:0"><strong>Tip from Arthur:</strong> bunny-hop (Space) just before
+          <p><strong>Tip from Arthur:</strong> bunny-hop (Space) just before
           a kicker's lip for extra air — and brake <em>before</em> the corner, never in it.</p>
+          <p style="margin-bottom:0"><strong>Build your ride:</strong> frames, forks, tires, gears and
+          brakes all change how the bike handles — <a href="garage.html">wrench on it in the Garage 🔧</a>.
+          Dream parts are earned by riding, never bought.</p>
         </article>
 
         <article class="card ghost-box reveal">
@@ -270,6 +276,7 @@
 
 <script src="js/tours-data.js"></script>
 <script src="js/main.js"></script>
+<script src="js/bikes.js"></script>
 <script src="js/game3d-core.js"></script>
 <script type="importmap">{ "imports": { "three": "./js/vendor/three.module.min.js" } }</script>
 <script type="module" src="js/game3d.js"></script>
