@@ -72,6 +72,20 @@
         water: 0xE8A45C
       }
     },
+    zambezi: {
+      id: "zambezi", name: "Lower Zambezi", level: "trail", levelLabel: "Trail Star",
+      seed: 20261107, length: 1600, slope: 0.062, wobble: 0.8, kickerEvery: 150,
+      river: { offset: 24, width: 70, depth: 2.2 },
+      desc: "Riverside flow — mind the crocs",
+      theme: {
+        sky: 0xC2E4EE, skyLow: 0xF5E6B8, fog: 0xD8E4C4, fogNear: 70, fogFar: 450,
+        sun: 0xFFF2CC, sunPos: [-150, 130, -260], ambient: 0xB0C49A,
+        turbidity: 5, rayleigh: 1.7, mieCoeff: 0.004, mieG: 0.8, cloudCover: 0.3, exposure: 0.56,
+        grass: 0x3E8E52, grassDry: 0x8AA84E, dirt: 0x8A6238, dirtDark: 0x6B4826, rock: 0x7E7A64,
+        trunk: 0x5A4028, canopy: 0x2F7A44, canopy2: 0x4E9B58, accent: 0xE8791D,
+        water: 0x2E6E5E, sand: 0xD8C08A
+      }
+    },
     falls: {
       id: "falls", name: "Mosi Falls Drop", level: "hero", levelLabel: "Downhill Hero",
       seed: 20260926, length: 1750, slope: 0.165, wobble: 1.15, kickerEvery: 100,
@@ -86,7 +100,7 @@
       }
     }
   };
-  var TRACK3_ORDER = ["miombo", "baobab", "falls"];
+  var TRACK3_ORDER = ["miombo", "baobab", "zambezi", "falls"];
 
   /* ================= world building ================= */
 
@@ -102,9 +116,12 @@
     h += 5 * vnoise(x / 88, z / 88, s + 7);
     h += 2.1 * vnoise(x / 37, z / 37, s + 13);
     h += 0.7 * vnoise(x / 13, z / 13, s + 29);
-    /* valley walls keep the ride in a broad corridor */
-    var ax = Math.abs(x);
-    var wall = def.id === "falls" ? smoothstepN(ax, 70, 200) * 55 : smoothstepN(ax, 120, 250) * 34;
+    /* valley walls keep the ride in a broad corridor; river tracks stay open
+       on the water side so the bank can fall away to the Zambezi */
+    var wall;
+    if (def.river) wall = smoothstepN(-x, 100, 240) * 30;
+    else if (def.id === "falls") wall = smoothstepN(Math.abs(x), 70, 200) * 55;
+    else wall = smoothstepN(Math.abs(x), 120, 250) * 34;
     return h + wall;
   }
 
@@ -196,14 +213,62 @@
       }
     }
 
+    /* river tracks: drop everything beyond the bank to the water, with a
+       sandy beach slope, and remember the water level per grid row */
+    var rowWaterY = null;
+    var rowEdgeX = null;
+    if (def.river) {
+      rowWaterY = new Float32Array(nz);
+      rowEdgeX = new Float32Array(nz);
+      for (gz = 0; gz < nz; gz++) {
+        var wz2 = z0 + gz * GRID_STEP;
+        var ti2 = trailRangeForZ(wz2);
+        var tp = pts[Math.min(n - 1, ti2)];
+        var edge = tp.x + def.river.offset;
+        var wY = tp.y - def.river.depth;
+        rowWaterY[gz] = wY;
+        rowEdgeX[gz] = edge;
+        for (gx = 0; gx < nx; gx++) {
+          var wx2 = -X_HALF + gx * GRID_STEP;
+          var dEdge = wx2 - edge;
+          var vi2 = gz * nx + gx;
+          if (dEdge <= -14) {
+            /* the floodplain never dips under the waterline — the only
+               place to get wet is the river itself */
+            if (H[vi2] < wY + 1.3) H[vi2] = wY + 1.3;
+          } else if (dEdge < 12) {
+            /* beach: ease the bank down toward the water */
+            var k = smoothstepN(dEdge, -14, 12);
+            var hLand = H[vi2] < wY + 1.3 ? wY + 1.3 : H[vi2];
+            H[vi2] = hLand * (1 - k) + (wY - 1.2) * k;
+          } else if (dEdge < def.river.width) {
+            H[vi2] = wY - 1.2 - Math.min(2.2, (dEdge - 12) * 0.1);
+          } else {
+            /* far bank rises into hazy tree line */
+            H[vi2] = wY - 1 + smoothstepN(dEdge, def.river.width, def.river.width + 36) * 9;
+          }
+        }
+      }
+    }
+
     var world = {
       def: def, nx: nx, nz: nz, z0: z0, x0: -X_HALF, step: GRID_STEP,
       H: H, TD: TD, trail: pts, trailN: n, finishIdx: n - 4,
-      kickers: kickers, props: [], coins: [], gates: [], hash: {}, hashCell: 8
+      kickers: kickers, props: [], coins: [], gates: [], hash: {}, hashCell: 8,
+      rowWaterY: rowWaterY, rowEdgeX: rowEdgeX, riverEdgeX: null, waterY: null
     };
 
     /* re-sample trail y from the carved grid so physics and path agree */
     for (i = 0; i < n; i++) pts[i].y = heightAt(world, pts[i].x, pts[i].z);
+
+    if (def.river) {
+      world.riverEdgeX = new Float32Array(n);
+      world.waterY = new Float32Array(n);
+      for (i = 0; i < n; i++) {
+        world.riverEdgeX[i] = pts[i].x + def.river.offset;
+        world.waterY[i] = pts[i].y - def.river.depth;
+      }
+    }
 
     /* ---- gates (checkpoints) every ~150 m + finish ---- */
     for (i = 30; i < n - 8; i += Math.round(150 / TRAIL_DS)) world.gates.push(i);
@@ -228,6 +293,7 @@
     var POOLS = {
       miombo: [["miombo", 5, 2.0], ["miombo", 5, 2.0], ["bush", 2, 0], ["rock", 2, 1.1], ["fern", 1, 0], ["grass", 4, 0]],
       baobab: [["baobab", 2, 2.6], ["acacia", 3, 1.6], ["termite", 2, 0.9], ["grass", 5, 0], ["rock", 2, 1.1], ["bush", 1, 0]],
+      zambezi: [["palm", 3, 1.4], ["miombo", 3, 2.0], ["reed", 3, 0], ["bush", 2, 0], ["grass", 3, 0], ["rock", 1, 1.1]],
       falls: [["miombo", 4, 2.0], ["palm", 2, 1.4], ["rock", 4, 1.4], ["fern", 3, 0], ["grass", 3, 0], ["bush", 1, 0]]
     };
     var pool = [];
@@ -248,13 +314,65 @@
       var pick = pool[Math.floor(rng() * pool.length)];
       var margin = pick[1] > 0 ? 7.5 : 4.5;
       if (dBest < margin) continue;
+      /* keep land props out of the river */
+      if (def.river) {
+        var rti = trailRangeForZ(pz);
+        if (px > pts[Math.min(n - 1, rti)].x + def.river.offset - 5) continue;
+      }
       world.props.push({
         type: pick[0], x: px, z: pz, y: heightAt(world, px, pz),
         s: 0.75 + rng() * 0.7, rot: rng() * 6.28, r: pick[1]
       });
     }
+
+    /* ---- Lower Zambezi hazards & riverside life ---- */
+    if (def.river) {
+      /* crocs sun themselves ON the trail edges — the racing line stays open,
+         but a lazy line meets teeth. Straight-ish segments only, so the AI
+         ghosts' centre line never clips one. */
+      var cz2 = 140;
+      var side2 = 1;
+      while (cz2 < def.length - 120) {
+        var ciT = Math.floor(cz2 / TRAIL_DS);
+        if (ciT > 6 && ciT < n - 8) {
+          var yawA = Math.atan2(pts[ciT + 3].x - pts[ciT - 3].x, pts[ciT + 3].z - pts[ciT - 3].z);
+          var yawB = pts[ciT].yaw;
+          var bend = Math.abs(yawA - yawB);
+          if (bend < 0.14) {
+            var cp = pts[ciT];
+            var lat = side2 * (1.7 + rng() * 1.9);
+            world.props.push({
+              type: "croc", x: cp.x + lat, z: cp.z, y: heightAt(world, cp.x + lat, cp.z),
+              s: 0.85 + rng() * 0.4, rot: rng() * 6.28, r: 1.05
+            });
+            side2 = -side2;
+          }
+        }
+        cz2 += 120 + rng() * 90;
+      }
+      /* a few more crocs hauled out on the beach, plus hippo pods in the water */
+      var bz = 200;
+      while (bz < def.length - 150) {
+        var bti = Math.floor(bz / TRAIL_DS);
+        var bp = pts[Math.min(n - 1, bti)];
+        if (rng() < 0.6) {
+          world.props.push({
+            type: "croc", x: bp.x + def.river.offset - 5 - rng() * 5, z: bp.z,
+            y: heightAt(world, bp.x + def.river.offset - 5, bp.z),
+            s: 0.9 + rng() * 0.45, rot: 1.2 + rng() * 0.8, r: 1.05
+          });
+        } else {
+          var hx = bp.x + def.river.offset + 16 + rng() * 24;
+          world.props.push({
+            type: "hippo", x: hx, z: bp.z, y: (world.waterY ? bp.y - def.river.depth : bp.y) + 0.1,
+            s: 1, rot: rng() * 6.28, r: 0
+          });
+        }
+        bz += 240 + rng() * 200;
+      }
+    }
     /* wildlife, well away from the trail */
-    var FAUNA = { miombo: ["antelope", "antelope", "zebra"], baobab: ["giraffe", "elephant", "zebra", "antelope"], falls: ["antelope", "elephant"] };
+    var FAUNA = { miombo: ["antelope", "antelope", "zebra"], baobab: ["giraffe", "elephant", "zebra", "antelope"], zambezi: ["elephant", "antelope", "zebra"], falls: ["antelope", "elephant"] };
     var fz = 150;
     while (fz < zEnd - 150) {
       var side = rng() < 0.5 ? -1 : 1;
@@ -512,6 +630,15 @@
         taken[i] = 1;
         st.coinCount++; st.score += 25;
         ev.push({ t: "coin" });
+      }
+    }
+
+    /* --- ride into the river: below the water line means swimming --- */
+    if (world.rowWaterY && st.crashT <= 0) {
+      var gzI = Math.max(0, Math.min(world.nz - 1, Math.round((st.z - world.z0) / world.step)));
+      if (st.y < world.rowWaterY[gzI] - 0.12) {
+        st.crashT = 0.7;
+        ev.push({ t: "splash" });
       }
     }
 

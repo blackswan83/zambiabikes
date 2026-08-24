@@ -303,6 +303,10 @@
         p_night: { name: "Miombo Night", color: "#22303A", desc: "Stealth. Extra fast at dusk (citation needed).", kg: 0, stats: {} },
         p_sunset: { name: "Kariba Sunset", color: "#D95F2B", desc: "Golden hour, all day.", kg: 0, stats: {} },
         p_purple: { name: "Jacaranda", color: "#8E44AD", desc: "October in Lusaka, when the whole city turns purple.", kg: 0, stats: {} },
+        p_croc: {
+          name: "Croc Green", color: "#767B3B", desc: "Basking-crocodile khaki. Earned by surviving the Lower Zambezi.",
+          kg: 0, stats: {}, unlock: { type: "finish", track: "zambezi", label: "Finish Lower Zambezi" }
+        },
         p_chrome: {
           name: "Copper Chrome", color: "#D8A05A", metal: true, desc: "Mirror-polished show finish. Blinds the ghosts behind you.",
           kg: 0, stats: {}, unlock: { type: "medal", track: "any", medal: "silver", label: "Beat Arthur's ghost anywhere" }

@@ -83,8 +83,11 @@ and verdicts, all of which change the ride. Dream parts are **earned by
 riding** (finish tracks, beat ghosts, collect coins — tracked in
 `zr3_career`), never bought.
 
-Three 3D mountains: **Miombo Meander** (1.25 km), **Baobab Ridge** (1.5 km,
-sunset), **Mosi Falls Drop** (1.75 km canyon). Armand and Arthur's ghosts
+Four 3D mountains: **Miombo Meander** (1.25 km), **Baobab Ridge** (1.5 km,
+sunset), **Lower Zambezi** (1.6 km riverside — a flowing river with sandy
+beaches, reed beds, hippo pods, and crocodiles basking right on the trail
+edge; clip one and you crash, ride into the river and you splash), and
+**Mosi Falls Drop** (1.75 km canyon). Armand and Arthur's ghosts
 are simulated through the same physics, so their times are honestly
 beatable — gold medal = beat Armand. **Ghost Codes** (`ZR3G1…`) give kid-safe
 multiplayer with no server: positions + a first name, nothing else. If a

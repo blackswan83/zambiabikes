@@ -123,6 +123,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     bigair: function () { tone(520, 0.18, "triangle", 0, 990); },
     gate: function () { tone(740, 0.09, "triangle"); },
     bell: function () { tone(1610, 0.35, "triangle"); tone(2130, 0.5, "triangle", 0.09); },
+    splash: function () { tone(320, 0.28, "sine", 0, 70); tone(900, 0.18, "triangle", 0.03, 200); },
     count: function (hi) { tone(hi ? 880 : 440, 0.14, "square"); },
     finish: function () { [523, 659, 784, 1047].forEach(function (f, i) { tone(f, 0.16, "triangle", i * 0.12); }); }
   };
@@ -536,6 +537,32 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
 
   var baobabGeo = buildBaobabGeometry(20261010);
 
+  /* papyrus reed clump: stalks + umbrella heads, merged for instancing */
+  var reedGeo = (function () {
+    var s2 = 77;
+    function rnd() { s2 = (s2 * 16807) % 2147483647; return s2 / 2147483647; }
+    var geos = [];
+    var up = new THREE.Vector3(0, 1, 0);
+    for (var i = 0; i < 6; i++) {
+      var h = 1.8 + rnd() * 1.3;
+      var lean = new THREE.Vector3((rnd() - 0.5) * 0.5, 1, (rnd() - 0.5) * 0.5).normalize();
+      var base = new THREE.Vector3((rnd() - 0.5) * 0.7, 0, (rnd() - 0.5) * 0.7);
+      var g2 = new THREE.CylinderGeometry(0.016, 0.028, h, 5);
+      g2.translate(0, h / 2, 0);
+      var q = new THREE.Quaternion().setFromUnitVectors(up, lean);
+      var m = new THREE.Matrix4().makeRotationFromQuaternion(q);
+      m.setPosition(base.x, base.y, base.z);
+      g2.applyMatrix4(m);
+      geos.push(g2);
+      var head = new THREE.ConeGeometry(0.16, 0.22, 6);
+      head.scale(1, -1, 1);
+      var tip = base.clone().addScaledVector(lean, h);
+      head.translate(tip.x, tip.y + 0.08, tip.z);
+      geos.push(head);
+    }
+    return mergeGeometries(geos);
+  })();
+
   /* 3 crossed vertical cards + 1 horizontal card, centered on origin */
   var canopyCardGeo = (function () {
     var pos = [], uv = [], idx = [];
@@ -924,6 +951,12 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
         var hD = world.H[Math.min(nz - 1, iz + 1) * nx + ix];
         var sl = Math.min(1, (Math.abs(hR - h) + Math.abs(hD - h)) / step * 0.9);
         var nse = (Math.sin(wx * 0.31) * Math.sin(wz * 0.23) + Math.sin(wx * 0.071 + wz * 0.083)) * 0.5;
+        var sandK = 0;
+        if (world.rowWaterY && wx > world.rowEdgeX[iz] - 15) {    /* riverside only */
+          var wl = world.rowWaterY[iz];
+          if (h < wl - 0.35) sandK = -1;                          /* riverbed */
+          else if (h < wl + 1.8) sandK = 1 - (h - wl) / 1.8;      /* beach */
+        }
         if (d < 2.6) {
           tmp.copy(cDirt).lerp(cDirtD, 0.35 + nse * 0.2);
           /* twin tire ruts worn into the trail */
@@ -935,6 +968,8 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
           tmp.copy(cGrass).lerp(cDry, 0.5 + nse * 0.45);
           if (sl > 0.55) tmp.lerp(cRock, (sl - 0.55) * 1.6);
         }
+        if (sandK > 0) tmp.lerp(new THREE.Color(T.sand || 0xD8C08A), Math.min(1, sandK));
+        else if (sandK < 0) tmp.copy(cDirtD).multiplyScalar(0.55);
         colors[vi * 3] = tmp.r; colors[vi * 3 + 1] = tmp.g; colors[vi * 3 + 2] = tmp.b;
       }
     }
@@ -952,6 +987,47 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     }));
     terrain.receiveShadow = true;
     scene.add(terrain);
+
+    /* ---- the Zambezi itself: a flowing water ribbon along the bank ---- */
+    var riverTex = null;
+    if (world.riverEdgeX) {
+      var rPos = [], rUv = [], rIdx = [];
+      var smoothY = new Float32Array(world.trailN);
+      for (var ri2 = 0; ri2 < world.trailN; ri2++) {
+        var lo2 = Math.max(0, ri2 - 4), hi2 = Math.min(world.trailN - 1, ri2 + 4), acc2 = 0;
+        for (var k2 = lo2; k2 <= hi2; k2++) acc2 += world.waterY[k2];
+        smoothY[ri2] = acc2 / (hi2 - lo2 + 1);
+      }
+      var rStep = 2, rCount = 0;
+      for (ri2 = 0; ri2 < world.trailN; ri2 += rStep) {
+        var tp2 = world.trail[ri2];
+        var lx2 = world.riverEdgeX[ri2] - 8;
+        var rx2 = world.riverEdgeX[ri2] + world.def.river.width + 60;
+        var wy2 = smoothY[ri2];
+        rPos.push(lx2, wy2, tp2.z, rx2, wy2, tp2.z);
+        rUv.push(0, ri2 * 0.09, 7, ri2 * 0.09);
+        if (ri2 + rStep < world.trailN) {
+          var b2 = rCount * 2;
+          /* wound so the face normal points up (+y) — the surface is viewed from above */
+          rIdx.push(b2, b2 + 2, b2 + 1, b2 + 1, b2 + 2, b2 + 3);
+        }
+        rCount++;
+      }
+      var rGeo = new THREE.BufferGeometry();
+      rGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(rPos), 3));
+      rGeo.setAttribute("uv", new THREE.BufferAttribute(new Float32Array(rUv), 2));
+      rGeo.setIndex(rIdx);
+      rGeo.computeVertexNormals();
+      riverTex = waterNormalTex.clone();
+      riverTex.needsUpdate = true;
+      var riverMesh = new THREE.Mesh(rGeo, new THREE.MeshPhongMaterial({
+        color: T.water, normalMap: riverTex, normalScale: new THREE.Vector2(0.55, 0.55),
+        shininess: 130, specular: 0xA8D9C8, transparent: true, opacity: 0.93,
+        emissive: T.water, emissiveIntensity: 0.38   /* rivers scatter skylight — never black */
+      }));
+      riverMesh.receiveShadow = true;
+      scene.add(riverMesh);
+    }
 
     /* ---- instanced props ---- */
     var density = lightMode ? 0.55 : 1;
@@ -986,6 +1062,9 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       piece(canopyCardGeo.clone().scale(1.7, 0.9, 1.7), leafM, 4.0)
     ];
     parts.bush = [piece(new THREE.SphereGeometry(0.8, 7, 5).scale(1, 0.6, 1), can2M, 0.45)];
+    var reedM = new THREE.MeshLambertMaterial({ color: 0x6E9E52 });
+    addSway(reedM, 0.09, 1.6);
+    parts.reed = [piece(reedGeo, reedM, 0)];
     parts.fern = [piece(new THREE.ConeGeometry(0.55, 1.1, 5), canM, 0.5)];
     parts.grass = [piece(new THREE.ConeGeometry(0.3, 0.75, 4), can2M, 0.32)];
     parts.rock = [piece(new THREE.DodecahedronGeometry(0.85, 0), rockM, 0.4)];
@@ -1032,12 +1111,15 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     });
 
     /* wildlife: little primitive sculptures */
+    var crocs = [];
     world.props.forEach(function (p) {
       var g2 = null;
       if (p.type === "elephant") g2 = buildElephant();
       else if (p.type === "giraffe") g2 = buildGiraffe();
       else if (p.type === "zebra") g2 = buildZebra();
       else if (p.type === "antelope") g2 = buildAntelope();
+      else if (p.type === "croc") { g2 = buildCroc(); g2.scale.setScalar(p.s * 1.25); crocs.push(g2); }
+      else if (p.type === "hippo") g2 = buildHippo();
       if (g2) {
         g2.position.set(p.x, p.y, p.z);
         g2.rotation.y = p.rot;
@@ -1335,7 +1417,8 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     var cached = {
       scene: scene, coinMesh: coinMesh, clouds: clouds, wf: wf,
       dome: dome, sky: skyObj, ridges: [ridgeFar, ridgeNear], sunSp: sunSp, sun: sun, sunDir: sunDir,
-      birds: birds, exposure: exposure, swayMats: sceneLeafMats.slice()
+      birds: birds, exposure: exposure, swayMats: sceneLeafMats.slice(),
+      crocs: crocs, riverTex: riverTex
     };
     sceneCache[id] = cached;
     return cached;
@@ -1423,6 +1506,108 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       var leg = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 1.05, 4), m);
       leg.position.set(l[0], 0.5, l[1]);
       g.add(leg);
+    });
+    return g;
+  }
+
+  function buildCroc() {
+    /* khaki back + near-black scutes + cream jaw: reads as "croc!" from 40 m
+       out on green ground, which the kids need to dodge it in time */
+    var olive = lam(0x767B3B), oliveD = lam(0x2E351A), teeth = lam(0xF2EBD8);
+    var g = new THREE.Group();
+    /* body + ridged tail */
+    var body = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 8), olive);
+    body.scale.set(0.44, 0.26, 1.05);
+    body.position.set(0, 0.26, -0.2);
+    g.add(body);
+    var tail = new THREE.Group();
+    tail.position.set(0, 0.24, -1.1);
+    var seg1 = new THREE.Mesh(new THREE.ConeGeometry(0.22, 1.1, 6), olive);
+    seg1.rotation.x = -Math.PI / 2;
+    seg1.position.z = -0.5;
+    tail.add(seg1);
+    var seg2 = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.8, 5), oliveD);
+    seg2.rotation.x = -Math.PI / 2;
+    seg2.position.z = -1.15;
+    tail.add(seg2);
+    g.add(tail);
+    /* dorsal scutes */
+    for (var i = 0; i < 6; i++) {
+      var sc2 = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.15, 4), oliveD);
+      sc2.position.set((i % 2 ? 0.09 : -0.09), 0.48 - i * 0.015, -0.55 - i * 0.14);
+      g.add(sc2);
+    }
+    /* head: fixed upper jaw + animated lower jaw */
+    var head = new THREE.Group();
+    head.position.set(0, 0.26, 0.75);
+    var upper = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.14, 0.85), olive);
+    upper.position.set(0, 0.06, 0.32);
+    head.add(upper);
+    var snoutTip = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.11, 0.2), olive);
+    snoutTip.position.set(0, 0.045, 0.78);
+    head.add(snoutTip);
+    [-0.1, 0.1].forEach(function (x) {
+      var eye = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), oliveD);
+      eye.position.set(x, 0.16, 0.12);
+      head.add(eye);
+      var pupil = new THREE.Mesh(new THREE.SphereGeometry(0.018, 6, 5), lam(0x1A1A10));
+      pupil.position.set(x, 0.185, 0.15);
+      head.add(pupil);
+      var nostril = new THREE.Mesh(new THREE.SphereGeometry(0.028, 6, 5), oliveD);
+      nostril.position.set(x * 0.6, 0.11, 0.85);
+      head.add(nostril);
+    });
+    /* teeth on the upper lip */
+    for (i = 0; i < 5; i++) {
+      [-0.14, 0.14].forEach(function (x) {
+        var t2 = new THREE.Mesh(new THREE.ConeGeometry(0.016, 0.05, 4), teeth);
+        t2.rotation.x = Math.PI;
+        t2.position.set(x, -0.015, 0.25 + i * 0.13);
+        head.add(t2);
+      });
+    }
+    var jaw = new THREE.Group();
+    jaw.position.set(0, -0.02, 0);
+    var lower = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.08, 0.92), lam(0xD8CBA4));
+    lower.position.set(0, -0.04, 0.42);
+    jaw.add(lower);
+    var gape = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.015, 0.8), lam(0xC96A5A));
+    gape.position.set(0, 0.005, 0.42);
+    jaw.add(gape);
+    head.add(jaw);
+    g.add(head);
+    /* stubby splayed legs */
+    [[-0.38, 0.25, 0.55], [0.38, 0.25, 0.55], [-0.4, 0.25, -0.75], [0.4, 0.25, -0.75]].forEach(function (l) {
+      var leg = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 0.3, 6), olive);
+      leg.position.set(l[0], l[1] - 0.12, l[2]);
+      leg.rotation.z = l[0] > 0 ? -0.5 : 0.5;
+      g.add(leg);
+    });
+    g.userData = { jaw: jaw, tail: tail, phase: Math.random() * 6.28 };
+    return g;
+  }
+
+  function buildHippo() {
+    var grey = lam(0x6E5A64), greyD = lam(0x59464F);
+    var g = new THREE.Group();
+    var back = new THREE.Mesh(new THREE.SphereGeometry(1.3, 10, 8), grey);
+    back.scale.set(0.85, 0.5, 1.15);
+    back.position.set(0, -0.25, -0.4);
+    g.add(back);
+    var head = new THREE.Mesh(new THREE.SphereGeometry(0.62, 10, 8), grey);
+    head.scale.set(0.9, 0.62, 1.25);
+    head.position.set(0, 0.02, 1.05);
+    g.add(head);
+    [-0.24, 0.24].forEach(function (x) {
+      var ear = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 5), greyD);
+      ear.position.set(x, 0.42, 0.78);
+      g.add(ear);
+      var eye = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 5), greyD);
+      eye.position.set(x, 0.3, 1.06);
+      g.add(eye);
+      var nostril = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 5), greyD);
+      nostril.position.set(x * 0.55, 0.28, 1.65);
+      g.add(nostril);
     });
     return g;
   }
@@ -1705,6 +1890,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
 
   var CRASH_MSG = {
     landing: "OUCH! 💥 Bend those knees on big drops!",
+    croc: "CROC! 🐊 Give those teeth some space!",
     miombo: "Tree! 🌳 Keep it on the trail!",
     baobab: "That baobab is 1000 years old — and solid! 💥",
     acacia: "Tree! 🌳 Keep it on the trail!",
@@ -1734,6 +1920,11 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
         SFX.crash();
         spawnDust(st.x, st.y, st.z, 14);
         if (!reducedMotion) shakeT = 0.5;
+      }
+      else if (e.t === "splash") {
+        toast("SPLASH! 🐊 The Zambezi is NOT a shortcut!");
+        SFX.splash();
+        spawnDust(st.x, st.y + 0.5, st.z, 12);
       }
       else if (e.t === "respawn") toast("Back on track! 🚵");
       else if (e.t === "gate") SFX.gate();
@@ -1906,6 +2097,17 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     for (i = 0; i < sc.swayMats.length; i++) {
       var sm = sc.swayMats[i];
       if (sm.userData.swayShader) sm.userData.swayShader.uniforms.uZbTime.value = t;
+    }
+    /* crocs yawn slowly and sweep their tails; the river flows */
+    for (i = 0; i < sc.crocs.length; i++) {
+      var cr = sc.crocs[i].userData;
+      var yawn = Math.max(0, Math.sin(t * 0.45 + cr.phase));
+      cr.jaw.rotation.x = 0.06 + Math.pow(yawn, 8) * 0.55;
+      cr.tail.rotation.y = Math.sin(t * 1.1 + cr.phase) * 0.16;
+    }
+    if (sc.riverTex) {
+      sc.riverTex.offset.y -= dt * 0.22;
+      sc.riverTex.offset.x = Math.sin(t * 0.3) * 0.02;
     }
     if (sc.wf) {
       if (sc.wf.water) sc.wf.water.material.uniforms.time.value += dt * 0.55;
@@ -2236,6 +2438,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       followEnvironment(sc, run.st.x, run.st.y, run.st.z);
       updateHUD(run.st, world);
       renderFrame(sc);
+      if (location.search.indexOf("dbg3d") !== -1) window.__dbg = { sc: sc, camera: camera, renderer: renderer, world: world, st: run.st, THREE: THREE };
 
       if (run.st.finished) {
         run.endT += dt;
