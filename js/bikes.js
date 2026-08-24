@@ -167,6 +167,64 @@
       }
     },
 
+    bar: {
+      label: "Handlebar",
+      options: {
+        bar_narrow: {
+          name: "700 mm Whippet", spec: "700 × 20 mm rise · 8° backsweep",
+          desc: "Narrow bars turn tiny inputs into big direction changes — darty in the trees, twitchy when the trail hits back.",
+          kg: 0.26, stats: { steer: 1.08, rough: 1.05 }
+        },
+        bar_trail: {
+          name: "760 mm Trail", spec: "760 × 25 mm rise · 9° backsweep",
+          desc: "The modern do-it-all width. Enough leverage to muscle the front wheel, not so wide you clip a mopane on the way past.",
+          kg: 0.3, stats: {}
+        },
+        bar_wide: {
+          name: "800 mm Gorilla", spec: "800 × 30 mm rise · 10° backsweep",
+          desc: "Maximum leverage, maximum calm. The bike stops arguing in the rough — just mind your knuckles in tight forest.",
+          kg: 0.34, stats: { steer: 0.94, rough: 0.95, landSoft: 0.03 }
+        }
+      }
+    },
+
+    ring: {
+      label: "Chainring",
+      options: {
+        ring_30: {
+          name: "30T Climber", spec: "30 T narrow-wide · steel",
+          desc: "A small ring spins up instantly — snap out of corners, dance up the climbs, run out of gear on the fast straights.",
+          kg: 0.07, stats: { pedal: 1.05, vcap: 0.96 }
+        },
+        ring_32: {
+          name: "32T All-round", spec: "32 T narrow-wide · alloy",
+          desc: "The reference ring. Nobody ever got dropped for running a 32.",
+          kg: 0.06, stats: {}
+        },
+        ring_34: {
+          name: "34T Big Ring", spec: "34 T narrow-wide · alloy",
+          desc: "For riders with diesel in their legs: slower to wind up, but the top end just keeps giving.",
+          kg: 0.065, stats: { pedal: 0.95, vcap: 1.05 }
+        }
+      }
+    },
+
+    pedals: {
+      label: "Pedals",
+      options: {
+        pedal_comp: {
+          name: "Composite Flats", spec: "Nylon body · moulded grip",
+          desc: "Light, cheap, kind to shins. The moulded studs hold fine until things get properly wild.",
+          kg: 0.35, stats: {}
+        },
+        pedal_pins: {
+          name: "Alloy Pin Flats", spec: "6061 body · 10 traction pins a side",
+          desc: "Ten steel pins per side lock your shoes to the bike — bunny-hops come up with you instead of staying behind.",
+          kg: 0.42, stats: { hop: 1.07, landSoft: 0.02 }
+        }
+      }
+    },
+
     brakes: {
       label: "Brakes",
       options: {
@@ -262,7 +320,22 @@
   var DEFAULT_CONFIG = {
     frame: "zambezi_fs", fork: "kafue_120", wheels: "w275", tires: "miombo_grip",
     drivetrain: "trail_1x11", brakes: "two_pot", seatpost: "rigid_post",
+    bar: "bar_trail", ring: "ring_32", pedals: "pedal_comp",
     extras: ["bottle"], paint: "p_forest"
+  };
+
+  /* every paintable zone on the bike + the workshop tune bench */
+  var COLOR_ZONES = ["frame", "fork", "rims", "saddle", "grips"];
+  var DEFAULT_COLORS = { frame: "p_forest", fork: "p_night", rims: "p_night", saddle: "p_night", grips: "p_night", wall: "black" };
+  var WALL_OPTIONS = { black: { name: "Blackwall", color: "#2A2420" }, tan: { name: "Tanwall", color: "#C9995C" }, gum: { name: "Gumwall", color: "#A9764C" } };
+  var DEFAULT_TUNE = { sag: 27, rebound: 5, psi: 22 };
+  var TUNE_SPEC = {
+    sag: { label: "Suspension sag", unit: "%", min: 15, max: 35, recLo: 25, recHi: 30,
+      blurb: "How far the suspension settles under your weight. Low sag = a firm, sprinty platform; high sag = plush and forgiving but wallowy on the pedals." },
+    rebound: { label: "Rebound damping", unit: " clicks", min: 0, max: 10, recLo: 4, recHi: 6,
+      blurb: "How fast the suspension returns. Too fast (low clicks) and the bike bucks you on landings; too slow and it packs up through repeated hits." },
+    psi: { label: "Tire pressure", unit: " psi", min: 16, max: 30, recLo: 20, recHi: 24,
+      blurb: "The cheapest suspension you own. Low pressure grips and floats over roots but rolls slow and risks rim strikes; high pressure is fast and skittery." }
   };
 
   var MEDAL_RANK = { none: 0, bronze: 1, silver: 2, gold: 3 };
@@ -311,6 +384,40 @@
       if (!def || !isUnlocked(def, career)) id = DEFAULT_CONFIG[cat];
       out[cat] = id;
     });
+    /* per-zone colours: values are paint ids; legacy configs painted only the frame */
+    var colors = cfg.colors && typeof cfg.colors === "object" ? cfg.colors : {};
+    out.colors = {};
+    COLOR_ZONES.forEach(function (zone) {
+      var pid = colors[zone] || (zone === "frame" ? out.paint : DEFAULT_COLORS[zone]);
+      var pd = getOption("paint", pid);
+      if (!pd || !isUnlocked(pd, career)) pid = DEFAULT_COLORS[zone];
+      out.colors[zone] = pid;
+    });
+    out.colors.wall = WALL_OPTIONS[colors.wall] ? colors.wall : DEFAULT_COLORS.wall;
+    out.paint = out.colors.frame;   /* keep legacy field in sync */
+    /* tune bench values, clamped to the physical range */
+    var tune = cfg.tune && typeof cfg.tune === "object" ? cfg.tune : {};
+    out.tune = {};
+    Object.keys(TUNE_SPEC).forEach(function (k) {
+      var v = Number(tune[k]);
+      var sp = TUNE_SPEC[k];
+      if (!isFinite(v)) v = DEFAULT_TUNE[k];
+      out.tune[k] = Math.max(sp.min, Math.min(sp.max, Math.round(v)));
+    });
+    return out;
+  }
+
+  /* one verdict per tune dial, used by the garage UI and worth reading */
+  function tuneVerdict(tune) {
+    var out = {};
+    Object.keys(TUNE_SPEC).forEach(function (k) {
+      var sp = TUNE_SPEC[k];
+      var v = tune[k];
+      if (v >= sp.recLo && v <= sp.recHi) out[k] = { ok: true, text: "Dialled ✓" };
+      else if (k === "sag") out[k] = { ok: false, text: v < sp.recLo ? "Firm: sprinty but harsh" : "Plush: forgiving but wallowy" };
+      else if (k === "rebound") out[k] = { ok: false, text: v < sp.recLo ? "Too fast: the bike bucks" : "Too slow: packs up in the rough" };
+      else out[k] = { ok: false, text: v < sp.recLo ? "Squishy: grippy, slow, rim-strike risk" : "Rock hard: fast rolling, skittery" };
+    });
     return out;
   }
 
@@ -333,7 +440,27 @@
     apply(getOption("drivetrain", cfg.drivetrain));
     apply(getOption("brakes", cfg.brakes));
     apply(getOption("seatpost", cfg.seatpost));
+    apply(getOption("bar", cfg.bar));
+    apply(getOption("ring", cfg.ring));
+    apply(getOption("pedals", cfg.pedals));
     (cfg.extras || []).forEach(function (id) { apply(getOption("extras", id)); });
+
+    /* --- the tune bench: setup is real mechanics, not decoration --- */
+    var tune = cfg.tune || DEFAULT_TUNE;
+    var sagDev = (tune.sag - 27) / 10;            /* -1.2 .. +0.8 */
+    S.pedal *= 1 - Math.max(0, sagDev) * 0.05 + Math.max(0, -sagDev) * 0.02;
+    S.rough *= 1 - sagDev * 0.10;                 /* more sag soaks more chatter */
+    S.landSoft += sagDev * 0.10;
+    var rebOff = Math.abs(tune.rebound - 5);      /* distance from the sweet spot */
+    if (rebOff > 1) {
+      S.landSoft -= (rebOff - 1) * 0.03;
+      S.rough *= 1 + (rebOff - 1) * 0.02;
+    }
+    var psiDev = (tune.psi - 22) / 8;             /* -0.75 .. +1 */
+    S.roll *= 1 - psiDev * 0.07;                  /* hard tires roll fast */
+    S.steer *= 1 - psiDev * 0.08;                 /* soft tires bite */
+    S.rough *= 1 + psiDev * 0.06;
+    S.landSoft += -Math.max(0, psiDev) * 0.03 - Math.max(0, -psiDev - 0.5) * 0.06; /* rim-strike territory */
 
     /* weight matters: every kilo over the reference bike costs a little sprint */
     S.pedal *= 1 + (13.5 - kg) * 0.008;
@@ -384,7 +511,9 @@
 
   var API = {
     CATALOG: CATALOG, DEFAULT_CONFIG: DEFAULT_CONFIG, BASE_KG: BASE_KG,
-    MEDAL_RANK: MEDAL_RANK,
+    MEDAL_RANK: MEDAL_RANK, COLOR_ZONES: COLOR_ZONES, DEFAULT_COLORS: DEFAULT_COLORS,
+    WALL_OPTIONS: WALL_OPTIONS, DEFAULT_TUNE: DEFAULT_TUNE, TUNE_SPEC: TUNE_SPEC,
+    tuneVerdict: tuneVerdict,
     getOption: getOption, isUnlocked: isUnlocked, normalizeConfig: normalizeConfig,
     computeStats: computeStats, riderNameForBike: riderNameForBike, emptyCareer: emptyCareer,
     loadConfig: loadConfig, saveConfig: saveConfig, loadCareer: loadCareer, saveCareer: saveCareer

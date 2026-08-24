@@ -65,17 +65,23 @@ two layers:
   textures are generated procedurally — the game ships zero image assets.
 
 **The Garage** (`garage.html`, `js/garage.js`, catalog in `js/bikes.js`):
-a bike-builder for real MTB fans with an interactive 3D viewer (OrbitControls,
-studio lighting, PMREM reflections on metallic paint). 39 parts across nine
-categories — five frames (hardtail, trail FS, enduro, DH, dirt jumper), five
-forks up to a 200 mm dual-crown, three wheel sizes, four tire compounds, four
-drivetrains, three brake sets, seatposts, extras and paint. Every part carries
-real stat trade-offs (sprint, top speed, agility, rolling resistance,
-rough-line tolerance, landing armour, bunny-hop pop, weight in kg) that feed
-straight into the riding physics via `computeStats`; the equipped bike also
-changes the in-game model (wheel size, paint, dual-crown, shock, mudguard,
-bell — press B to ring it). Dream parts are **earned by riding** (finish
-tracks, beat ghosts, collect coins — tracked in `zr3_career`), never bought.
+an engineering-detail bike builder for real MTB fans. The interactive 3D
+viewer (OrbitControls, studio lighting, PMREM reflections) shows every
+component as real geometry: cross-laced spokes on flanged hubs with nipples
+and valve stems, hooked rim profiles, toothed chainrings and cassettes, a
+rear derailleur with jockey wheels, drilled rotors (alpha-tested canvas
+texture), brake hoses routed lever-to-caliper, fork dust seals and arches,
+coil or air shocks with rocker links, welds, head badges, downtube decals,
+stem faceplate bolts and pinned pedals. 47 parts across eleven categories —
+frames, forks, wheels, tires, drivetrains, chainring sizes, handlebars,
+pedals, brakes, seatposts, extras — each with honest stat trade-offs that
+feed the riding physics via `computeStats`. The **paint booth** sprays every
+zone independently (frame, fork lowers, rims, saddle, grips, plus black /
+tan / gum tire walls) and the **Tune bench** sets suspension sag %, rebound
+clicks and tire pressure psi — real setup mechanics with recommended bands
+and verdicts, all of which change the ride. Dream parts are **earned by
+riding** (finish tracks, beat ghosts, collect coins — tracked in
+`zr3_career`), never bought.
 
 Three 3D mountains: **Miombo Meander** (1.25 km), **Baobab Ridge** (1.5 km,
 sunset), **Mosi Falls Drop** (1.75 km canyon). Armand and Arthur's ghosts

@@ -193,3 +193,80 @@
   .garage-layout { grid-template-columns: 1fr; }
   .garage-viewer { position: static; }
 }
+
+/* ---------- paint booth ---------- */
+
+.paint-zone {
+  background: #fff;
+  border: 2px solid var(--line);
+  border-radius: 14px;
+  padding: 0.8rem 1rem;
+}
+.paint-zone h3 { margin: 0 0 0.5rem; font-size: 0.98rem; }
+
+.swatch-row { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+
+.swatch {
+  width: 2.1rem;
+  height: 2.1rem;
+  border-radius: 50%;
+  border: 3px solid rgba(0, 0, 0, 0.18);
+  cursor: pointer;
+  font-size: 0.8rem;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  color: #fff;
+  transition: transform 0.12s ease;
+}
+.swatch:hover { transform: scale(1.12); }
+.swatch.is-selected { border-color: var(--forest-900); box-shadow: 0 0 0 3px var(--sun); }
+.swatch.is-locked { cursor: default; opacity: 0.75; }
+
+.swatch--wide {
+  width: auto;
+  border-radius: 999px;
+  padding: 0.3rem 0.9rem;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.82rem;
+  color: #FFF3C4;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+}
+
+/* ---------- tune bench ---------- */
+
+.tune-row {
+  background: #fff;
+  border: 2px solid var(--line);
+  border-radius: 14px;
+  padding: 0.85rem 1rem;
+}
+.tune-head { display: flex; justify-content: space-between; align-items: baseline; }
+.tune-head h3 { margin: 0; font-size: 1rem; }
+.tune-val { font-family: var(--font-display); font-weight: 700; color: var(--copper-deep); }
+
+.tune-slider {
+  position: relative;
+  margin: 0.55rem 0 0.35rem;
+  border-radius: 999px;
+  background:
+    linear-gradient(90deg,
+      var(--paper-2) 0%, var(--paper-2) var(--recl),
+      var(--forest-100) var(--recl), var(--forest-100) var(--recr),
+      var(--paper-2) var(--recr), var(--paper-2) 100%);
+  padding: 0.15rem 0.2rem;
+}
+.tune-slider input {
+  width: 100%;
+  accent-color: var(--copper);
+  margin: 0;
+}
+.tune-verdict {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.85rem;
+  margin-bottom: 0.3rem;
+}
+.tune-verdict.is-ok { color: var(--forest-700); }
+.tune-verdict.is-off { color: #A93113; }
