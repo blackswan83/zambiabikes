@@ -116,6 +116,47 @@ small serverless function that emails the Grown-Up Crew), and replace
 `hello@zambiabikes.org` with the club's real inbox. Tours are edited in one
 place: `js/tours-data.js`.
 
+## Running the server (Railway)
+
+The site now ships with a tiny Node backend (`server.js`) that serves the
+static pages, takes membership requests for real, and hosts a shared Ghost
+Code leaderboard — every code is re-validated server-side by the same
+`js/game3d-core.js` engine the game runs on.
+
+```bash
+npm install
+npm start
+# → http://localhost:3000  (no DATABASE_URL → in-memory mode, perfect for tinkering)
+```
+
+**Deploying on Railway:**
+
+1. Create a new Railway service from this repo — it detects `package.json`
+   and runs `npm start` automatically.
+2. Add the **Postgres plugin** to the project and attach it to the service,
+   so `DATABASE_URL` is injected. Tables are created on boot.
+3. Set `ADMIN_TOKEN` to a long random string (e.g. `openssl rand -hex 32`).
+   This guards the Grown-Up Crew's request list and ghost moderation.
+4. That's it — Railway sets `PORT` automatically.
+
+**Environment variables:**
+
+| Variable | What it does |
+| --- | --- |
+| `DATABASE_URL` | Postgres connection string (Railway injects it). Unset → in-memory storage, lost on restart. |
+| `ADMIN_TOKEN` | Bearer token for `/api/admin/requests` and ghost deletion. Unset → admin routes answer 503. |
+| `PORT` | Port to listen on (Railway sets it; defaults to 3000). |
+
+**Reading the membership requests** (Grown-Up Crew only):
+
+```bash
+curl -H "Authorization: Bearer $ADMIN_TOKEN" https://your-app.up.railway.app/api/admin/requests
+```
+
+The static site still works completely standalone (GitHub Pages) — with no
+server behind it, the join form simply falls back to the original
+prepared-email flow.
+
 ---
 
 Built with muddy hands by Armand & Arthur (both 10) and the Grown-Up Crew.

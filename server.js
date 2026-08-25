@@ -1,0 +1,362 @@
+/* Zambia Bikes — tiny Express server.
+   Serves the static site and two small APIs:
+     - /api/join    membership requests (reviewed by the Grown-Up Crew)
+     - /api/ghosts  Zambia Rush 3D ghost leaderboard (validated by the real game engine)
+   Storage is Postgres when DATABASE_URL is set (Railway), otherwise in-memory
+   arrays so local dev and tests work with zero setup.
+   Kid-safety notes: we store the minimum, never echo stored data back on the
+   public join route, and never log request bodies (they contain parent emails). */
+
+"use strict";
+
+const express = require("express");
+const CORE = require("./js/game3d-core.js");
+
+const PORT = process.env.PORT || 3000;
+const DATABASE_URL = process.env.DATABASE_URL || "";
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || "";
+
+/* ================= storage =================
+   One tiny `db` object with the same five methods either way, so the routes
+   never care whether Postgres is behind them. */
+
+function isLocalDbUrl(url) {
+  try {
+    const host = new URL(url).hostname;
+    return host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]";
+  } catch (e) {
+    return false; /* unparsable → assume remote, use SSL */
+  }
+}
+
+function makePgDb(url) {
+  const { Pool } = require("pg");
+  const pool = new Pool({
+    connectionString: url,
+    ssl: isLocalDbUrl(url) ? false : { rejectUnauthorized: false }
+  });
+
+  return {
+    kind: "postgres",
+
+    async init() {
+      await pool.query(
+        "CREATE TABLE IF NOT EXISTS join_requests(" +
+          "id serial primary key, kid_name text, age int, parent_email text, " +
+          "message text, created_at timestamptz default now())"
+      );
+      await pool.query(
+        "CREATE TABLE IF NOT EXISTS ghosts(" +
+          "id serial primary key, track text, name text, time_ms int, code text, " +
+          "created_at timestamptz default now(), unique(track, name))"
+      );
+    },
+
+    async addJoin(r) {
+      await pool.query(
+        "INSERT INTO join_requests(kid_name, age, parent_email, message) VALUES ($1, $2, $3, $4)",
+        [r.kidName, r.age, r.parentEmail, r.message]
+      );
+    },
+
+    async listJoins() {
+      const res = await pool.query(
+        "SELECT id, kid_name, age, parent_email, message, created_at " +
+          "FROM join_requests ORDER BY created_at DESC, id DESC"
+      );
+      return res.rows;
+    },
+
+    /* Keep the faster (smaller) time only. Returns "new" or "existing". */
+    async upsertGhost(g) {
+      const res = await pool.query(
+        "INSERT INTO ghosts(track, name, time_ms, code) VALUES ($1, $2, $3, $4) " +
+          "ON CONFLICT (track, name) DO UPDATE " +
+          "SET time_ms = EXCLUDED.time_ms, code = EXCLUDED.code, created_at = now() " +
+          "WHERE ghosts.time_ms > EXCLUDED.time_ms " +
+          "RETURNING id",
+        [g.track, g.name, g.timeMs, g.code]
+      );
+      return res.rowCount > 0 ? "new" : "existing";
+    },
+
+    async topGhosts(track, limit) {
+      const res = await pool.query(
+        "SELECT name, time_ms, code FROM ghosts WHERE track = $1 " +
+          "ORDER BY time_ms ASC, created_at ASC LIMIT $2",
+        [track, limit]
+      );
+      return res.rows.map(function (r) {
+        return { name: r.name, timeMs: r.time_ms, code: r.code };
+      });
+    },
+
+    async deleteGhost(track, name) {
+      const res = await pool.query(
+        "DELETE FROM ghosts WHERE track = $1 AND name = $2",
+        [track, name]
+      );
+      return res.rowCount;
+    }
+  };
+}
+
+function makeMemoryDb() {
+  const joins = [];
+  const ghosts = [];
+  let joinSeq = 0;
+
+  return {
+    kind: "memory",
+
+    async init() {},
+
+    async addJoin(r) {
+      joins.push({
+        id: ++joinSeq,
+        kid_name: r.kidName,
+        age: r.age,
+        parent_email: r.parentEmail,
+        message: r.message,
+        created_at: new Date().toISOString()
+      });
+    },
+
+    async listJoins() {
+      return joins.slice().reverse();
+    },
+
+    async upsertGhost(g) {
+      for (let i = 0; i < ghosts.length; i++) {
+        if (ghosts[i].track === g.track && ghosts[i].name === g.name) {
+          if (ghosts[i].timeMs <= g.timeMs) return "existing";
+          ghosts[i].timeMs = g.timeMs;
+          ghosts[i].code = g.code;
+          ghosts[i].created_at = new Date().toISOString();
+          return "new";
+        }
+      }
+      ghosts.push({
+        track: g.track,
+        name: g.name,
+        timeMs: g.timeMs,
+        code: g.code,
+        created_at: new Date().toISOString()
+      });
+      return "new";
+    },
+
+    async topGhosts(track, limit) {
+      return ghosts
+        .filter(function (g) { return g.track === track; })
+        .sort(function (a, b) { return a.timeMs - b.timeMs; })
+        .slice(0, limit)
+        .map(function (g) { return { name: g.name, timeMs: g.timeMs, code: g.code }; });
+    },
+
+    async deleteGhost(track, name) {
+      let removed = 0;
+      for (let i = ghosts.length - 1; i >= 0; i--) {
+        if (ghosts[i].track === track && ghosts[i].name === name) {
+          ghosts.splice(i, 1);
+          removed++;
+        }
+      }
+      return removed;
+    }
+  };
+}
+
+const db = DATABASE_URL ? makePgDb(DATABASE_URL) : makeMemoryDb();
+if (!DATABASE_URL) {
+  console.warn("WARNING: DATABASE_URL is not set — using in-memory storage; everything is lost on restart.");
+}
+
+/* ================= helpers ================= */
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function bad(res, msg) {
+  return res.status(400).json({ ok: false, error: msg });
+}
+
+/* Bearer-token admin gate. 503 when no ADMIN_TOKEN configured, 401 on mismatch. */
+function requireAdmin(req, res, next) {
+  if (!ADMIN_TOKEN) return res.status(503).json({ ok: false, error: "admin is not configured" });
+  const auth = String(req.headers.authorization || "");
+  if (auth !== "Bearer " + ADMIN_TOKEN) return res.status(401).json({ ok: false, error: "unauthorized" });
+  next();
+}
+
+/* Simple sliding-window in-memory rate limit (per IP, per route). Resets on restart — fine. */
+function makeRateLimiter(max, windowMs) {
+  const hits = new Map();
+  setInterval(function () {
+    const now = Date.now();
+    hits.forEach(function (list, key) {
+      if (!list.length || now - list[list.length - 1] > windowMs) hits.delete(key);
+    });
+  }, windowMs).unref();
+  return function (req, res, next) {
+    const key = req.ip + "|" + req.path;
+    const now = Date.now();
+    const list = (hits.get(key) || []).filter(function (t) { return now - t < windowMs; });
+    if (list.length >= max) {
+      hits.set(key, list);
+      return res.status(429).json({ ok: false, error: "too many requests — take a breather and try again in a minute" });
+    }
+    list.push(now);
+    hits.set(key, list);
+    next();
+  };
+}
+
+const postLimiter = makeRateLimiter(10, 60 * 1000);
+
+/* ================= app ================= */
+
+const app = express();
+app.set("trust proxy", 1); /* Railway runs behind a proxy; makes req.ip the client IP */
+app.disable("x-powered-by");
+app.use(express.json({ limit: "64kb" }));
+
+/* ---------- health ---------- */
+
+app.get("/api/health", function (req, res) {
+  res.json({ ok: true, db: db.kind });
+});
+
+/* ---------- join requests ---------- */
+
+app.post("/api/join", postLimiter, async function (req, res, next) {
+  try {
+    const body = req.body || {};
+
+    /* Honeypot: real kids never see the "website" field. Bots fill it in.
+       Pretend success, store nothing. */
+    if (typeof body.website === "string" && body.website.trim() !== "") {
+      return res.json({ ok: true });
+    }
+
+    const kidName = String(body.kidName == null ? "" : body.kidName)
+      .replace(/[^A-Za-z '\-]/g, "").replace(/\s+/g, " ").trim();
+    if (kidName.length < 1 || kidName.length > 40) return bad(res, "please give a rider first name (letters only, up to 40 characters)");
+
+    let age = null;
+    if (body.age !== null && body.age !== undefined && body.age !== "") {
+      age = Number(body.age);
+      if (!Number.isInteger(age) || age < 5 || age > 17) return bad(res, "age must be a whole number from 5 to 17");
+    }
+
+    const parentEmail = String(body.parentEmail == null ? "" : body.parentEmail).trim();
+    if (parentEmail.length > 160 || !EMAIL_RE.test(parentEmail)) return bad(res, "please give a valid parent or guardian email");
+
+    let message = "";
+    if (body.message !== null && body.message !== undefined) {
+      if (typeof body.message !== "string") return bad(res, "message must be text");
+      message = body.message.trim();
+      if (message.length > 1000) return bad(res, "message is too long (max 1000 characters)");
+    }
+
+    await db.addJoin({ kidName: kidName, age: age, parentEmail: parentEmail, message: message });
+    /* Store the minimum, echo nothing back — this is a kids' club. */
+    res.status(201).json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+app.get("/api/admin/requests", requireAdmin, async function (req, res, next) {
+  try {
+    const rows = await db.listJoins();
+    res.json({ ok: true, requests: rows });
+  } catch (err) { next(err); }
+});
+
+/* ---------- ghost leaderboard ---------- */
+
+app.post("/api/ghosts", postLimiter, async function (req, res, next) {
+  try {
+    const body = req.body || {};
+
+    const track = body.track;
+    if (typeof track !== "string" || CORE.TRACK3_ORDER.indexOf(track) === -1) {
+      return bad(res, "unknown track");
+    }
+
+    if (typeof body.name !== "string") return bad(res, "name must be text");
+    const sanitized = CORE.sanitizeName(body.name);
+    if (!sanitized) return bad(res, "name is empty after cleaning");
+    const name = sanitized.split(/\s+/)[0].slice(0, 12); /* first name only */
+    if (!name) return bad(res, "name is empty after cleaning");
+
+    const timeMs = body.timeMs;
+    if (!Number.isInteger(timeMs) || timeMs < 20000 || timeMs > 600000) {
+      return bad(res, "timeMs must be a whole number of milliseconds between 20000 and 600000");
+    }
+
+    const code = body.code;
+    if (typeof code !== "string" || code.length > 40000 || code.indexOf("ZR3G1") !== 0) {
+      return bad(res, "that does not look like a Ghost Code");
+    }
+    const ghost = CORE.unpackGhost3(code);
+    if (!ghost || ghost.timeMs !== timeMs || ghost.track !== track) {
+      return bad(res, "the Ghost Code does not match this run");
+    }
+    /* the game records ghost samples at GHOST_HZ — a run whose sample count
+       disagrees with its claimed time by more than a few seconds is faked */
+    const expectedMs = (ghost.samples ? ghost.samples.length : 0) * (1000 / CORE.GHOST_HZ);
+    if (Math.abs(expectedMs - timeMs) > 4000) {
+      return bad(res, "the Ghost Code does not match this run");
+    }
+
+    const kept = await db.upsertGhost({ track: track, name: name, timeMs: timeMs, code: code });
+    res.status(kept === "new" ? 201 : 200).json({ ok: true, kept: kept });
+  } catch (err) { next(err); }
+});
+
+app.get("/api/ghosts", async function (req, res, next) {
+  try {
+    const track = String(req.query.track || "");
+    if (CORE.TRACK3_ORDER.indexOf(track) === -1) return bad(res, "unknown track");
+    const ghosts = await db.topGhosts(track, 10);
+    res.json({ ghosts: ghosts });
+  } catch (err) { next(err); }
+});
+
+app.delete("/api/ghosts/:track/:name", requireAdmin, async function (req, res, next) {
+  try {
+    const deleted = await db.deleteGhost(String(req.params.track), String(req.params.name));
+    res.json({ ok: true, deleted: deleted });
+  } catch (err) { next(err); }
+});
+
+/* ---------- static site ---------- */
+
+app.use(express.static(__dirname, { extensions: ["html"] }));
+
+/* ---------- 404 + errors ---------- */
+
+app.use("/api", function (req, res) {
+  res.status(404).json({ ok: false, error: "not found" });
+});
+
+/* Never log err with request context — bodies contain parent emails. */
+app.use(function (err, req, res, next) { /* eslint-disable-line no-unused-vars */
+  if (err && (err.type === "entity.parse.failed" || err.type === "entity.too.large")) {
+    return res.status(400).json({ ok: false, error: "bad request body" });
+  }
+  console.error("Server error on", req.method, req.path, "-", err && err.message);
+  res.status(500).json({ ok: false, error: "server error" });
+});
+
+/* ---------- boot ---------- */
+
+db.init()
+  .then(function () {
+    app.listen(PORT, function () {
+      console.log("Zambia Bikes server riding on port " + PORT + " (db: " + db.kind + ")");
+    });
+  })
+  .catch(function (err) {
+    console.error("Failed to initialize database:", err && err.message);
+    process.exit(1);
+  });

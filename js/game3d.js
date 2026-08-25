@@ -146,6 +146,8 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
 
   document.addEventListener("keydown", function (e) {
     if (e.repeat) return;
+    if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")) return;
+    if (e.code === "KeyF") { toggleFullscreen(); e.preventDefault(); return; }
     if (e.code === "KeyB" && mode === "race" && run && run.hasBell) { SFX.bell(); return; }
     if (e.code === "KeyP" || e.code === "Escape") {
       if (mode === "race" || mode === "count") { pauseGame(); e.preventDefault(); }
@@ -201,7 +203,8 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     riderName: $("rider-name"), ghostToggle: $("ghost-toggle"),
     btnSound: $("btn-sound"), btnDetail: $("btn-detail"),
     lbTabs: $("lb-tabs"), lbList: $("lb-list"),
-    ghostList: $("ghost-list"), ghostInput: $("ghost-input"), ghostMsg: $("ghost-import-msg")
+    ghostList: $("ghost-list"), ghostInput: $("ghost-input"), ghostMsg: $("ghost-import-msg"),
+    fsBtn: $("btn-fs"), hint: $("controls-hint"), hintKeys: $("hint-keys"), hintTouch: $("hint-touch")
   };
 
   function toast(txt) {
@@ -215,8 +218,9 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
      THREE setup
      ==================================================================== */
 
+  var viewW = 960, viewH = 540;
   var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: !lightMode });
-  renderer.setSize(960, 540, false);
+  renderer.setSize(viewW, viewH, false);
   renderer.setPixelRatio(lightMode ? 1 : Math.min(window.devicePixelRatio || 1, 1.6));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -224,7 +228,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   renderer.shadowMap.enabled = !lightMode;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-  var camera = new THREE.PerspectiveCamera(68, 16 / 9, 0.1, 4200);
+  var camera = new THREE.PerspectiveCamera(68, viewW / viewH, 0.1, 4200);
 
   /* ---------- post-processing (full detail only): bloom + FXAA ---------- */
 
@@ -235,16 +239,55 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     var pr = Math.min(window.devicePixelRatio || 1, 1.6);
     composer = new EffectComposer(renderer);
     composer.setPixelRatio(pr);
-    composer.setSize(960, 540);
+    composer.setSize(viewW, viewH);
     cRenderPass = new RenderPass(new THREE.Scene(), camera);
     composer.addPass(cRenderPass);
-    composer.addPass(new UnrealBloomPass(new THREE.Vector2(960, 540), 0.14, 0.45, 1.0));
+    composer.addPass(new UnrealBloomPass(new THREE.Vector2(viewW, viewH), 0.14, 0.45, 1.0));
     composer.addPass(new OutputPass());
     var fxaa = new FXAAPass();
-    fxaa.setSize(960 * pr, 540 * pr);
+    fxaa.setSize(viewW * pr, viewH * pr);
     composer.addPass(fxaa);
   }
   initComposer();
+
+  /* ---------- fullscreen: the stage takes the whole display ---------- */
+
+  var stageEl = document.getElementById("game-stage");
+  function setRenderSize(w, h) {
+    viewW = w; viewH = h;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    initComposer();
+  }
+  function toggleFullscreen() {
+    if (document.fullscreenElement) {
+      if (document.exitFullscreen) document.exitFullscreen();
+    } else if (stageEl.requestFullscreen) {
+      stageEl.requestFullscreen();
+    }
+  }
+  function syncRenderSize() {
+    if (document.fullscreenElement === stageEl) {
+      /* cap the buffer so weak GPUs keep their frame rate on huge screens */
+      var s = Math.min(1, 1920 / window.innerWidth);
+      setRenderSize(Math.round(window.innerWidth * s), Math.round(window.innerHeight * s));
+    } else if (viewW !== 960) {
+      setRenderSize(960, 540);
+    }
+  }
+  if (el.fsBtn && stageEl && stageEl.requestFullscreen && document.fullscreenEnabled !== false) {
+    el.fsBtn.hidden = false;
+    el.fsBtn.addEventListener("click", toggleFullscreen);
+    document.addEventListener("fullscreenchange", function () {
+      syncRenderSize();
+      el.fsBtn.textContent = document.fullscreenElement ? "🗗" : "⛶";
+      el.fsBtn.title = document.fullscreenElement ? "Exit full screen (F)" : "Full screen (F)";
+    });
+    window.addEventListener("resize", function () {
+      if (document.fullscreenElement === stageEl) syncRenderSize();
+    });
+  }
 
   function renderFrame(sc) {
     renderer.toneMappingExposure = sc.exposure;
@@ -1741,6 +1784,11 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       friends.filter(function (f) { return f.track === selTrack; }).slice(-2).forEach(function (f) {
         ghosts.push({ name: f.name, color: 0x8E44AD, samples: f.samples, timeMs: f.timeMs });
       });
+      /* the two fastest club riders join the start line too */
+      (clubGhosts[selTrack] || []).slice(0, 2).forEach(function (c) {
+        var dup = ghosts.some(function (g2) { return CORE.sanitizeName(g2.name) === c.name; });
+        if (!dup && ghosts.length < 6) ghosts.push({ name: c.name, color: 0xF7B733, samples: c.samples, timeMs: c.timeMs });
+      });
     }
     attachRigs(b.sc.scene, ghosts);
     initDust(b.sc.scene);
@@ -1766,6 +1814,10 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     el.hud.hidden = false;
     el.countdown.hidden = false;
     el.touch.hidden = !isTouch;
+    el.hintKeys.hidden = isTouch;
+    el.hintTouch.hidden = !isTouch;
+    el.hint.hidden = false;
+    el.hint.classList.remove("is-fading");
     SFX.count(false);
   }
 
@@ -1792,7 +1844,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     clearInput();
     stopRumble();
     el.pause.hidden = true; el.results.hidden = true; el.hud.hidden = true;
-    el.countdown.hidden = true; el.touch.hidden = true;
+    el.countdown.hidden = true; el.touch.hidden = true; el.hint.hidden = true;
     el.menu.hidden = false;
     refreshMenu();
   }
@@ -1841,6 +1893,8 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       bests[selTrack] = timeMs;
       lsSet("zr3_best", bests);
       lsSet("zr3_bestghost_" + selTrack, { timeMs: timeMs, samples: run.recorder });
+      /* named riders share their new best with the club board; nameless riders stay local */
+      if ((profile.name || "").trim()) submitClubGhost(name, timeMs, run.recorder);
     }
 
     if (!run.practice) {
@@ -2198,6 +2252,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     lsSet("zr3_seltrack", selTrack);
     camSnap = true;
     refreshMenu();
+    if (clubOn && !clubGhosts[selTrack]) fetchClubGhosts(selTrack);
   });
 
   document.querySelectorAll(".jersey").forEach(function (b) {
@@ -2342,7 +2397,85 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     if (!b) return;
     lbTrack = b.getAttribute("data-lb");
     refreshLeaderboard();
+    refreshClubBoard();
+    if (clubOn && !clubGhosts[lbTrack]) fetchClubGhosts(lbTrack);
   });
+
+  /* ---------- club server: shared leaderboard + club ghosts ----------
+     When the site runs on its Node server (Railway), /api/health answers and
+     the game turns on the club layer: new personal bests upload as Ghost
+     Codes (re-validated server-side by this same engine), the club's fastest
+     ghosts ride beside you, and the club board shows everyone's times.
+     On static hosting nothing answers and all of this stays silently off. */
+
+  var clubOn = false;
+  var clubGhosts = {};   /* track id -> [{name, timeMs, samples}] fastest first */
+
+  function refreshClubBoard() {
+    var card = $("club-card");
+    if (!card) return;
+    card.hidden = !clubOn;
+    if (!clubOn) return;
+    var nameEl = $("club-track-name");
+    if (nameEl) nameEl.textContent = CORE.TRACKS3[lbTrack].name;
+    var listEl = $("club-list");
+    var list = clubGhosts[lbTrack];
+    if (!list) {
+      listEl.innerHTML = '<li class="lb-empty" style="grid-template-columns:1fr">Fetching club times…</li>';
+      return;
+    }
+    if (!list.length) {
+      listEl.innerHTML = '<li class="lb-empty" style="grid-template-columns:1fr">Nobody has posted a time here yet — go set one!</li>';
+      return;
+    }
+    var html = "";
+    list.forEach(function (r, i) {
+      html += '<li><span class="lb-rank">' + (i + 1) + '.</span><span>' + CORE.sanitizeName(r.name) +
+        '</span><span class="lb-time">' + fmtTime(r.timeMs) + "</span></li>";
+    });
+    listEl.innerHTML = html;
+  }
+
+  function fetchClubGhosts(track) {
+    if (!clubOn || !CORE.TRACKS3[track]) return;
+    fetch("/api/ghosts?track=" + encodeURIComponent(track))
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        if (!j || !Array.isArray(j.ghosts)) return;
+        clubGhosts[track] = j.ghosts.map(function (row) {
+          var g = CORE.unpackGhost3(row.code);
+          return (g && g.track === track) ? { name: g.name, timeMs: g.timeMs, samples: g.samples } : null;
+        }).filter(Boolean).slice(0, 10);
+        refreshClubBoard();
+      })
+      .catch(function () { /* server went away — stay quiet */ });
+  }
+
+  function submitClubGhost(gName, timeMs, samples) {
+    if (!clubOn || !gName) return;
+    try {
+      var code = CORE.packGhost3({ name: gName, track: selTrack, timeMs: timeMs, samples: samples });
+      fetch("/api/ghosts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ track: selTrack, name: gName, timeMs: timeMs, code: code })
+      }).then(function (r) { if (r.ok) fetchClubGhosts(selTrack); }).catch(function () {});
+    } catch (e) { /* ignore */ }
+  }
+
+  if (window.fetch) {
+    fetch("/api/health")
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        if (j && j.ok) {
+          clubOn = true;
+          refreshClubBoard();
+          fetchClubGhosts(selTrack);
+          if (lbTrack !== selTrack) fetchClubGhosts(lbTrack);
+        }
+      })
+      .catch(function () { /* static hosting — no club layer */ });
+  }
 
   /* ---------- main loop ---------- */
 
@@ -2397,6 +2530,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       el.countdown.textContent = run.countT > 0 ? String(Math.max(1, n)) : "GO!";
       if (run.countT <= -0.7) {
         el.countdown.hidden = true;
+        el.hint.classList.add("is-fading");   /* linger, then melt away */
         mode = "race";
       } else if (run.countT <= 0 && run.lastBeep !== 0) {
         run.lastBeep = 0; SFX.count(true);
