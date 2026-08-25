@@ -490,7 +490,9 @@
       return;
     }
 
-    var steer = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
+    /* rider faces +z and the chase camera sits behind, so screen-right is
+       world -x: "right" must turn the heading toward -x, i.e. lower yaw */
+    var steer = (inp.left ? 1 : 0) - (inp.right ? 1 : 0);
 
     if (st.onGround) {
       var n = normalAt(world, st.x, st.z);
@@ -702,8 +704,8 @@
       var inp = {
         pedal: true,
         brake: (curve > style.brakeCurve && speed > 13) || speed > style.vBrake,
-        left: dyaw < -0.06,
-        right: dyaw > 0.06,
+        left: dyaw > 0.06,    /* +yaw turns toward +x, the rider's left */
+        right: dyaw < -0.06,
         hop: false
       };
       ev.length = 0;
