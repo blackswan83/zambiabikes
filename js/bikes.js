@@ -56,6 +56,11 @@
           desc: "Arthur's pick. A pump-track scalpel: tiny, stiff, and it leaves the ground if you so much as think about it. Bring your own suspension (knees).",
           kg: 2.2, stats: { pedal: 1.04, vcap: 0.92, steer: 1.18, hop: 1.25, rough: 1.35, landSoft: 0.02 },
           unlock: { type: "coinsRun", n: 60, label: "Grab 60 coins in one run" }
+        },
+        kalambo_steel: {
+          name: "Kalambo Steel", spec: "Classic steel hardtail · 69° HA · brazed lugs",
+          desc: "Steel is real: the frame flexes just enough to sting less than aluminium, carries a mango-laden backpack without complaint, and will outlive everyone reading this.",
+          kg: 3.1, stats: { pedal: 0.96, steer: 1.02, rough: 1.12, landSoft: -0.02 }
         }
       }
     },
@@ -163,6 +168,12 @@
           desc: "No derailleur, no cables, no mercy. Absurdly light and direct — until the mountain tilts up and it's all legs.",
           kg: 1.0, stats: { pedal: 1.1, vcap: 0.88 },
           unlock: { type: "medal", track: "any", medal: "gold", label: "Beat Armand's ghost anywhere" }
+        },
+        kwacha_13: {
+          name: "1×13 Kwacha Race", spec: "34T ring · 10–46T · 13-speed electronic",
+          desc: "The team-issue groupset: a servo clicks the shifts for you, perfectly, every time. Featherweight, frighteningly quick, and it never mis-shifts under a sprint.",
+          kg: 1.3, stats: { pedal: 1.05, vcap: 1.02 },
+          unlock: { type: "medal", track: "any", medal: "silver", label: "Beat Arthur's ghost anywhere" }
         }
       }
     },
@@ -290,6 +301,43 @@
           name: "Kickstand", spec: "Absolutely not race legal",
           desc: "The Grown-Up Crew would like it noted, for the record, that no self-respecting race bike has ever had one of these. Arthur fitted one anyway.",
           kg: 0.35, stats: { steer: 0.99 }
+        },
+        tubeless: {
+          name: "Tubeless Kit", spec: "Sealant + valves · no inner tubes",
+          desc: "Ditch the tubes, pour in the magic milk. Thorns seal themselves mid-ride, the wheels spin up lighter, and you can run softer pressure without pinch flats.",
+          kg: -0.25, stats: { rough: 0.97 }
+        }
+      }
+    },
+
+    decal: {
+      label: "Decals",
+      options: {
+        d_none: {
+          name: "Clean Look", spec: "No graphics",
+          desc: "Let the paint do the talking. The fastest-looking bike is sometimes the quietest one.",
+          kg: 0, stats: {}
+        },
+        d_stripes: {
+          name: "Racing Stripes", spec: "Twin stripes, nose to tail",
+          desc: "Two stripes down the frame — the internationally recognised symbol of at least 10% more speed.",
+          kg: 0, stats: {}
+        },
+        d_flames: {
+          name: "Mosi Flames", spec: "Flame job",
+          desc: "Painted fire along the downtube. Scientifically proven to do nothing, emotionally proven to do everything.",
+          kg: 0, stats: {}
+        },
+        d_zigzag: {
+          name: "Chitenge Zigzag", spec: "Chevron pattern",
+          desc: "Bold chevrons like the brightest chitenge fabric at the Sunday market. Unmistakably yours from across the trailhead.",
+          kg: 0, stats: {}
+        },
+        d_leopard: {
+          name: "Leopard Spots", spec: "Full spot wrap",
+          desc: "Rosettes down every tube. The Luangwa valley's apex predator, now available in bicycle form.",
+          kg: 0, stats: {},
+          unlock: { type: "coinsRun", n: 40, label: "Grab 40 coins in one run" }
         }
       }
     },
@@ -303,9 +351,14 @@
         p_night: { name: "Miombo Night", color: "#22303A", desc: "Stealth. Extra fast at dusk (citation needed).", kg: 0, stats: {} },
         p_sunset: { name: "Kariba Sunset", color: "#D95F2B", desc: "Golden hour, all day.", kg: 0, stats: {} },
         p_purple: { name: "Jacaranda", color: "#8E44AD", desc: "October in Lusaka, when the whole city turns purple.", kg: 0, stats: {} },
+        p_silver: { name: "Raw Alloy", color: "#C9CDD2", desc: "No paint at all — polished metal, straight from the workshop.", kg: 0, stats: {} },
         p_croc: {
           name: "Croc Green", color: "#767B3B", desc: "Basking-crocodile khaki. Earned by surviving the Lower Zambezi.",
           kg: 0, stats: {}, unlock: { type: "finish", track: "zambezi", label: "Finish Lower Zambezi" }
+        },
+        p_gold: {
+          name: "Victoria Gold", color: "#D9A93B", metal: true, desc: "Sunset on the Smoke that Thunders. Only a gold medal at the falls earns it.",
+          kg: 0, stats: {}, unlock: { type: "medal", track: "falls", medal: "gold", label: "Gold on Mosi Falls Drop" }
         },
         p_chrome: {
           name: "Copper Chrome", color: "#D8A05A", metal: true, desc: "Mirror-polished show finish. Blinds the ghosts behind you.",
@@ -324,13 +377,16 @@
   var DEFAULT_CONFIG = {
     frame: "zambezi_fs", fork: "kafue_120", wheels: "w275", tires: "miombo_grip",
     drivetrain: "trail_1x11", brakes: "two_pot", seatpost: "rigid_post",
-    bar: "bar_trail", ring: "ring_32", pedals: "pedal_comp",
+    bar: "bar_trail", ring: "ring_32", pedals: "pedal_comp", decal: "d_none",
     extras: ["bottle"], paint: "p_forest"
   };
 
   /* every paintable zone on the bike + the workshop tune bench */
-  var COLOR_ZONES = ["frame", "fork", "rims", "saddle", "grips"];
-  var DEFAULT_COLORS = { frame: "p_forest", fork: "p_night", rims: "p_night", saddle: "p_night", grips: "p_night", wall: "black" };
+  var COLOR_ZONES = ["frame", "fork", "rims", "saddle", "grips", "decal", "spokes", "chain"];
+  var DEFAULT_COLORS = {
+    frame: "p_forest", fork: "p_night", rims: "p_night", saddle: "p_night",
+    grips: "p_night", decal: "p_copper", spokes: "p_silver", chain: "p_night", wall: "black"
+  };
   var WALL_OPTIONS = { black: { name: "Blackwall", color: "#2A2420" }, tan: { name: "Tanwall", color: "#C9995C" }, gum: { name: "Gumwall", color: "#A9764C" } };
   var DEFAULT_TUNE = { sag: 27, rebound: 5, psi: 22 };
   var TUNE_SPEC = {
@@ -447,6 +503,7 @@
     apply(getOption("bar", cfg.bar));
     apply(getOption("ring", cfg.ring));
     apply(getOption("pedals", cfg.pedals));
+    apply(getOption("decal", cfg.decal));
     (cfg.extras || []).forEach(function (id) { apply(getOption("extras", id)); });
 
     /* --- the tune bench: setup is real mechanics, not decoration --- */

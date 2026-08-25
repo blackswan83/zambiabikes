@@ -74,6 +74,37 @@
 }
 .controls-hint.is-fading { opacity: 0; }
 
+/* time-of-day picker in the menu */
+.tod-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+}
+.tod-label {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: rgba(255, 246, 224, 0.75);
+  margin-right: 0.2rem;
+}
+.tod-chip {
+  font: inherit;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.8rem;
+  color: #FFF6E0;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1.5px solid rgba(255, 246, 224, 0.35);
+  border-radius: 999px;
+  padding: 0.22rem 0.7rem;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.tod-chip:hover { background: rgba(255, 255, 255, 0.22); }
+.tod-chip.is-selected { background: var(--sun); border-color: var(--sun); color: #43290F; }
+
 /* subtle cinematic vignette over the 3D view */
 .stage-vignette {
   position: absolute;

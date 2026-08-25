@@ -72,12 +72,14 @@ and valve stems, hooked rim profiles, toothed chainrings and cassettes, a
 rear derailleur with jockey wheels, drilled rotors (alpha-tested canvas
 texture), brake hoses routed lever-to-caliper, fork dust seals and arches,
 coil or air shocks with rocker links, welds, head badges, downtube decals,
-stem faceplate bolts and pinned pedals. 47 parts across eleven categories —
+stem faceplate bolts and pinned pedals. 58 parts across twelve categories —
 frames, forks, wheels, tires, drivetrains, chainring sizes, handlebars,
-pedals, brakes, seatposts, extras — each with honest stat trade-offs that
-feed the riding physics via `computeStats`. The **paint booth** sprays every
-zone independently (frame, fork lowers, rims, saddle, grips, plus black /
-tan / gum tire walls) and the **Tune bench** sets suspension sag %, rebound
+pedals, brakes, seatposts, extras and decal patterns (racing stripes,
+flames, chitenge chevrons, leopard spots) — each with honest stat trade-offs
+that feed the riding physics via `computeStats`. The **paint booth** sprays
+every zone independently (frame, fork lowers, rims, saddle, grips, decal
+colour, spokes and chain, plus black / tan / gum tire walls) and the
+**Tune bench** sets suspension sag %, rebound
 clicks and tire pressure psi — real setup mechanics with recommended bands
 and verdicts, all of which change the ride. Dream parts are **earned by
 riding** (finish tracks, beat ghosts, collect coins — tracked in

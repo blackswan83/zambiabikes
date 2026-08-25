@@ -165,9 +165,41 @@ import { OrbitControls } from "./vendor/addons/controls/OrbitControls.js";
   chainTex.wrapS = THREE.RepeatWrapping;
   chainTex.repeat.set(70, 1);
 
-  function decalTex(text) {
+  function decalTex(text, pattern, colorHex) {
     return canvasTex(512, 64, function (g) {
       g.clearRect(0, 0, 512, 64);
+      var col = colorHex || "#E8791D";
+      if (pattern === "d_stripes") {
+        g.fillStyle = col;
+        g.fillRect(0, 8, 512, 11);
+        g.fillRect(0, 45, 512, 11);
+      } else if (pattern === "d_flames") {
+        g.strokeStyle = col;
+        g.lineWidth = 8;
+        g.lineCap = "round";
+        for (var f = 0; f < 6; f++) {
+          g.beginPath();
+          g.moveTo(14 + f * 86, 58);
+          g.bezierCurveTo(46 + f * 86, 34, 6 + f * 86, 24, 52 + f * 86, 6);
+          g.stroke();
+        }
+      } else if (pattern === "d_zigzag") {
+        g.strokeStyle = col;
+        g.lineWidth = 9;
+        [14, 46].forEach(function (y0) {
+          g.beginPath();
+          for (var zx = 0, up = false; zx <= 512; zx += 30, up = !up) g.lineTo(zx, up ? y0 - 8 : y0 + 8);
+          g.stroke();
+        });
+      } else if (pattern === "d_leopard") {
+        for (var s = 0; s < 30; s++) {
+          var sx = (s * 89 + 20) % 500, sy = 6 + (s * 41) % 52, sr = 5 + (s % 3) * 2;
+          g.fillStyle = col;
+          g.beginPath(); g.arc(sx, sy, sr, 0, 6.284); g.fill();
+          g.fillStyle = "#241A10";
+          g.beginPath(); g.arc(sx + sr * 0.3, sy - sr * 0.2, sr * 0.45, 0, 6.284); g.fill();
+        }
+      }
       g.font = "italic 700 40px Fredoka, Arial, sans-serif";
       g.textAlign = "center"; g.textBaseline = "middle";
       g.lineWidth = 7; g.strokeStyle = "rgba(12,46,28,0.85)";
@@ -346,7 +378,8 @@ import { OrbitControls } from "./vendor/addons/controls/OrbitControls.js";
     });
 
     /* 28 spokes, two-cross laced: flange hole -> rim seat offset ~40 degrees */
-    var spokeM = M("spoke", { color: 0xB8B8BE, metalness: 0.7, roughness: 0.4 });
+    var spokeHex = opts.spokeHex || "#B8B8BE";
+    var spokeM = M("spoke_" + spokeHex, { color: new THREE.Color(spokeHex), metalness: 0.7, roughness: 0.4 });
     var nipG = new THREE.CylinderGeometry(0.0032, 0.0032, 0.009, 6);
     for (var i = 0; i < 28; i++) {
       var side = i % 2 ? 0.042 : -0.042;
@@ -447,9 +480,10 @@ import { OrbitControls } from "./vendor/addons/controls/OrbitControls.js";
       bolt(V(0, 0.5, 0.1), 0.005, 0.01, "z", steelM, g);
       bolt(V(0, 0.44, 0.06), 0.005, 0.01, "z", steelM, g);
     }
-    /* downtube decals: model name both sides */
+    /* downtube decals: model name + chosen graphics pattern, both sides */
     var frameDef = B.getOption("frame", frame);
-    var dTex = decalTex(frameDef ? frameDef.name : "ZAMBIA");
+    var decalHex = (B.getOption("paint", (cfg.colors || {}).decal) || {}).color || "#E8791D";
+    var dTex = decalTex(frameDef ? frameDef.name : "ZAMBIA", cfg.decal, decalHex);
     dTex.wrapS = THREE.RepeatWrapping;
     dTex.repeat.set(1.6, 1);
     dTex.offset.x = -0.28;
@@ -462,6 +496,20 @@ import { OrbitControls } from "./vendor/addons/controls/OrbitControls.js";
     sleeve.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dtDir.clone().normalize());
     sleeve.rotateY(Math.PI * 0.75);
     g.add(sleeve);
+    /* a patterned bike wears its graphics on the top tube too */
+    if (cfg.decal && cfg.decal !== "d_none") {
+      var ttTex = decalTex("", cfg.decal, decalHex);
+      ttTex.wrapS = THREE.RepeatWrapping;
+      ttTex.repeat.set(1.1, 1);
+      var ttDir = new THREE.Vector3().subVectors(STT, HTt);
+      var ttMid = HTt.clone().addScaledVector(ttDir, 0.5);
+      var ttSleeve = new THREE.Mesh(
+        new THREE.CylinderGeometry(tubeR * 0.92 * 1.18 + 0.0008, tubeR * 0.92 * 1.18 + 0.0008, 0.4, 20, 1, true),
+        new THREE.MeshBasicMaterial({ map: ttTex, transparent: true, side: THREE.DoubleSide }));
+      ttSleeve.position.copy(ttMid);
+      ttSleeve.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), ttDir.clone().normalize());
+      g.add(ttSleeve);
+    }
     /* head badge */
     var badge = new THREE.Mesh(new THREE.PlaneGeometry(0.036, 0.036),
       new THREE.MeshBasicMaterial({ map: badgeTex, transparent: true }));
@@ -751,9 +799,17 @@ import { OrbitControls } from "./vendor/addons/controls/OrbitControls.js";
       chainPts.push(V(0.052, RA.y - 0.075, RA.z + 0.02));   /* around jockey 1 */
       chainPts.push(V(0.052, RA.y - 0.118, RA.z - 0.028));  /* under jockey 2 */
     }
+    /* stock chains keep the linked texture; anodized ones go solid colour */
+    var chainId = (cfg.colors || {}).chain;
+    var chainM = (!chainId || chainId === "p_night")
+      ? new THREE.MeshStandardMaterial({ map: chainTex, metalness: 0.6, roughness: 0.5 })
+      : new THREE.MeshStandardMaterial({
+          color: new THREE.Color((B.getOption("paint", chainId) || {}).color || "#3A3A3E"),
+          metalness: 0.85, roughness: 0.3
+        });
     var chainMesh = new THREE.Mesh(
       new THREE.TubeGeometry(new THREE.CatmullRomCurve3(chainPts, true), 72, 0.0058, 6, true),
-      new THREE.MeshStandardMaterial({ map: chainTex, metalness: 0.6, roughness: 0.5 }));
+      chainM);
     g.add(chainMesh);
 
     /* ----- extras ----- */
@@ -804,10 +860,11 @@ import { OrbitControls } from "./vendor/addons/controls/OrbitControls.js";
 
     /* ----- wheels ----- */
     var knobPat = KNOBS[cfg.tires];
-    var rear = buildWheel({ r: wheelR, fat: fat, wall: (cfg.colors || {}).wall, knobs: knobPat, rimMat: rimMat, rotorR: rotorR });
+    var spokeHex2 = (B.getOption("paint", (cfg.colors || {}).spokes) || {}).color || "#B8B8BE";
+    var rear = buildWheel({ r: wheelR, fat: fat, wall: (cfg.colors || {}).wall, knobs: knobPat, rimMat: rimMat, rotorR: rotorR, spokeHex: spokeHex2 });
     rear.position.copy(RA);
     g.add(rear);
-    var front = buildWheel({ r: wheelR, fat: fat, wall: (cfg.colors || {}).wall, knobs: knobPat, rimMat: rimMat, rotorR: rotorR });
+    var front = buildWheel({ r: wheelR, fat: fat, wall: (cfg.colors || {}).wall, knobs: knobPat, rimMat: rimMat, rotorR: rotorR, spokeHex: spokeHex2 });
     front.position.copy(FA);
     g.add(front);
 
@@ -838,7 +895,10 @@ import { OrbitControls } from "./vendor/addons/controls/OrbitControls.js";
   var elCareer = document.getElementById("garage-career");
   var activeTab = "frame";
 
-  var ZONE_LABELS = { frame: "Frame", fork: "Fork lowers", rims: "Rims", saddle: "Saddle", grips: "Grips" };
+  var ZONE_LABELS = {
+    frame: "Frame", fork: "Fork lowers", rims: "Rims", saddle: "Saddle",
+    grips: "Grips", decal: "Decal colour", spokes: "Spokes", chain: "Chain"
+  };
 
   var STAT_LABELS = {
     pedal: ["Sprint", false], vcap: ["Top speed", false], brake: ["Brakes", false],

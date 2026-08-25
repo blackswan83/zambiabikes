@@ -89,7 +89,10 @@
     falls: {
       id: "falls", name: "Mosi Falls Drop", level: "hero", levelLabel: "Downhill Hero",
       seed: 20260926, length: 1750, slope: 0.165, wobble: 1.15, kickerEvery: 100,
-      desc: "Steep canyon by the thundering falls",
+      /* the finale rides the Knife-Edge rim: a transverse chasm opens on +x
+         and the mile-wide Victoria Falls curtain forms its far wall */
+      gorge: { fromFrac: 0.84, offset: 32, width: 95, depth: 60 },
+      desc: "Steep canyon to the thundering Victoria Falls",
       theme: {
         sky: 0xC6ECEF, skyLow: 0xEAF9F4, fog: 0xCDE9E2, fogNear: 45, fogFar: 380,
         sun: 0xF6FFF0, sunPos: [180, 260, -60], ambient: 0x8FB8A8,
@@ -251,11 +254,51 @@
       }
     }
 
+    /* Victoria Falls finale: a transverse chasm opens beside the rim trail,
+       its far wall carrying the curtain, the upper Zambezi flat behind it */
+    var rowGorgeX = null;
+    if (def.gorge) {
+      var G = def.gorge;
+      rowGorgeX = new Float32Array(nz);
+      rowGorgeX.fill(Infinity);
+      for (gz = 0; gz < nz; gz++) {
+        var gwz = z0 + gz * GRID_STEP;
+        var gti = Math.min(n - 1, trailRangeForZ(gwz));
+        var gFrac = gti / (n - 1);
+        var fade = smoothstepN(gFrac, G.fromFrac - 0.05, G.fromFrac + 0.02);
+        if (fade <= 0) continue;
+        var gtp = pts[gti];
+        var edgeG = gtp.x + G.offset;
+        var floorY = gtp.y - G.depth;
+        var lipY = gtp.y + 5;
+        if (fade > 0.4) rowGorgeX[gz] = edgeG;
+        for (gx = 0; gx < nx; gx++) {
+          var gwx = -X_HALF + gx * GRID_STEP;
+          var dG = gwx - edgeG;
+          if (dG <= 0) continue;
+          var gvi = gz * nx + gx;
+          var carved;
+          if (dG < 7) {
+            carved = H[gvi] + smoothstepN(dG, 0, 7) * (floorY - H[gvi]);
+          } else if (dG < G.width - 10) {
+            carved = floorY;
+          } else if (dG < G.width) {
+            carved = floorY + smoothstepN(dG, G.width - 10, G.width) * (lipY - floorY);
+          } else if (dG < G.width + 70) {
+            carved = lipY + (dG - G.width) * 0.03;   /* upper river plateau */
+          } else {
+            carved = lipY + 2.1 + smoothstepN(dG, G.width + 70, G.width + 120) * (H[gvi] - lipY - 2.1);
+          }
+          H[gvi] = H[gvi] * (1 - fade) + carved * fade;
+        }
+      }
+    }
+
     var world = {
       def: def, nx: nx, nz: nz, z0: z0, x0: -X_HALF, step: GRID_STEP,
       H: H, TD: TD, trail: pts, trailN: n, finishIdx: n - 4,
       kickers: kickers, props: [], coins: [], gates: [], hash: {}, hashCell: 8,
-      rowWaterY: rowWaterY, rowEdgeX: rowEdgeX, riverEdgeX: null, waterY: null
+      rowWaterY: rowWaterY, rowEdgeX: rowEdgeX, rowGorgeX: rowGorgeX, riverEdgeX: null, waterY: null
     };
 
     /* re-sample trail y from the carved grid so physics and path agree */
@@ -318,6 +361,12 @@
       if (def.river) {
         var rti = trailRangeForZ(pz);
         if (px > pts[Math.min(n - 1, rti)].x + def.river.offset - 5) continue;
+      }
+      /* and out of the falls gorge + curtain wall */
+      if (def.gorge) {
+        var gpi = Math.min(n - 1, trailRangeForZ(pz));
+        if (gpi / (n - 1) > def.gorge.fromFrac - 0.06 &&
+            px > pts[gpi].x + def.gorge.offset - 6) continue;
       }
       world.props.push({
         type: pick[0], x: px, z: pz, y: heightAt(world, px, pz),
@@ -641,6 +690,15 @@
       if (st.y < world.rowWaterY[gzI] - 0.12) {
         st.crashT = 0.7;
         ev.push({ t: "splash" });
+      }
+    }
+
+    /* --- ride off the Knife-Edge rim: the gorge is not a shortcut --- */
+    if (world.rowGorgeX && st.crashT <= 0) {
+      var ggI = Math.max(0, Math.min(world.nz - 1, Math.round((st.z - world.z0) / world.step)));
+      if (st.x > world.rowGorgeX[ggI] - 1.5) {
+        st.crashT = 0.7;
+        ev.push({ t: "gorge" });
       }
     }
 
