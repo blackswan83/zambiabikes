@@ -157,6 +157,16 @@ The static site still works completely standalone (GitHub Pages) — with no
 server behind it, the join form simply falls back to the original
 prepared-email flow.
 
+## Making the mountains more realistic
+
+Every texture, sky and tree in the game is generated in code, which is why
+the game ships with no image files at all. The way past that ceiling is real
+photo-scanned assets: drop CC0 textures, HDRI skies and `.glb` models into
+[`assets/world/`](assets/world/README.md), which documents the exact file
+names and size limits. Anything present gets used; anything missing falls
+back to the procedural version, so the folder can be filled one material at
+a time.
+
 ---
 
 Built with muddy hands by Armand & Arthur (both 10) and the Grown-Up Crew.
