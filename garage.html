@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Garage — Build Your Bike — Zambia Bikes</title>
+<meta name="description" content="The Zambia Rush Garage: pick a frame, tune your suspension, choose tires, wheels, drivetrain and brakes — every part changes how your bike rides. Dream parts are earned by riding, never bought.">
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/styles.css">
+<link rel="stylesheet" href="css/garage.css">
+</head>
+<body class="page-game">
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="site-header">
+  <div class="container header-inner">
+    <a class="brand" href="index.html" aria-label="Zambia Bikes — home">
+      <svg class="brand-mark" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+        <defs>
+          <linearGradient id="bmSky" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#FFE9A8"/><stop offset="1" stop-color="#E8791D"/>
+          </linearGradient>
+          <clipPath id="bmDisc"><circle cx="32" cy="32" r="28"/></clipPath>
+        </defs>
+        <circle cx="32" cy="32" r="31" fill="#0C2E1C"/>
+        <circle cx="32" cy="32" r="28" fill="url(#bmSky)"/>
+        <g clip-path="url(#bmDisc)">
+          <circle cx="32" cy="26" r="9" fill="#FFF3C4"/>
+          <path d="M 2 46 Q 18 38 34 44 T 62 43 L 62 64 L 2 64 Z" fill="#0C2E1C"/>
+          <path d="M 20 44 C 19.5 38 19.6 34 19 30 C 15 28.6 11.4 25.6 10 22 C 13 24.2 16.2 25.7 19 26 C 18.2 23.6 16.6 21.6 14.6 19.6 C 17.6 21 19.8 23 21.2 25 C 21.6 21.6 21 18.4 19.8 15.4 C 22.4 18.2 23.7 21.7 24 25 C 25.8 22.8 28.4 21.4 32 21 C 29.4 23.2 27.2 25.4 25.8 27.8 C 28.8 27.4 31.4 27.8 33.6 29 C 30.6 29.4 27.6 30.4 25.4 31.6 C 24.8 35.6 24.8 39.6 25.4 44 Z" fill="#0C2E1C"/>
+        </g>
+      </svg>
+      <span class="brand-word">Zambia<em>Bikes</em></span>
+    </a>
+    <button class="nav-toggle" aria-expanded="false" aria-controls="site-nav" aria-label="Open menu">
+      <span class="nav-toggle-bars"></span>
+    </button>
+    <nav class="site-nav" id="site-nav" aria-label="Main">
+      <a href="index.html">Home</a>
+      <a href="tours.html">Tours &amp; Events</a>
+      <a href="game.html" class="is-active" aria-current="page">Play the Game</a>
+      <a href="about.html">Our Story</a>
+      <a href="safety.html">Parents &amp; Safety</a>
+      <a class="btn btn--copper btn--nav" href="join.html">Join the Club</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+  <section class="page-hero">
+    <div class="container">
+      <p class="kicker">Zambia Rush · The Workshop</p>
+      <h1>The <em>Garage</em> 🔧</h1>
+      <p class="lede">Build the bike, then ride it — every part here changes how your bike actually
+      handles on the mountain. Frames, forks, rubber, gears and brakes, all with real trade-offs.
+      Dream parts are <strong>earned by riding, never bought</strong>: that's the club promise.</p>
+    </div>
+    <div class="hero-hills" aria-hidden="true"><svg viewBox="0 0 1440 90" preserveAspectRatio="none" focusable="false"><path d="M0 60 Q 240 20 480 52 T 960 46 T 1440 40 L 1440 90 L 0 90 Z" fill="#FFF9EE"/></svg></div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <div class="garage-layout">
+
+        <div>
+          <div class="garage-viewer" id="garage-stage">
+            <canvas id="garage-canvas" aria-label="3D bike viewer — drag to spin your bike"></canvas>
+            <div class="bike-title">
+              <h2 id="bike-name">Zambezi FS 140</h2>
+              <span class="bike-weight" id="bike-weight">— kg</span>
+            </div>
+            <p class="viewer-hint">drag to spin · scroll to zoom</p>
+          </div>
+
+          <div class="garage-stats" id="garage-stats" style="margin-top:1rem">
+            <div class="gstat"><label>Sprint</label><div class="bar"><i data-bar="sprint"></i></div></div>
+            <div class="gstat"><label>Top speed</label><div class="bar"><i data-bar="topSpeed"></i></div></div>
+            <div class="gstat"><label>Handling</label><div class="bar"><i data-bar="handling"></i></div></div>
+            <div class="gstat"><label>Suspension</label><div class="bar"><i data-bar="suspension"></i></div></div>
+            <div class="gstat"><label>Braking</label><div class="bar"><i data-bar="braking"></i></div></div>
+          </div>
+
+          <div class="garage-actions">
+            <a class="btn btn--copper btn--big" href="game.html">Ride it 🚵</a>
+            <button type="button" class="btn btn--ghost" id="btn-reset-build">Reset build</button>
+            <span style="font-size:0.9rem;color:var(--ink-soft)">Your build saves itself as you wrench.</span>
+          </div>
+
+          <div class="garage-career" id="garage-career"></div>
+        </div>
+
+        <div>
+          <div class="garage-tabs" id="garage-tabs" role="tablist" aria-label="Part categories"></div>
+          <div class="garage-parts" id="garage-parts"></div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <section class="section section--alt">
+    <div class="container">
+      <div class="callout callout--safety reveal">
+        <h2>🛡️ How unlocks work</h2>
+        <p style="margin-bottom:0">A few dream parts — the downhill rigs, the champion's paint — are
+        locked until you earn them <strong>on the mountain</strong>: finish tracks, out-ride the
+        ghosts, hoover up copper coins. There is nothing to buy in the Garage, no coins to purchase,
+        and no way to spend real money anywhere on this site. Wrenches up, wallets away.</p>
+      </div>
+      <p style="text-align:center;margin-top:2rem">
+        <a class="btn btn--forest btn--big" href="game.html">Back to Zambia Rush 🎮</a>
+      </p>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="container footer-grid">
+    <div>
+      <div class="footer-brand">
+        <img src="assets/logo.svg" alt="Zambia Bikes badge" width="64" height="64">
+        <span class="brand-word">Zambia<em>Bikes</em></span>
+      </div>
+      <p class="footer-tag">Ride wild. Ride kind. Ride Zambia.</p>
+      <p>A kids' mountain-bike club and free game, founded in 2026 by two best friends
+      and guarded by their Grown-Up Crew.</p>
+    </div>
+    <nav aria-label="Footer">
+      <h3>Explore</h3>
+      <ul class="footer-links">
+        <li><a href="index.html">Home</a></li>
+        <li><a href="tours.html">Tours &amp; Events</a></li>
+        <li><a href="game.html">Zambia Rush</a></li>
+        <li><a href="about.html">Our Story</a></li>
+        <li><a href="safety.html">Parents &amp; Safety</a></li>
+        <li><a href="join.html">Join the Club</a></li>
+      </ul>
+    </nav>
+    <div>
+      <h3>The Club Promise</h3>
+      <div class="footer-pledge">
+        <p>🛡️ Every member is vetted by real grown-ups before joining.</p>
+        <p>💬 No chat, no direct messages, no strangers — on the site or in the game.</p>
+        <p>✉️ Questions? <a href="mailto:hello@zambiabikes.org">hello@zambiabikes.org</a></p>
+      </div>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <div class="container">
+      <span>© <span data-year>2026</span> Zambia Bikes — built with muddy hands by Armand &amp; Arthur (both 10) and the Grown-Up Crew.</span>
+      <span>Made in Zambia 🇿🇲</span>
+    </div>
+  </div>
+</footer>
+
+<script src="js/main.js"></script>
+<script src="js/bikes.js"></script>
+<script type="importmap">{ "imports": { "three": "./js/vendor/three.module.min.js" } }</script>
+<script type="module" src="js/garage.js"></script>
+</body>
+</html>

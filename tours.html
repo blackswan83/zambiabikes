@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tours &amp; Events — Zambia Bikes</title>
+<meta name="description" content="Guided kids' mountain-bike tours across Zambia — miombo forests, baobab ridges, Victoria Falls mist and Lake Kariba sunsets. Every ride is helmet-checked, guide-led and reviewed by the Grown-Up Crew.">
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="page-tours">
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="site-header">
+  <div class="container header-inner">
+    <a class="brand" href="index.html" aria-label="Zambia Bikes — home">
+      <svg class="brand-mark" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+        <defs>
+          <linearGradient id="bmSky" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#FFE9A8"/><stop offset="1" stop-color="#E8791D"/>
+          </linearGradient>
+          <clipPath id="bmDisc"><circle cx="32" cy="32" r="28"/></clipPath>
+        </defs>
+        <circle cx="32" cy="32" r="31" fill="#0C2E1C"/>
+        <circle cx="32" cy="32" r="28" fill="url(#bmSky)"/>
+        <g clip-path="url(#bmDisc)">
+          <circle cx="32" cy="26" r="9" fill="#FFF3C4"/>
+          <path d="M 2 46 Q 18 38 34 44 T 62 43 L 62 64 L 2 64 Z" fill="#0C2E1C"/>
+          <path d="M 20 44 C 19.5 38 19.6 34 19 30 C 15 28.6 11.4 25.6 10 22 C 13 24.2 16.2 25.7 19 26 C 18.2 23.6 16.6 21.6 14.6 19.6 C 17.6 21 19.8 23 21.2 25 C 21.6 21.6 21 18.4 19.8 15.4 C 22.4 18.2 23.7 21.7 24 25 C 25.8 22.8 28.4 21.4 32 21 C 29.4 23.2 27.2 25.4 25.8 27.8 C 28.8 27.4 31.4 27.8 33.6 29 C 30.6 29.4 27.6 30.4 25.4 31.6 C 24.8 35.6 24.8 39.6 25.4 44 Z" fill="#0C2E1C"/>
+        </g>
+      </svg>
+      <span class="brand-word">Zambia<em>Bikes</em></span>
+    </a>
+    <button class="nav-toggle" aria-expanded="false" aria-controls="site-nav" aria-label="Open menu">
+      <span class="nav-toggle-bars"></span>
+    </button>
+    <nav class="site-nav" id="site-nav" aria-label="Main">
+      <a href="index.html">Home</a>
+      <a href="tours.html" class="is-active" aria-current="page">Tours &amp; Events</a>
+      <a href="game.html">Play the Game</a>
+      <a href="about.html">Our Story</a>
+      <a href="safety.html">Parents &amp; Safety</a>
+      <a class="btn btn--copper btn--nav" href="join.html">Join the Club</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+  <!-- ============ PAGE HERO ============ -->
+  <section class="page-hero">
+    <div class="container">
+      <p class="kicker">Saddle up</p>
+      <h1>Upcoming <em>tours</em> &amp; events</h1>
+      <p class="lede">Guided kid-sized rides all over Zambia — shady miombo loops, baobab ridgelines,
+      the mist of Mosi-oa-Tunya and sunset gravel by Lake Kariba. Every single ride is
+      helmet-checked, guide-led and backed by the Grown-Up Crew.</p>
+    </div>
+    <div class="hero-hills" aria-hidden="true"><svg viewBox="0 0 1440 90" preserveAspectRatio="none" focusable="false"><path d="M0 60 Q 240 20 480 52 T 960 46 T 1440 40 L 1440 90 L 0 90 Z" fill="#FFF9EE"/></svg></div>
+  </section>
+
+  <!-- ============ RIDES ON THE CALENDAR ============ -->
+  <section class="section">
+    <div class="container">
+      <div class="callout callout--safety reveal" style="margin-bottom:2.6rem">
+        <h2>🛡️ How joining a ride works</h2>
+        <ul>
+          <li><strong>1. You ask.</strong> Tap "Request to join" on any ride — it sends a request, never a booking.</li>
+          <li><strong>2. Real grown-ups check.</strong> The Grown-Up Crew reads every request by hand. Nothing is automatic.</li>
+          <li><strong>3. Your parent or guardian confirms.</strong> They get an email from us, and only then is your spot locked in.</li>
+        </ul>
+      </div>
+
+      <div class="section-head">
+        <p class="kicker">The calendar</p>
+        <h2>Rides on the <em>calendar</em></h2>
+        <p class="lede">Small groups, big skies. Each card shows the distance, the ages it suits, and
+        how many spots are left — the level chips go Easy Rider, Trail Star, then Downhill Hero.</p>
+      </div>
+      <div class="card-grid" data-tours></div>
+      <noscript><p class="callout">Turn on JavaScript to see the live ride calendar — or email
+      <a href="mailto:hello@zambiabikes.org">hello@zambiabikes.org</a> and the Grown-Up Crew will send it over.</p></noscript>
+    </div>
+  </section>
+
+  <!-- ============ CLUB EVENTS ============ -->
+  <section class="section section--alt">
+    <div class="container">
+      <div class="section-head">
+        <p class="kicker">More than rides</p>
+        <h2>Club <em>events</em></h2>
+        <p class="lede">Some of our best days barely touch a trail: the Big Baobab Jamboree, the
+        decorated-bike parade, and Trail Care Day — when we fix ruts, pick up every last wrapper
+        and plant trees for shade in twenty years. Leave the trail better than you found it.</p>
+      </div>
+      <div class="card-grid" data-tours="events"></div>
+      <noscript><p class="callout">The events list needs JavaScript too — or just ask us at
+      <a href="mailto:hello@zambiabikes.org">hello@zambiabikes.org</a>.</p></noscript>
+    </div>
+  </section>
+
+  <!-- ============ WHAT EVERY RIDE INCLUDES ============ -->
+  <section class="section">
+    <div class="container">
+      <div class="section-head section-head--center">
+        <p class="kicker">The Zambia Bikes standard</p>
+        <h2>What <em>every</em> ride includes</h2>
+        <p class="lede">Whether it's a gentle forest loop or the South Luangwa Big-Sky Pedal, the
+        same six things happen on every single tour. No exceptions, no shortcuts.</p>
+      </div>
+      <div class="card-grid card-grid--3">
+        <article class="card reveal">
+          <span class="card-emoji">🧭</span>
+          <h3>Certified guides &amp; the Grown-Up Crew</h3>
+          <p>Trained adult guides lead from the front, and there's at least one grown-up for every
+          four riders. Kids set the pace; adults hold the plan.</p>
+        </article>
+        <article class="card reveal">
+          <span class="card-emoji">🪖</span>
+          <h3>Helmets &amp; a full gear check</h3>
+          <p>No helmet, no ride — it's the first club rule. Before we roll, the crew checks every
+          helmet, every brake and every tyre. Loaner helmets are always in the van.</p>
+        </article>
+        <article class="card reveal">
+          <span class="card-emoji">🥭</span>
+          <h3>Snack &amp; water stops</h3>
+          <p>Planned water breaks on every route, plus the famous mango break at the halfway point.
+          In mango season, honestly, it's the best part.</p>
+        </article>
+        <article class="card reveal">
+          <span class="card-emoji">🦅</span>
+          <h3>Wildlife-wise briefings</h3>
+          <p>Before we set off, a guide explains who we might meet — from fish eagles to hippos —
+          and exactly how we keep a kind, sensible distance. In park areas, rangers ride with us.</p>
+        </article>
+        <article class="card reveal">
+          <span class="card-emoji">🚲</span>
+          <h3>A sweep rider at the back</h3>
+          <p>A grown-up always rides last, so nobody is ever left behind. Slowest rider on the day?
+          You've basically got your own personal guide.</p>
+        </article>
+        <article class="card reveal">
+          <span class="card-emoji">🌳</span>
+          <h3>The trail-care pledge</h3>
+          <p>Every wrapper packed out, every rider on the trail and off the plants. We leave each
+          trail better than we found it — that's the "ride kind" part of the motto.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ GOOD TO KNOW ============ -->
+  <section class="section section--alt">
+    <div class="container">
+      <div class="section-head">
+        <p class="kicker">Questions, answered</p>
+        <h2>Good to <em>know</em></h2>
+        <p class="lede">The things riders and parents ask us most, before their first tour.</p>
+      </div>
+      <div class="faq">
+        <details class="faq-item reveal">
+          <summary>What bike do I need?</summary>
+          <p>Any working bike with two brakes that fits you — a mountain bike is great, but plenty of
+          riders start on whatever's in the shed. The crew checks every bike before we roll, and for
+          skills days like the Copperbelt Pump Track Party we bring loaner bikes. If you don't have a
+          bike at all, tell us in your request: the club's bikes-to-borrow fund exists exactly for that.</p>
+        </details>
+        <details class="faq-item reveal">
+          <summary>Can parents and guardians come along?</summary>
+          <p>Yes — please do! Parents and guardians are welcome on every ride, either on a bike with us
+          or at the start, snack stop and finish. Some of our best sweep riders started as "I'll just
+          watch" parents. Sunset finishes, like the Baobab Ridge Rally, are made for family picnics.</p>
+        </details>
+        <details class="faq-item reveal">
+          <summary>How fit does my rider need to be?</summary>
+          <p>If you can ride around your neighbourhood for half an hour, you can do an Easy Rider tour.
+          Trail Star routes add hills and longer distances, and Downhill Hero rides are for confident
+          riders aged 10 and up. Every card shows the distance and ages — and the sweep rider means
+          nobody ever has to keep up.</p>
+        </details>
+        <details class="faq-item reveal">
+          <summary>What about wildlife safety?</summary>
+          <p>Zambia's wild is why we ride — and we treat it with serious respect. Routes are scouted by
+          adults before every tour, each ride starts with a wildlife-wise briefing, and in national-park
+          areas we only ride with trained rangers. Hippos are admired from a very sensible distance.</p>
+        </details>
+        <details class="faq-item reveal">
+          <summary>What does a tour cost?</summary>
+          <p>A small fee covers the guides, snacks, water and first-aid kit — your parent or guardian
+          gets the exact amount in the confirmation email, so there are never surprises. And this
+          matters to us: <strong>no kid is ever turned away for money.</strong> Just tell the Grown-Up
+          Crew in your request and they'll quietly sort it out.</p>
+        </details>
+        <details class="faq-item reveal">
+          <summary>What if it rains?</summary>
+          <p>Light rain means mud, and mud means the Mud Monster patch — we ride. Storms, lightning or
+          flooded trails mean we don't: the Grown-Up Crew makes the call the evening before, and your
+          parent or guardian gets an email with the new date. Safety picks the weather, not us.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ JOIN CTA ============ -->
+  <section class="section section--forest">
+    <div class="container" style="text-align:center">
+      <p class="kicker">First pick goes to members</p>
+      <h2>Not a <em>member</em> yet?</h2>
+      <p class="lede" style="margin-inline:auto">Membership is free, and members get first pick of tour
+      spots before rides fill up — plus patches, Trail Care Days and Zambia Rush bragging rights
+      at every club showdown. Every sign-up is a request: the Grown-Up Crew reviews it and confirms with your
+      parent or guardian before anything is unlocked.</p>
+      <div class="hero-ctas" style="justify-content:center">
+        <a class="btn btn--copper btn--big" href="join.html">Request to join the club</a>
+        <a class="btn btn--ghost btn--big" href="safety.html">How vetting works</a>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="container footer-grid">
+    <div>
+      <div class="footer-brand">
+        <img src="assets/logo.svg" alt="Zambia Bikes badge" width="64" height="64">
+        <span class="brand-word">Zambia<em>Bikes</em></span>
+      </div>
+      <p class="footer-tag">Ride wild. Ride kind. Ride Zambia.</p>
+      <p>A kids' mountain-bike club and free game, founded in 2026 by two best friends
+      and guarded by their Grown-Up Crew.</p>
+    </div>
+    <nav aria-label="Footer">
+      <h3>Explore</h3>
+      <ul class="footer-links">
+        <li><a href="index.html">Home</a></li>
+        <li><a href="tours.html">Tours &amp; Events</a></li>
+        <li><a href="game.html">Zambia Rush</a></li>
+        <li><a href="about.html">Our Story</a></li>
+        <li><a href="safety.html">Parents &amp; Safety</a></li>
+        <li><a href="join.html">Join the Club</a></li>
+      </ul>
+    </nav>
+    <div>
+      <h3>The Club Promise</h3>
+      <div class="footer-pledge">
+        <p>🛡️ Every member is vetted by real grown-ups before joining.</p>
+        <p>💬 No chat, no direct messages, no strangers — on the site or in the game.</p>
+        <p>✉️ Questions? <a href="mailto:hello@zambiabikes.org">hello@zambiabikes.org</a></p>
+      </div>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <div class="container">
+      <span>© <span data-year>2026</span> Zambia Bikes — built with muddy hands by Armand &amp; Arthur (both 10) and the Grown-Up Crew.</span>
+      <span>Made in Zambia 🇿🇲</span>
+    </div>
+  </div>
+</footer>
+
+<script src="js/tours-data.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
