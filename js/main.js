@@ -1,7 +1,9 @@
 /* Zambia Bikes — shared site behaviour
    Nav, tour cards, request-to-join modal, join form, reveal animations.
-   All "requests to join" are stored locally and reviewed by the Grown-Up
-   Crew before anyone becomes a member — nothing on this site is automatic. */
+   "Requests to join" are sent to the club server (/api/join) when one is
+   running; on static hosting (or any error) they fall back to the original
+   prepared-email flow. Either way a real grown-up reviews every request
+   before anyone becomes a member — nothing on this site is automatic. */
 
 (function () {
   "use strict";
@@ -204,6 +206,10 @@
     return (
       '<p>Ask to ride <strong>' + esc(tour.name) + "</strong> — " + esc(tour.dateLabel) + " at " + esc(tour.place) + ".</p>" +
       '<form id="zb-request-form">' +
+        /* honeypot: humans never see this field; bots fill it in */
+        '<div style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden" aria-hidden="true">' +
+        '<label for="rq-website">Leave this field empty</label>' +
+        '<input id="rq-website" name="website" type="text" autocomplete="off" tabindex="-1" aria-hidden="true"></div>' +
         '<div class="field-row">' +
           '<div class="field"><label for="rq-name">Rider first name <span class="req">*</span></label>' +
           '<input id="rq-name" name="rider" type="text" required maxlength="20" autocomplete="off"></div>' +
@@ -246,6 +252,56 @@
       "&body=" + encodeURIComponent(lines.join("\n"));
   }
 
+  /* ---------- send a request to the club server ---------- */
+
+  /* Everything beyond rider name / age / parent email travels in one plain-text
+     message — the server stores the minimum. */
+  function requestMessage(req, tourName) {
+    var lines = [
+      tourName ? "Tour request: " + tourName : "Membership request",
+      req.parentName ? "Parent/guardian: " + req.parentName : null,
+      req.province ? "Province: " + req.province : null,
+      req.level ? "Riding level: " + req.level : null,
+      req.about ? "About the rider: " + req.about : null
+    ].filter(Boolean);
+    return lines.join("\n").slice(0, 1000);
+  }
+
+  /* POST to /api/join; done(true) on HTTP 2xx, done(false) on anything else
+     (e.g. static hosting with no server) so callers can fall back to the
+     prepared-email flow. */
+  function postJoin(req, tourName, done) {
+    if (!window.fetch) { done(false); return; }
+    var age = parseInt(req.age, 10);
+    var payload = {
+      kidName: req.rider,
+      age: isFinite(age) ? age : null,
+      parentEmail: req.parentEmail,
+      message: requestMessage(req, tourName),
+      website: req.website || ""
+    };
+    try {
+      window.fetch("/api/join", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      }).then(function (res) { done(res.ok); }, function () { done(false); });
+    } catch (e) { done(false); }
+  }
+
+  function modalSentHTML(req, tour) {
+    return (
+      '<div style="text-align:center;padding:0.5rem 0 0.2rem"><span style="font-size:3rem">🎉</span></div>' +
+      '<h3 style="text-align:center">Request sent, ' + esc(req.rider) + "!</h3>" +
+      '<p style="text-align:center">Request sent! A grown-up from the club will reply to your parent\'s email.</p>' +
+      '<p style="text-align:center"><span class="chip chip--trail">Status: pending review</span> ' +
+      '<span class="chip chip--info">' + esc(tour.name) + "</span></p>" +
+      '<p style="text-align:center;color:var(--ink-soft);font-size:0.95rem">A real adult from the Grown-Up Crew reads it and replies within 3 days, before the spot is booked.</p>' +
+      '<div style="display:flex;justify-content:center;margin-top:0.8rem">' +
+      '<button type="button" class="btn btn--copper" data-close>Done!</button></div>'
+    );
+  }
+
   function modalSuccessHTML(req, tour) {
     return (
       '<div style="text-align:center;padding:0.5rem 0 0.2rem"><span style="font-size:3rem">🎉</span></div>' +
@@ -280,13 +336,23 @@
         age: form.age.value,
         parentName: form.parentName.value.trim(),
         parentEmail: form.parentEmail.value.trim(),
+        website: form.website ? form.website.value : "",
         status: "pending",
         ts: new Date().toISOString()
       };
-      var list = loadRequests();
-      list.push(req);
-      saveRequests(list);
-      body.innerHTML = modalSuccessHTML(req, tour);
+      var btn = form.querySelector('button[type="submit"]');
+      if (btn) { btn.disabled = true; btn.textContent = "Sending…"; }
+      postJoin(req, tour.name, function (sent) {
+        if (sent) {
+          body.innerHTML = modalSentHTML(req, tour);
+          return;
+        }
+        /* no server reachable (e.g. static hosting) — prepared-email fallback */
+        var list = loadRequests();
+        list.push(req);
+        saveRequests(list);
+        body.innerHTML = modalSuccessHTML(req, tour);
+      });
     });
     if (typeof dlg.showModal === "function") dlg.showModal();
     else dlg.setAttribute("open", "open");
@@ -315,17 +381,39 @@
         province: form.province ? form.province.value : "",
         level: levelInput ? levelInput.value : "",
         about: (form.about ? form.about.value : "").trim().slice(0, 500),
+        website: form.website ? form.website.value : "",
         status: "pending",
         ts: new Date().toISOString()
       };
-      var list = loadRequests();
-      list.push(req);
-      saveRequests(list);
-      renderRequestStatus();
-      form.reset();
-      var panel = document.querySelector("[data-request-status]");
-      if (panel) panel.scrollIntoView({ behavior: "smooth", block: "center" });
+      var btn = form.querySelector('button[type="submit"]');
+      if (btn) btn.disabled = true;
+      postJoin(req, null, function (sent) {
+        if (btn) btn.disabled = false;
+        if (sent) {
+          renderSentStatus(req);
+          form.reset();
+        } else {
+          /* no server reachable (e.g. static hosting) — prepared-email fallback */
+          var list = loadRequests();
+          list.push(req);
+          saveRequests(list);
+          renderRequestStatus();
+          form.reset();
+        }
+        var panel = document.querySelector("[data-request-status]");
+        if (panel) panel.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
     });
+  }
+
+  function renderSentStatus(req) {
+    var host = document.querySelector("[data-request-status]");
+    if (!host) return;
+    host.innerHTML =
+      '<div class="status-panel reveal is-visible"><h3>🎉 Request sent!</h3>' +
+      "<p><strong>" + esc(req.rider) + "</strong>'s membership request is with the Grown-Up Crew. " +
+      "A grown-up from the club will reply to your parent's email within 3 days.</p>" +
+      '<p style="margin-bottom:0"><span class="chip chip--trail">Status: pending review</span></p></div>';
   }
 
   function renderRequestStatus() {

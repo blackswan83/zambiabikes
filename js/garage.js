@@ -103,6 +103,10 @@ import { OrbitControls } from "./vendor/addons/controls/OrbitControls.js";
   controls.autoRotate = true;
   controls.autoRotateSpeed = 1.0;
   canvas.addEventListener("pointerdown", function () { controls.autoRotate = false; });
+  if (location.search.indexOf("dbg") !== -1) {
+    controls.autoRotate = false;
+    window.__g = { scene: scene, camera: camera, renderer: renderer, controls: controls, THREE: THREE };
+  }
 
   /* ---------- component data ---------- */
 
@@ -269,11 +273,14 @@ import { OrbitControls } from "./vendor/addons/controls/OrbitControls.js";
     var wallM = M("wall_" + opts.wall, { color: new THREE.Color(wallDef.color), roughness: 0.92 });
     var rubberM = M("rubber", { color: 0x25201B, roughness: 0.95 });
 
-    /* casing (sidewall colour) + tread band over the crown */
+    /* casing (sidewall colour) + tread band over the crown — torus rings live
+       in the x-y plane, so rotate them into the wheel plane (axle along x) */
     var casing = new THREE.Mesh(new THREE.TorusGeometry(r - fat, fat, 14, 40), wallM);
+    casing.rotation.y = Math.PI / 2;
     casing.castShadow = true;
     w.add(casing);
     var tread = new THREE.Mesh(new THREE.TorusGeometry(r - fat + fat * 0.32, fat * 0.74, 12, 40), rubberM);
+    tread.rotation.y = Math.PI / 2;
     tread.castShadow = true;
     w.add(tread);
 
@@ -294,10 +301,12 @@ import { OrbitControls } from "./vendor/addons/controls/OrbitControls.js";
           knobs.setMatrixAt(idx++, m4);
         }
       }
-      ringOf(pat.c[0], pat.c[1], 0, r - 0.006);
+      /* centre row rides the tread crown, shoulders sit on the casing flanks —
+         each knob half-buried in the rubber, half proud */
+      ringOf(pat.c[0], pat.c[1], 0, r + fat * 0.06);
       if (pat.s) {
-        ringOf(pat.s[0], pat.s[1], fat * 0.52, r - fat * 0.22);
-        ringOf(pat.s[0], pat.s[1], -fat * 0.52, r - fat * 0.22);
+        ringOf(pat.s[0], pat.s[1], fat * 0.52, r - fat * 0.15);
+        ringOf(pat.s[0], pat.s[1], -fat * 0.52, r - fat * 0.15);
       }
       w.add(knobs);
     }
@@ -763,12 +772,14 @@ import { OrbitControls } from "./vendor/addons/controls/OrbitControls.js";
       });
     }
     if (ex.indexOf("mudguard") >= 0) {
-      var guard = new THREE.Mesh(new THREE.TorusGeometry(wheelR + 0.03, 0.024, 5, 14, Math.PI * 0.7), darkM);
+      /* fender arc over the top-front of the wheel, rotated into the wheel
+         plane in geometry space so the lateral squash stays lateral */
+      var guardGeo = new THREE.TorusGeometry(wheelR + 0.035, 0.026, 6, 16, Math.PI * 0.62);
+      guardGeo.rotateZ(Math.PI * 0.22);
+      guardGeo.rotateY(-Math.PI / 2);
+      var guard = new THREE.Mesh(guardGeo, darkM);
+      guard.scale.x = 0.6;
       guard.position.copy(FA);
-      guard.rotation.z = Math.PI / 2;
-      guard.rotation.y = Math.PI / 2;
-      guard.rotation.x = Math.PI * 0.16;
-      guard.scale.x = 0.32;
       g.add(guard);
     }
     if (ex.indexOf("bell") >= 0) {

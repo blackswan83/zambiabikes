@@ -19,6 +19,61 @@
 
 #game-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 
+/* fullscreen: the stage becomes the whole screen */
+.game-stage:fullscreen { aspect-ratio: auto; border: none; border-radius: 0; box-shadow: none; }
+.game-stage:fullscreen .fs-btn { top: 3.6rem; }   /* clear of the HUD chips */
+
+.fs-btn {
+  position: absolute;
+  top: 0.65rem;
+  right: 0.65rem;
+  z-index: 7;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 10px;
+  border: 2px solid rgba(255, 255, 255, 0.45);
+  background: rgba(12, 26, 16, 0.45);
+  color: #FFF6E0;
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.12s ease;
+}
+.fs-btn:hover { background: rgba(12, 26, 16, 0.75); transform: scale(1.06); }
+
+/* controls hint shown during the start countdown */
+.controls-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 16%;
+  transform: translateX(-50%);
+  z-index: 5;
+  pointer-events: none;
+  background: rgba(12, 26, 16, 0.58);
+  border: 1.5px solid rgba(255, 246, 224, 0.25);
+  border-radius: 999px;
+  padding: 0.55rem 1.25rem;
+  color: #FFF6E0;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: clamp(0.8rem, 1.9vw, 1rem);
+  white-space: nowrap;
+  transition: opacity 1.6s ease;
+}
+.controls-hint .ch-row { display: flex; gap: 1.1rem; }
+.controls-hint .ch-row[hidden] { display: none; }
+.controls-hint kbd {
+  font: inherit;
+  font-size: 0.85em;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-bottom-width: 2.5px;
+  border-radius: 6px;
+  padding: 0.02rem 0.42rem;
+  margin-right: 0.1rem;
+}
+.controls-hint.is-fading { opacity: 0; }
+
 /* subtle cinematic vignette over the 3D view */
 .stage-vignette {
   position: absolute;

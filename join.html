@@ -84,6 +84,11 @@
         <div class="form-card reveal">
           <div data-request-status></div>
           <form id="join-form" data-join-form>
+            <!-- Honeypot: humans never see this field; bots fill it in and get quietly ignored. -->
+            <div style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden" aria-hidden="true">
+              <label for="jf-website">Leave this field empty</label>
+              <input id="jf-website" name="website" type="text" autocomplete="off" tabindex="-1" aria-hidden="true">
+            </div>
             <div class="field-row">
               <div class="field">
                 <label for="jf-rider">Rider first name <span class="req">*</span></label>

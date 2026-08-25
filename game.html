@@ -69,6 +69,22 @@
       <div class="game-stage" id="game-stage">
         <canvas id="game-canvas" width="960" height="540" aria-label="Zambia Rush — downhill biking game. Use the keyboard or on-screen buttons to play."></canvas>
         <div class="stage-vignette" aria-hidden="true"></div>
+        <button type="button" class="fs-btn" id="btn-fs" aria-label="Full screen" title="Full screen (F)" hidden>⛶</button>
+
+        <div class="controls-hint" id="controls-hint" hidden aria-hidden="true">
+          <div class="ch-row" id="hint-keys">
+            <span class="ch-item"><kbd>W</kbd> pedal</span>
+            <span class="ch-item"><kbd>A</kbd><kbd>D</kbd> steer</span>
+            <span class="ch-item"><kbd>S</kbd> brake</span>
+            <span class="ch-item"><kbd>Space</kbd> jump</span>
+            <span class="ch-item"><kbd>Esc</kbd> pause</span>
+          </div>
+          <div class="ch-row" id="hint-touch" hidden>
+            <span class="ch-item">hold ▲ to pedal</span>
+            <span class="ch-item">◀ ▶ steer</span>
+            <span class="ch-item">⤒ jump</span>
+          </div>
+        </div>
 
         <div class="hud" id="hud" hidden>
           <div class="hud-top">
@@ -209,6 +225,17 @@
           <p style="font-size:0.88rem;color:var(--ink-soft);margin:0.8rem 0 0">This board lives on
           <em>this device</em> — first names only, and no public list anywhere. We compare best
           times together at every club event, so bring yours to the Jamboree!</p>
+        </article>
+
+        <article class="card reveal" id="club-card" hidden>
+          <span class="card-emoji">🌍</span>
+          <h3>Club leaderboard — <span id="club-track-name"></span></h3>
+          <p style="font-size:0.92rem">The fastest riders in the whole club, live from the club
+          server. Type your rider name, set a new personal best, and your ghost joins the board —
+          the top two club ghosts ride beside everyone on the start line. Ghost Codes carry riding
+          data and a first name only, every code is checked by the server, and the Grown-Up Crew
+          can remove anything. Pick a track above to switch boards.</p>
+          <ol class="lb-list" id="club-list"></ol>
         </article>
       </div>
 
