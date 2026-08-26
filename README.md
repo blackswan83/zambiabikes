@@ -7,9 +7,9 @@ The website of Zambia Bikes — a kids' mountain-biking club founded by two
 (Chief Fun & Games Officer), and safeguarded by their Grown-Up Crew.
 
 The site organizes guided mountain-bike tours across Zambia for kids and
-hosts **Zambia Rush**, a free Descenders-inspired downhill game set in
-Zambian landscapes — miombo forest, baobab ridges and the Mosi-oa-Tunya
-falls canyon.
+hosts two free Descenders-inspired games: **Zambia Rush**, a downhill racer
+across five hand-built Zambian mountains, and **Trial**, a freeride game where
+every mountain is generated from a single number.
 
 ## What's inside
 
@@ -19,6 +19,7 @@ falls canyon.
 | `tours.html` | Tour & event calendar with "Request to join" flow |
 | `game.html` | **Zambia Rush 3D** — the full 3D downhill game |
 | `game2d.html` | **Zambia Rush Classic** — the 2D version, runs on anything |
+| `trial.html` | **Trial** — the freeride game: every mountain generated from one number |
 | `garage.html` | **The Garage** — build and mod your bike in 3D |
 | `join.html` | Membership request form (vetted, never automatic) |
 | `about.html` | The founders' story, values, the Grown-Up Crew |
@@ -97,6 +98,54 @@ multiplayer with no server: positions + a first name, nothing else. If a
 device has no WebGL, the page offers **Zambia Rush Classic** (`game2d.html`,
 engine in `js/game.js`) — the original 2D side-scroller with backflips,
 which shares the same design and its own `ZRG1…` ghost codes.
+
+## The other game — Trial
+
+Where Zambia Rush gives you five hand-built mountains, **Trial** builds a new
+one every time. A run is one seed, so a trail code like `5PR-MAP` *is* the
+whole hill — the same ridge, the same corners, the same jumps in the same
+places for anyone who types it in.
+
+- **`js/trial-core.js`** — the headless simulation (`window.TRIAL`; exports
+  under node). Five biome recipes grow a heightfield; a wandering trail is
+  carved *and banked* into it, with the bank taken from the trail's own
+  curvature so every corner rides like a built berm. Seven feature builders
+  then cut into that trail — kickers, road gaps, step-downs, whoops, berms,
+  hips and rock gardens — writing into delta layers (local shape, permanent
+  step, bank, carve width, lateral shift) that are applied *after* grade
+  clamping, so a 3 m lip survives.
+- **`js/trial.js`** — the Three.js renderer, the HUD and the career.
+
+**What makes it Trial and not Zambia Rush**
+
+| | |
+| --- | --- |
+| Air | Three axes — spin (`A`/`D`), flip (`W`/`S`), whip (`Q`/`E`). Rotation must come back round before the wheels touch. |
+| Hops | Hold `Space` to preload, release to pop. Let go right on a lip for extra height. |
+| Scoring | Style points per landed trick, escalating with rotation, plus a combo multiplier that stacks while you keep landing them. |
+| Damage | A bail bar, not lives. Every crash takes a bite; style refills it; at zero the run is over. |
+| Progress | Five career stages, three nodes each, seeded from *your* career number — your Batoka is nobody else's Batoka. |
+| Assist | Landing assist is on by default (~115° of forgiveness). Off, it is ~55°. |
+
+**Feature geometry is measured, not guessed.** A generator that *can* build an
+unrideable jump will build one, so each builder sizes its gully or landing
+ramp from the flight a rider can actually make off that specific lip. A
+harness then drops a rider onto the line ahead of every generated feature at
+9, 13, 17, 21 and 25 m/s — about 2 700 landings across five biomes and both
+jump sizes — and counts the crashes:
+
+| Feature | Tries | Bail rate | Where it bites |
+| --- | --- | --- | --- |
+| Berm | 605 | 0.0 % | nowhere |
+| Hip jump | 340 | 0.0 % | nowhere |
+| Rock garden | 435 | 0.0 % | nowhere |
+| Kicker | 1 700 | 0.3 % | 25 m/s off the biggest lips |
+| Whoops | 820 | 0.7 % | even across all speeds |
+| Step-down | 440 | 5.2 % | 21–25 m/s with no brakes |
+| Road gap | 515 | 8.5 % | 17–25 m/s, cased |
+
+Gaps and drops are *allowed* to punish you — but only for sending it flat
+out, which is what the brake is for.
 
 ## Kid-safety design decisions
 

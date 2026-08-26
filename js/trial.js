@@ -924,18 +924,45 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   });
   window.addEventListener("blur", function () { keys = {}; });
 
+  /* A key that was already held when the wheels left the ground must not
+     become a trick: you pedal into a lip with W down and steer into it with D
+     down, and neither of those is a request for a backflip. Held keys are
+     latched out until they are released and pressed again in the air. */
+  var airLatch = { up: false, down: false, left: false, right: false };
+
+  function latchOnTakeoff() {
+    airLatch.up = keys.up || touch.pedal;
+    airLatch.down = keys.down || touch.brake;
+    airLatch.left = keys.left || touch.left;
+    airLatch.right = keys.right || touch.right;
+  }
+
   function readInput(airborne) {
     var up = keys.up || touch.pedal;
     var down = keys.down || touch.brake;
     var left = keys.left || touch.left;
     var right = keys.right || touch.right;
+
+    if (airborne) {
+      if (!up) airLatch.up = false;
+      if (!down) airLatch.down = false;
+      if (!left) airLatch.left = false;
+      if (!right) airLatch.right = false;
+    }
+
+    var aUp = up && !(airborne && airLatch.up);
+    var aDown = down && !(airborne && airLatch.down);
+    var aLeft = left && !(airborne && airLatch.left);
+    var aRight = right && !(airborne && airLatch.right);
+
     return {
       pedal: !airborne && up,
       brake: !airborne && down,
-      left: left, right: right,
+      left: airborne ? aLeft : left,
+      right: airborne ? aRight : right,
       hop: keys.hop || touch.hop,
-      flipBack: airborne && up,
-      flipFwd: airborne && down,
+      flipBack: airborne && aUp,
+      flipFwd: airborne && aDown,
       whipL: keys.whipL || touch.whipL,
       whipR: keys.whipR || touch.whipR
     };
@@ -1121,8 +1148,10 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
         var steps = 0;
         while (accumulator >= CORE.DT && steps < 5) {
           run.events.length = 0;
+          var wasDown = run.st.onGround;
           var inp = readInput(!run.st.onGround);
           CORE.stepRider(run.st, inp, run.world, run.events);
+          if (wasDown && !run.st.onGround) latchOnTakeoff();
           handleEvents(run.events);
           accumulator -= CORE.DT;
           steps++;
