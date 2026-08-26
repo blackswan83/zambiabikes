@@ -1644,13 +1644,31 @@
   text-align: center;
 }
 .vs-card.is-winner { background: rgba(247, 183, 51, 0.2); box-shadow: inset 0 0 0 3px var(--sun); }
+/* The jersey colour reads beautifully as a dot and badly as text: a name in
+   #1F7A48 on the winner's gold-tinted card measures 1.5:1, which is the least
+   readable thing on a screen a child is looking at to find their own name. The
+   colour stays — as a dot, where saturation costs nothing. */
 .vs-name {
   font-family: var(--font-display);
   font-weight: 700;
   font-size: clamp(0.85rem, 2vw, 1.05rem);
-  color: var(--p-tint, #FFF6E0);
+  color: #FFF6E0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35em;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.vs-name::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 0.62em;
+  height: 0.62em;
+  border-radius: 50%;
+  background: var(--p-tint, var(--sun));
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5);
 }
 .vs-time {
   font-family: var(--font-display);
