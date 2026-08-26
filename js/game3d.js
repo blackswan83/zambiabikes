@@ -148,6 +148,14 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     if (e.repeat) return;
     if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")) return;
     if (e.code === "KeyF") { toggleFullscreen(); e.preventDefault(); return; }
+    /* cabinet-style course browsing: left/right steps through the courses */
+    if (mode === "menu" && (e.code === "ArrowLeft" || e.code === "ArrowRight")) {
+      var ord = CORE.TRACK3_ORDER;
+      var at = ord.indexOf(selTrack);
+      selectTrack(ord[(at + (e.code === "ArrowRight" ? 1 : ord.length - 1)) % ord.length]);
+      e.preventDefault();
+      return;
+    }
     if (e.code === "KeyB" && mode === "race" && run && run.hasBell) { SFX.bell(); return; }
     if (e.code === "KeyP" || e.code === "Escape") {
       if (mode === "race" || mode === "count") { pauseGame(); e.preventDefault(); }
@@ -2442,19 +2450,157 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
 
   /* ---------- menu ---------- */
 
+  /* ---------- arcade course select ----------
+     The course map is drawn from the real trail spline (CORE.trailPreview),
+     so what a rider studies here is exactly the line they get. */
+
+  var previewCache = {};
+  function trackPreview(id) {
+    if (!previewCache[id]) previewCache[id] = CORE.trailPreview(CORE.TRACKS3[id]);
+    return previewCache[id];
+  }
+
+  function pips(v) {
+    var s = "";
+    for (var i = 1; i <= 5; i++) s += i <= v ? "▰" : "▱";
+    return s;
+  }
+
+  function courseRatings(def) {
+    function span(v, lo, hi) { return Math.max(1, Math.min(5, Math.round(1 + ((v - lo) / (hi - lo)) * 4))); }
+    var wild = 2 + (def.hazards ? 1 : 0) + (def.river ? 1 : 0) + (def.gorge ? 1 : 0) + (def.theme.bats ? 2 : 0);
+    return {
+      Speed: span(def.slope, 0.05, 0.165),
+      Twist: span(def.wobble, 0.8, 1.15),
+      Air: span(-def.kickerEvery, -150, -100),
+      Wild: Math.min(5, wild)
+    };
+  }
+
+  function courseMapSVG(id) {
+    var def = CORE.TRACKS3[id];
+    var pv = trackPreview(id);
+    var W = 200, H = 210, PAD = 16;
+    var sx = (W - PAD * 2) / Math.max(1, pv.maxX - pv.minX);
+    var sz = (H - PAD * 2) / Math.max(1, pv.zEnd);
+    function px(x) { return PAD + (x - pv.minX) * sx; }
+    function py(z) { return PAD + z * sz; }
+
+    var s = "";
+    /* faint CRT grid */
+    for (var g = 0; g <= 4; g++) {
+      s += '<line x1="0" y1="' + (g * H / 4) + '" x2="' + W + '" y2="' + (g * H / 4) + '" class="csm-grid"/>';
+      s += '<line x1="' + (g * W / 4) + '" y1="0" x2="' + (g * W / 4) + '" y2="' + H + '" class="csm-grid"/>';
+    }
+
+    /* the river / the gorge, drawn beside the line they run beside */
+    if (def.river) {
+      var rv = "";
+      for (var r = 0; r < pv.n; r += 6) {
+        rv += (r ? " L" : "M") + (px(pv.pts[r].x + def.river.offset + def.river.width / 2)).toFixed(1) + " " + py(pv.pts[r].z).toFixed(1);
+      }
+      s += '<path d="' + rv + '" class="csm-river"/>';
+    }
+    if (def.gorge) {
+      var gv = "", started = false;
+      for (var q = Math.floor(pv.n * def.gorge.fromFrac); q < pv.n; q += 4) {
+        gv += (started ? " L" : "M") + (px(pv.pts[q].x + def.gorge.offset + def.gorge.width / 2)).toFixed(1) + " " + py(pv.pts[q].z).toFixed(1);
+        started = true;
+      }
+      if (started) s += '<path d="' + gv + '" class="csm-gorge"/>';
+    }
+
+    /* the trail itself: dark casing, bright core, dashed centre line */
+    var d = "";
+    for (var i = 0; i < pv.n; i += 3) {
+      d += (i ? " L" : "M") + px(pv.pts[i].x).toFixed(1) + " " + py(pv.pts[i].z).toFixed(1);
+    }
+    d += " L" + px(pv.pts[pv.n - 1].x).toFixed(1) + " " + py(pv.pts[pv.n - 1].z).toFixed(1);
+    s += '<path d="' + d + '" class="csm-case"/><path d="' + d + '" class="csm-line"/><path d="' + d + '" class="csm-dash"/>';
+
+    /* kicker ticks across the trail */
+    var kStep = Math.max(4, Math.floor(pv.n / pv.kickers));
+    for (var k = kStep; k < pv.n - 4; k += kStep) {
+      var a = pv.pts[k - 2], b = pv.pts[k + 2];
+      var ax = px(a.x), ay = py(a.z), bx = px(b.x), by = py(b.z);
+      var dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1;
+      var nx = -dy / len * 5, ny = dx / len * 5;
+      var cx = px(pv.pts[k].x), cy = py(pv.pts[k].z);
+      s += '<line x1="' + (cx - nx).toFixed(1) + '" y1="' + (cy - ny).toFixed(1) +
+        '" x2="' + (cx + nx).toFixed(1) + '" y2="' + (cy + ny).toFixed(1) + '" class="csm-kick"/>';
+    }
+
+    /* hazard zones, spaced the way the world places them — both the generic
+       trail hazards and the river tracks' bespoke basking crocodiles */
+    var hazZ = [];
+    (def.hazards || []).forEach(function (hz) {
+      for (var z = hz.from; z < def.length - 120; z += hz.every + 55) hazZ.push(z);
+    });
+    if (def.river) {
+      for (var cz = 140; cz < def.length - 120; cz += 165) hazZ.push(cz);
+    }
+    hazZ.forEach(function (z) {
+      var hi = Math.min(pv.n - 1, Math.floor(z / 5));
+      s += '<circle cx="' + (px(pv.pts[hi].x) + 6).toFixed(1) + '" cy="' + py(pv.pts[hi].z).toFixed(1) + '" r="3" class="csm-haz"/>';
+    });
+
+    /* start and finish */
+    var s0 = pv.pts[0], s1 = pv.pts[pv.n - 1];
+    s += '<circle cx="' + px(s0.x).toFixed(1) + '" cy="' + py(s0.z).toFixed(1) + '" r="5" class="csm-start"/>';
+    s += '<text x="' + px(s0.x).toFixed(1) + '" y="' + (py(s0.z) - 8).toFixed(1) + '" class="csm-tx">START</text>';
+    for (var c = 0; c < 4; c++) {
+      s += '<rect x="' + (px(s1.x) - 6 + (c % 2) * 6).toFixed(1) + '" y="' + (py(s1.z) - 3 + Math.floor(c / 2) * 3).toFixed(1) +
+        '" width="6" height="3" fill="' + (c % 3 === 0 ? "#fff" : "#1A1A1A") + '"/>';
+    }
+    s += '<text x="' + px(s1.x).toFixed(1) + '" y="' + (py(s1.z) + 14).toFixed(1) + '" class="csm-tx">FINISH</text>';
+    return s;
+  }
+
+  function renderCourseSelect() {
+    var def = CORE.TRACKS3[selTrack];
+    var pv = trackPreview(selTrack);
+    var mapEl = $("cs-map");
+    if (mapEl) mapEl.innerHTML = courseMapSVG(selTrack);
+    $("cs-name").textContent = def.name;
+    var lv = $("cs-level");
+    lv.textContent = def.levelLabel;
+    lv.className = "track-pill track-pill--" + def.level;
+    $("cs-len").textContent = def.length + " m · " + pv.drop + " m drop";
+    $("cs-unique").textContent = def.unique || def.desc;
+    $("cs-feats").innerHTML = (def.feats || []).map(function (f) {
+      return "<li>" + f + "</li>";
+    }).join("");
+    var R = courseRatings(def);
+    $("cs-stats").innerHTML = Object.keys(R).map(function (k) {
+      return '<span class="cs-stat"><b>' + k + '</b><i>' + pips(R[k]) + "</i></span>";
+    }).join("");
+    var best = bests[selTrack];
+    $("cs-best").innerHTML = best
+      ? "Your best <strong>" + fmtTime(best) + "</strong>"
+      : "<em>Not ridden yet — set a time!</em>";
+  }
+
+  function selectTrack(id) {
+    if (!CORE.TRACKS3[id] || id === selTrack) return;
+    selTrack = id;
+    lsSet("zr3_seltrack", selTrack);
+    camSnap = true;
+    refreshMenu();
+    if (clubOn && !clubGhosts[selTrack]) fetchClubGhosts(selTrack);
+  }
+
   function refreshMenu() {
     var html = "";
     CORE.TRACK3_ORDER.forEach(function (id) {
       var t = CORE.TRACKS3[id];
-      var best = bests[id];
       html +=
         '<button type="button" class="track-card' + (id === selTrack ? " is-selected" : "") + '" data-track="' + id + '" aria-pressed="' + (id === selTrack) + '">' +
         '<span class="track-card__name">' + t.name + "</span>" +
-        '<span class="track-card__meta"><span class="track-pill track-pill--' + t.level + '">' + t.levelLabel + "</span> " + t.desc + " · " + t.length + " m</span>" +
-        '<span class="track-card__best">' + (best ? "Your best: " + fmtTime(best) : "Not ridden yet") + "</span>" +
+        '<span class="track-card__best">' + (bests[id] ? fmtTime(bests[id]) : "— · —") + "</span>" +
         "</button>";
     });
     el.trackCards.innerHTML = html;
+    renderCourseSelect();
     el.riderName.value = profile.name;
     var mb = $("menu-bike");
     if (mb && BIKES) {
@@ -2476,11 +2622,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   el.trackCards.addEventListener("click", function (e) {
     var btn = e.target.closest("[data-track]");
     if (!btn) return;
-    selTrack = btn.getAttribute("data-track");
-    lsSet("zr3_seltrack", selTrack);
-    camSnap = true;
-    refreshMenu();
-    if (clubOn && !clubGhosts[selTrack]) fetchClubGhosts(selTrack);
+    selectTrack(btn.getAttribute("data-track"));
   });
 
   /* time-of-day chips */

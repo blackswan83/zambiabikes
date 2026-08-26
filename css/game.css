@@ -122,10 +122,10 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 0.4rem;
+  justify-content: safe center;
+  gap: 0.3rem;
   text-align: center;
-  padding: clamp(0.8rem, 3vw, 2rem);
+  padding: clamp(0.6rem, 2.2vw, 1.4rem);
   background: linear-gradient(180deg, rgba(12, 46, 28, 0.82), rgba(12, 46, 28, 0.92));
   color: #F4EFE4;
   overflow-y: auto;
@@ -136,6 +136,12 @@
 /* the menu sits over the live "attract mode" ride — keep it translucent
    enough that Armand's ghost shows through */
 .overlay--menu { background: linear-gradient(180deg, rgba(12, 46, 28, 0.7), rgba(12, 46, 28, 0.88)); }
+
+/* the page already carries a big "Zambia Rush" headline right above the
+   stage, so the menu's own title stays small and its tagline steps aside —
+   that keeps START on screen without scrolling at 16:9 */
+.overlay--menu > h2 { font-size: clamp(1.05rem, 2.8vw, 1.5rem); margin-bottom: 0; }
+.overlay--menu > .gr-tag { display: none; }
 
 .overlay h2 {
   color: #fff;
@@ -153,9 +159,38 @@
 }
 
 .gr-panel {
-  width: min(680px, 100%);
+  width: min(880px, 100%);
   display: grid;
-  gap: 0.75rem;
+  gap: 0.5rem;
+}
+
+/* wide stages lay the menu out like an arcade cabinet: controls on the
+   left, the course screen on the right, START across the bottom */
+@media (min-width: 700px) {
+  .gr-panel {
+    grid-template-columns: minmax(238px, 0.78fr) minmax(352px, 1fr);
+    align-items: start;
+    gap: 0.5rem 0.8rem;
+  }
+  .gr-panel > .menu-row { grid-column: 1 / -1; }
+}
+.menu-side { display: grid; gap: 0.45rem; align-content: start; }
+.menu-side .menu-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.3rem;
+  justify-content: stretch;
+}
+.menu-side .menu-row .ghost-toggle { grid-column: 1 / -1; justify-content: center; }
+.menu-side .menu-row .btn { width: 100%; }
+
+/* smaller stages: drop the nice-to-haves so START still lands on screen */
+@media (max-width: 1100px) {
+  .cs-hint { display: none; }
+  .overlay--menu > h2 { display: none; }   /* the page H1 is right above the stage */
+  .cs-unique { font-size: 0.74rem; line-height: 1.28; }
+  .jersey { width: 1.7rem; height: 1.7rem; }
+  .overlay--menu .btn--big { font-size: 1rem; padding: 0.55rem 1.4rem; }
 }
 
 /* rider row */
@@ -194,31 +229,207 @@
 .jersey.is-selected { border-color: #fff; box-shadow: 0 0 0 3px var(--sun); }
 
 /* track cards */
+/* ==========================================================================
+   COURSE SELECT — 1990s arcade cabinet: CRT course map, chunky type,
+   pip meters and a row of course buttons along the bottom.
+   ========================================================================== */
+
+.course-select {
+  border: 3px solid var(--sun);
+  border-radius: 12px;
+  background: linear-gradient(180deg, #0B1524, #101E14);
+  box-shadow: 0 6px 0 rgba(0, 0, 0, 0.45), inset 0 0 30px rgba(0, 0, 0, 0.5);
+  padding: 0.5rem 0.6rem 0.55rem;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.cs-head {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.78rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--sun);
+  text-shadow: 2px 2px 0 #7A3A00;
+}
+.cs-blink { color: #56E0C8; animation: csBlink 0.9s steps(1) infinite; }
+@keyframes csBlink { 50% { opacity: 0; } }
+
+.cs-body {
+  display: grid;
+  grid-template-columns: 132px 1fr;
+  gap: 0.65rem;
+  align-items: stretch;
+  text-align: left;
+}
+
+/* ---- the CRT screen showing the real course map ---- */
+
+.cs-screen {
+  position: relative;
+  border: 2px solid #2C4A54;
+  border-radius: 8px;
+  background: radial-gradient(ellipse at 50% 40%, #0E2630 0%, #050C12 100%);
+  overflow: hidden;
+  box-shadow: inset 0 0 22px rgba(0, 0, 0, 0.85);
+}
+.cs-map { display: block; width: 100%; height: 100%; }
+.cs-scan {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(180deg, rgba(0, 0, 0, 0.32) 0 1px, transparent 1px 3px);
+}
+.cs-screen-tag {
+  position: absolute;
+  left: 0; right: 0; bottom: 3px;
+  text-align: center;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.6rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(86, 224, 200, 0.75);
+}
+
+/* map ink */
+.csm-grid { stroke: rgba(86, 224, 200, 0.13); stroke-width: 1; }
+.csm-case { fill: none; stroke: #06131B; stroke-width: 9; stroke-linejoin: round; stroke-linecap: round; }
+.csm-line { fill: none; stroke: var(--sun); stroke-width: 5; stroke-linejoin: round; stroke-linecap: round; }
+.csm-dash { fill: none; stroke: #FFF6E0; stroke-width: 1.3; stroke-dasharray: 3 7; stroke-linecap: round; }
+.csm-river { fill: none; stroke: rgba(64, 190, 214, 0.5); stroke-width: 13; stroke-linecap: round; }
+.csm-gorge { fill: none; stroke: rgba(226, 246, 255, 0.42); stroke-width: 11; stroke-linecap: round; }
+.csm-kick { stroke: #56E0C8; stroke-width: 1.8; stroke-linecap: round; }
+.csm-haz { fill: #E8791D; stroke: #2B1200; stroke-width: 1; }
+.csm-start { fill: #56E0C8; stroke: #06131B; stroke-width: 2; }
+.csm-tx {
+  fill: rgba(255, 246, 224, 0.8);
+  font-family: var(--font-display);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-anchor: middle;
+}
+
+/* ---- the info readout beside the screen ---- */
+
+.cs-info { display: grid; gap: 0.35rem; align-content: start; }
+.cs-name {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.1;
+  color: #fff;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.55);
+}
+.cs-meta { margin: 0; display: flex; flex-wrap: wrap; gap: 0.45rem; align-items: center; }
+.cs-len {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.78rem;
+  color: #56E0C8;
+  letter-spacing: 0.06em;
+}
+.cs-unique { margin: 0; font-size: 0.79rem; line-height: 1.32; color: rgba(244, 239, 228, 0.92); }
+
+.cs-feats { list-style: none; margin: 0.1rem 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.cs-feats li {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  padding: 0.1rem 0.5rem;
+  border-radius: 4px;
+  color: #0B1524;
+  background: #56E0C8;
+}
+
+.cs-stats { display: grid; grid-template-columns: repeat(2, max-content); gap: 0.1rem 1.1rem; margin-top: 0.1rem; }
+.cs-stat { display: flex; gap: 0.35rem; align-items: baseline; }
+.cs-stat b {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(244, 239, 228, 0.7);
+  min-width: 3.1rem;
+}
+.cs-stat i { font-style: normal; color: var(--sun); letter-spacing: 0.06em; font-size: 0.82rem; }
+
+.cs-best {
+  margin: 0.1rem 0 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sun-soft);
+}
+.cs-best em { font-style: normal; color: rgba(244, 239, 228, 0.6); }
+
+.cs-hint {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.66rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(244, 239, 228, 0.45);
+}
+
+/* ---- the course buttons along the cabinet's bottom edge ---- */
+
 .track-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 0.6rem;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.35rem;
 }
 
 .track-card {
   font: inherit;
-  text-align: left;
-  background: rgba(255, 255, 255, 0.08);
-  border: 2.5px solid rgba(255, 255, 255, 0.22);
-  border-radius: 14px;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.06);
+  border: 2px solid rgba(86, 224, 200, 0.3);
+  border-radius: 7px;
   color: #F4EFE4;
-  padding: 0.75rem 0.85rem;
+  padding: 0.28rem 0.15rem;
   cursor: pointer;
-  transition: transform 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+  transition: transform 0.1s ease, background 0.12s ease, border-color 0.12s ease;
   display: grid;
-  gap: 0.3rem;
+  gap: 0.1rem;
 }
-.track-card:hover { transform: translateY(-2px); background: rgba(255, 255, 255, 0.14); }
-.track-card.is-selected { border-color: var(--sun); background: rgba(247, 183, 51, 0.18); }
+.track-card:hover { background: rgba(86, 224, 200, 0.16); transform: translateY(-2px); }
+.track-card.is-selected {
+  border-color: var(--sun);
+  background: var(--sun);
+  color: #2B1200;
+  box-shadow: 0 3px 0 #7A3A00;
+}
 
-.track-card__name { font-family: var(--font-display); font-weight: 600; font-size: 1.02rem; color: #fff; }
-.track-card__meta { font-size: 0.8rem; color: rgba(244, 239, 228, 0.85); display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; }
-.track-card__best { font-size: 0.8rem; color: var(--sun-soft); font-weight: 800; }
+.track-card__name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.7rem;
+  line-height: 1.15;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.track-card__best {
+  font-family: var(--font-display);
+  font-size: 0.64rem;
+  font-weight: 700;
+  opacity: 0.8;
+}
+
+@media (max-width: 640px) {
+  .cs-body { grid-template-columns: 1fr; }
+  .cs-screen { height: 190px; }
+  .track-cards { grid-template-columns: repeat(3, 1fr); }
+}
 
 .track-pill {
   display: inline-block;

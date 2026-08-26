@@ -114,6 +114,7 @@
           <h2>Zambia <em>Rush</em></h2>
           <p class="gr-tag">The official Zambia Bikes downhill game — free, forever.</p>
           <div class="gr-panel">
+            <div class="menu-side">
             <div class="rider-row">
               <label for="rider-name">Rider name</label>
               <input id="rider-name" maxlength="12" autocomplete="off" spellcheck="false" placeholder="Rider">
@@ -125,7 +126,6 @@
               </span>
             </div>
             <p class="gr-tag" id="menu-bike" style="margin:0"></p>
-            <div class="track-cards" id="track-cards" role="group" aria-label="Choose a track"></div>
             <div class="tod-row" id="tod-row" role="group" aria-label="Time of day">
               <span class="tod-label">Ride at</span>
               <button type="button" class="tod-chip" data-tod="auto">✨ Track mood</button>
@@ -140,6 +140,27 @@
               <button type="button" class="btn btn--ghost btn--small" id="btn-sound" aria-pressed="true">🔊 Sound on</button>
               <button type="button" class="btn btn--ghost btn--small" id="btn-detail">✨ Detail: full</button>
               <a class="btn btn--ghost btn--small" href="garage.html">🔧 Garage</a>
+            </div>
+            </div>
+            <div class="course-select">
+              <p class="cs-head"><span class="cs-blink" aria-hidden="true">▶</span> Select your course <span class="cs-blink" aria-hidden="true">◀</span></p>
+              <div class="cs-body">
+                <div class="cs-screen">
+                  <svg class="cs-map" id="cs-map" viewBox="0 0 200 210" role="img" aria-labelledby="cs-map-title"><title id="cs-map-title">Course map</title></svg>
+                  <span class="cs-scan" aria-hidden="true"></span>
+                  <span class="cs-screen-tag" aria-hidden="true">Course map</span>
+                </div>
+                <div class="cs-info">
+                  <h3 class="cs-name" id="cs-name"></h3>
+                  <p class="cs-meta"><span class="track-pill" id="cs-level"></span><span class="cs-len" id="cs-len"></span></p>
+                  <p class="cs-unique" id="cs-unique"></p>
+                  <ul class="cs-feats" id="cs-feats"></ul>
+                  <div class="cs-stats" id="cs-stats"></div>
+                  <p class="cs-best" id="cs-best"></p>
+                </div>
+              </div>
+              <div class="track-cards" id="track-cards" role="group" aria-label="Choose a track"></div>
+              <p class="cs-hint" aria-hidden="true">◀ ▶ arrow keys to browse</p>
             </div>
             <div class="menu-row">
               <button type="button" class="btn btn--copper btn--big" id="btn-start">Start the ride 🚵</button>

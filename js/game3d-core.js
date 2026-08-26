@@ -50,6 +50,8 @@
       hazards: [{ type: "hippo", from: 260, every: 290, lat: 2.6, spread: 1.6, r: 1.5 }],
       seed: 20260912, length: 1250, slope: 0.105, wobble: 0.85, kickerEvery: 130,
       desc: "Flowing forest singletrack",
+      unique: "The one every club rider learns on. Fast, flowing singletrack under the msasa trees, with just enough kickers to get you comfortable in the air, and hippos grazing the trail edges to keep you honest.",
+      feats: ["Flowing singletrack", "Grazing hippos", "Gentle gradient"],
       theme: {
         sky: 0xBFE8F2, skyLow: 0xFFF6D9, fog: 0xD8EFDC, fogNear: 60, fogFar: 420,
         sun: 0xFFF7DC, sunPos: [140, 220, -160], ambient: 0x9CC5A8,
@@ -64,6 +66,8 @@
       hazards: [{ type: "elephant", from: 300, every: 340, lat: 3.0, spread: 1.6, r: 1.8 }],
       seed: 20261010, length: 1500, slope: 0.13, wobble: 1.0, kickerEvery: 110,
       desc: "Sunset savanna, big kickers",
+      unique: "Golden hour on the ridge, with the biggest kickers in the game and thousand-year-old baobabs to thread between. Elephants graze the open savanna. This is where you learn to jump properly.",
+      feats: ["Biggest air", "Ancient baobabs", "Elephants"],
       theme: {
         sky: 0xFFC969, skyLow: 0xF7B733, fog: 0xE09B55, fogNear: 80, fogFar: 480,
         sun: 0xFFE9B0, sunPos: [-200, 70, -280], ambient: 0xD9B08C,
@@ -79,6 +83,8 @@
       seed: 20261121, length: 1400, slope: 0.05, wobble: 0.85, kickerEvery: 140,
       hazards: [{ type: "antelope", from: 240, every: 330, lat: 2.2, spread: 1.5, r: 1.0 }],
       desc: "Dusk in the swamp forest — ten million bats overhead",
+      unique: "Every November ten million straw-coloured fruit bats pour into one patch of Kasanka swamp forest, the largest mammal migration on Earth. You ride under it at dusk, through ground mist, with rivers of bats crossing the sky.",
+      feats: ["10 million bats", "Ground mist", "Dusk light"],
       theme: {
         sky: 0x4A3E68, skyLow: 0xF2A05C, fog: 0x9A8A96, fogNear: 45, fogFar: 300,
         sun: 0xFFB877, sunPos: [-170, 38, -250], ambient: 0xA89AB0,
@@ -93,6 +99,8 @@
       seed: 20261107, length: 1600, slope: 0.062, wobble: 0.8, kickerEvery: 150,
       river: { offset: 24, width: 70, depth: 2.2 },
       desc: "Riverside flow — mind the crocs",
+      unique: "A flowing riverside line beside the real Zambezi, with sandy beaches, reed beds and hippo pods out in the water. Crocodiles bask right on the trail edge, and the river is very much not a shortcut.",
+      feats: ["The real Zambezi", "Basking crocs", "Hippo pods"],
       theme: {
         sky: 0xC2E4EE, skyLow: 0xF5E6B8, fog: 0xD8E4C4, fogNear: 70, fogFar: 450,
         sun: 0xFFF2CC, sunPos: [-150, 130, -260], ambient: 0xB0C49A,
@@ -110,6 +118,8 @@
       gorge: { fromFrac: 0.84, offset: 32, width: 95, depth: 60 },
       hazards: [{ type: "croc", from: 220, every: 300, lat: 2.0, spread: 1.7, r: 1.05 }],
       desc: "Steep canyon to the thundering Victoria Falls",
+      unique: "The hero line. The steepest, longest descent in the game, finishing along the Knife-Edge rim with Victoria Falls thundering across the gorge beside you. Beat Armand here and you have beaten the mountain.",
+      feats: ["Victoria Falls", "The gorge", "Steepest drop"],
       theme: {
         sky: 0xC6ECEF, skyLow: 0xEAF9F4, fog: 0xCDE9E2, fogNear: 45, fogFar: 380,
         sun: 0xF6FFF0, sunPos: [180, 260, -60], ambient: 0x8FB8A8,
@@ -150,15 +160,16 @@
     return t * t * (3 - 2 * t);
   }
 
-  function buildWorld(def) {
-    var rng = mulberry32(def.seed);
-
-    /* ---- trail path: wandering descent, z strictly increasing ---- */
+  /* The trail spline is generated from the track definition alone, so the
+     menu's course map can draw the real line without building a heightfield.
+     `rng` supplies only the three phase offsets (its first three draws), which
+     keeps buildWorld's random stream identical to a bare mulberry32(seed). */
+  function buildTrailPath(def, rng) {
     var n = Math.floor(def.length / TRAIL_DS);
     var pts = new Array(n);
     var phi1 = rng() * 6.28, phi2 = rng() * 6.28, phi3 = rng() * 6.28;
-    var x = 0, z = 0;
-    for (var i = 0; i < n; i++) {
+    var x = 0, z = 0, i;
+    for (i = 0; i < n; i++) {
       var t = i * TRAIL_DS;
       var theta = def.wobble * (0.62 * Math.sin(t * 0.011 + phi1) +
         0.34 * Math.sin(t * 0.027 + phi2) + 0.18 * Math.sin(t * 0.052 + phi3));
@@ -169,7 +180,6 @@
       if (x < -(X_HALF - 60)) x = -(X_HALF - 60);
       pts[i] = { x: x, z: z, y: 0, yaw: theta, dist: t };
     }
-    var zEnd = pts[n - 1].z;
 
     /* trail heights from terrain, then smoothed hard so it's rideable */
     for (i = 0; i < n; i++) pts[i].y = baseHeight(def, pts[i].x, pts[i].z);
@@ -183,6 +193,34 @@
       if (pts[i].y > pts[i - 1].y + TRAIL_DS * 0.14) pts[i].y = pts[i - 1].y + TRAIL_DS * 0.14;
       if (pts[i].y < pts[i - 1].y - TRAIL_DS * 0.55) pts[i].y = pts[i - 1].y - TRAIL_DS * 0.55;
     }
+    return { pts: pts, n: n };
+  }
+
+  /* compact summary for the menu's course map — no grid, cheap to call */
+  function trailPreview(def) {
+    var path = buildTrailPath(def, mulberry32(def.seed));
+    var pts = path.pts, n = path.n;
+    var minX = Infinity, maxX = -Infinity, i;
+    for (i = 0; i < n; i++) {
+      if (pts[i].x < minX) minX = pts[i].x;
+      if (pts[i].x > maxX) maxX = pts[i].x;
+    }
+    return {
+      pts: pts, n: n,
+      minX: minX, maxX: maxX,
+      zEnd: pts[n - 1].z,
+      drop: Math.round(pts[0].y - pts[n - 1].y),
+      kickers: Math.max(1, Math.round(def.length / def.kickerEvery))
+    };
+  }
+
+  function buildWorld(def) {
+    var rng = mulberry32(def.seed);
+
+    /* ---- trail path: wandering descent, z strictly increasing ---- */
+    var path = buildTrailPath(def, rng);
+    var pts = path.pts, n = path.n, i;
+    var zEnd = pts[n - 1].z;
 
     /* kickers: shaped bumps that launch you; on falls, extra step-downs */
     var kickers = [];
@@ -909,7 +947,8 @@
     buildWorld: buildWorld, heightAt: heightAt, normalAt: normalAt, trailDistAt: trailDistAt,
     newRider3: newRider3, stepRider3: stepRider3, simulateAI3: simulateAI3, AI3_STYLES: AI3_STYLES,
     ghostPosAt3: ghostPosAt3, packGhost3: packGhost3, unpackGhost3: unpackGhost3,
-    sanitizeName: sanitizeName, DT: DT, CARVE_R: CARVE_R, GHOST_HZ: GHOST_HZ, X_HALF: X_HALF
+    sanitizeName: sanitizeName, DT: DT, CARVE_R: CARVE_R, GHOST_HZ: GHOST_HZ, X_HALF: X_HALF,
+    trailPreview: trailPreview
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = CORE;
