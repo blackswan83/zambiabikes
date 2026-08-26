@@ -134,13 +134,22 @@ npm start
 
 **Deploying on Railway:**
 
-1. Create a new Railway service from this repo — it detects `package.json`
-   and runs `npm start` automatically.
-2. Add the **Postgres plugin** to the project and attach it to the service,
-   so `DATABASE_URL` is injected. Tables are created on boot.
-3. Set `ADMIN_TOKEN` to a long random string (e.g. `openssl rand -hex 32`).
+1. **New Project → Deploy from GitHub repo**, pick this repo, and choose the
+   branch you want live (Railway watches that one branch and redeploys on
+   every push to it).
+2. `railway.json` in the repo root does the rest: Nixpacks build, `npm start`,
+   and a healthcheck against `/api/health` so a broken deploy is rolled back
+   instead of served.
+3. Add the **Postgres database** to the project (`+ New → Database → Postgres`)
+   and attach it to the service, so `DATABASE_URL` is injected. Tables are
+   created on boot.
+4. Set `ADMIN_TOKEN` to a long random string (e.g. `openssl rand -hex 32`).
    This guards the Grown-Up Crew's request list and ghost moderation.
-4. That's it — Railway sets `PORT` automatically.
+5. Under **Settings → Networking**, click *Generate Domain* to get a public
+   URL. Railway sets `PORT` for you — never hard-code it.
+
+Without a Postgres database attached the site still comes up, but it runs in
+in-memory mode: join requests and ghost codes vanish on every redeploy.
 
 **Environment variables:**
 

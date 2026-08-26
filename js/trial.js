@@ -235,13 +235,3 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     return t;
   }
 
-  /* ------------------------------------------------------------------------
-     Work in progress: scene building, the rider, the camera rig, the HUD and
-     the game loop land in the next commit. Nothing loads this file yet —
-     trial.html does not exist — so it is inert until then.
-     ------------------------------------------------------------------------ */
-
-  buildComposer();
-  resize();
-  groundTextures();
-})();
