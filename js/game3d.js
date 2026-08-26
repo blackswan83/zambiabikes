@@ -124,13 +124,19 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     gate: function () { tone(740, 0.09, "triangle"); },
     bell: function () { tone(1610, 0.35, "triangle"); tone(2130, 0.5, "triangle", 0.09); },
     splash: function () { tone(320, 0.28, "sine", 0, 70); tone(900, 0.18, "triangle", 0.03, 200); },
+    turboOn: function () { tone(300, 0.22, "sawtooth", 0, 900); tone(680, 0.2, "square", 0.05, 1180); },
+    turboOff: function () { tone(520, 0.22, "sawtooth", 0, 190); },
+    turboTap: function () { tone(1180, 0.04, "square"); },
     count: function (hi) { tone(hi ? 880 : 440, 0.14, "square"); },
     finish: function () { [523, 659, 784, 1047].forEach(function (f, i) { tone(f, 0.16, "triangle", i * 0.12); }); }
   };
 
   /* ---------- input ---------- */
 
-  var input = { pedal: false, brake: false, left: false, right: false, hop: false };
+  var input = { pedal: false, brake: false, left: false, right: false, hop: false, turbo: false };
+  /* every physical K press queues one tap; the physics loop consumes them one
+     per step so a fast tapper never loses a press between frames */
+  var turboTaps = 0;
   var KEYMAP = {
     ArrowUp: "pedal", KeyW: "pedal",
     ArrowDown: "brake", KeyS: "brake",
@@ -140,7 +146,8 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   };
 
   function clearInput() {
-    input.pedal = input.brake = input.left = input.right = input.hop = false;
+    input.pedal = input.brake = input.left = input.right = input.hop = input.turbo = false;
+    turboTaps = 0;
     document.querySelectorAll(".tc-btn.is-down").forEach(function (b) { b.classList.remove("is-down"); });
   }
 
@@ -156,6 +163,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       e.preventDefault();
       return;
     }
+    if (e.code === "KeyK" && (mode === "race" || mode === "count")) { turboTaps++; e.preventDefault(); return; }
     if (e.code === "KeyB" && mode === "race" && run && run.hasBell) { SFX.bell(); return; }
     if (e.code === "KeyP" || e.code === "Escape") {
       if (mode === "race" || mode === "count") { pauseGame(); e.preventDefault(); }
@@ -196,6 +204,29 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   bindTouch("tc-pedal", "pedal");
   bindTouch("tc-brake", "brake");
   bindTouch("tc-hop", "hop");
+  (function () {
+    var tb = $("tc-turbo");
+    if (!tb) return;
+    tb.addEventListener("pointerdown", function (e) {
+      e.preventDefault();
+      if (mode === "race" || mode === "count") turboTaps++;
+      tb.classList.add("is-down");
+    });
+    ["pointerup", "pointercancel", "pointerleave"].forEach(function (ev) {
+      tb.addEventListener(ev, function () { tb.classList.remove("is-down"); });
+    });
+    tb.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+  })();
+
+  /* the on-screen pause/exit button — the only way out mid-race on a phone */
+  (function () {
+    var xb = $("btn-exit");
+    if (!xb) return;
+    xb.addEventListener("click", function () {
+      if (mode === "race" || mode === "count") pauseGame();
+      else if (mode === "pause") resumeGame();
+    });
+  })();
 
   var isTouch = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
   var reducedMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -212,7 +243,9 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     btnSound: $("btn-sound"), btnDetail: $("btn-detail"),
     lbTabs: $("lb-tabs"), lbList: $("lb-list"),
     ghostList: $("ghost-list"), ghostInput: $("ghost-input"), ghostMsg: $("ghost-import-msg"),
-    fsBtn: $("btn-fs"), hint: $("controls-hint"), hintKeys: $("hint-keys"), hintTouch: $("hint-touch")
+    fsBtn: $("btn-fs"), hint: $("controls-hint"), hintKeys: $("hint-keys"), hintTouch: $("hint-touch"),
+    exitBtn: $("btn-exit"), turbo: $("turbo"), turboState: $("turbo-state"),
+    turboFill: $("turbo-fill"), turboGain: $("turbo-gain"), turboHint: $("turbo-hint")
   };
 
   function toast(txt) {
@@ -2036,6 +2069,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     el.hud.hidden = false;
     el.countdown.hidden = false;
     el.touch.hidden = !isTouch;
+    if (el.exitBtn) el.exitBtn.hidden = false;
     el.hintKeys.hidden = isTouch;
     el.hintTouch.hidden = !isTouch;
     el.hint.hidden = false;
@@ -2051,6 +2085,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     stopRumble();
     el.pause.hidden = false;
     el.touch.hidden = true;
+    if (el.exitBtn) el.exitBtn.hidden = true;
   }
 
   function resumeGame() {
@@ -2058,6 +2093,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     mode = run.pausedFrom || "race";
     el.pause.hidden = true;
     el.touch.hidden = !isTouch;
+    if (el.exitBtn) el.exitBtn.hidden = false;
   }
 
   function quitToMenu() {
@@ -2067,6 +2103,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     stopRumble();
     el.pause.hidden = true; el.results.hidden = true; el.hud.hidden = true;
     el.countdown.hidden = true; el.touch.hidden = true; el.hint.hidden = true;
+    if (el.exitBtn) el.exitBtn.hidden = true;
     el.menu.hidden = false;
     refreshMenu();
   }
@@ -2157,6 +2194,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     el.results.hidden = false;
     el.hud.hidden = true;
     el.touch.hidden = true;
+    if (el.exitBtn) el.exitBtn.hidden = true;
     stopRumble();
     SFX.finish();
     refreshLeaderboard();
@@ -2210,6 +2248,8 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
         SFX.splash();
         if (!reducedMotion) shakeT = 0.4;
       }
+      else if (e.t === "turboOn") { toast("TURBO! ⚡ Tap K as fast as you can!"); SFX.turboOn(); }
+      else if (e.t === "turboOff") SFX.turboOff();
       else if (e.t === "respawn") toast("Back on track! 🚵");
       else if (e.t === "gate") SFX.gate();
       else if (e.t === "reset") toast("Whoops — back to the trail!");
@@ -2439,6 +2479,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   /* ---------- HUD ---------- */
 
   function updateHUD(st, world) {
+    updateTurboHUD(st);
     var ms = Math.round((st.finished ? st.finishT : st.t) * 1000);
     el.time.textContent = fmtTime(ms);
     el.score.textContent = "🪙 " + st.score;
@@ -2446,6 +2487,32 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     el.speed.textContent = Math.round(sp * 3.6) + " km/h";
     var prog = Math.max(0, Math.min(1, st.trailIdx / world.finishIdx));
     el.progress.style.width = (prog * 100).toFixed(1) + "%";
+  }
+
+  /* the throttle readout: how the turbo works, and how hard you are working */
+  function updateTurboHUD(st) {
+    if (!el.turbo) return;
+    var pct = Math.round((st.throttle || 0) * 100);
+    if (st.turboT > 0) {
+      el.turbo.dataset.state = "on";
+      el.turboState.textContent = st.turboT.toFixed(1) + "s left";
+      el.turboHint.innerHTML = "tap <kbd>K</kbd> faster!";
+      el.turboGain.textContent = pct + "%";
+      el.turboFill.style.width = pct + "%";
+    } else if (st.turboCd > 0) {
+      el.turbo.dataset.state = "cool";
+      el.turboState.textContent = "recharging";
+      el.turboHint.textContent = Math.ceil(st.turboCd) + "s";
+      el.turboGain.textContent = "";
+      el.turboFill.style.width =
+        (100 - (st.turboCd / CORE.TURBO_COOLDOWN) * 100).toFixed(0) + "%";
+    } else {
+      el.turbo.dataset.state = "ready";
+      el.turboState.innerHTML = "Press <kbd>K</kbd>";
+      el.turboHint.innerHTML = "tap <kbd>K</kbd> fast for a speed boost";
+      el.turboGain.textContent = "";
+      el.turboFill.style.width = "100%";
+    }
   }
 
   /* ---------- menu ---------- */
@@ -2940,6 +3007,8 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       var steps = 0;
       while (acc >= DT && steps < 5) {
         ev.length = 0;
+        input.turbo = turboTaps > 0;
+        if (input.turbo) turboTaps--;
         CORE.stepRider3(run.st, input, world, ev, run.taken);
         handleEvents(ev, run.st);
         if (run.step % 6 === 0) {

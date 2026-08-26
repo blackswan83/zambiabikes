@@ -74,6 +74,85 @@
 }
 .controls-hint.is-fading { opacity: 0; }
 
+/* ---------- turbo: press K once, then tap K as fast as you can ---------- */
+
+.exit-btn { right: 3.6rem; font-size: 0.95rem; }
+.game-stage:fullscreen .exit-btn { top: 3.6rem; }
+
+.turbo {
+  position: absolute;
+  left: 0.9rem;
+  bottom: 2.6rem;
+  width: min(230px, 34%);
+  padding: 0.4rem 0.55rem 0.45rem;
+  border-radius: 10px;
+  border: 2px solid rgba(255, 246, 224, 0.3);
+  background: rgba(10, 22, 16, 0.55);
+  color: #FFF6E0;
+  font-family: var(--font-display);
+  pointer-events: none;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+.turbo-top, .turbo-foot { display: flex; justify-content: space-between; align-items: baseline; gap: 0.4rem; }
+.turbo-name {
+  font-weight: 700;
+  font-size: 0.74rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--sun);
+}
+.turbo-state { font-weight: 700; font-size: 0.72rem; }
+.turbo-foot { margin-top: 0.15rem; font-size: 0.66rem; opacity: 0.85; }
+#turbo-gain { font-weight: 800; color: var(--sun); }
+.turbo kbd {
+  font: inherit;
+  font-size: 0.9em;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 0 0.28rem;
+}
+
+/* the throttle: how hard the rider is working right now */
+.turbo-bar {
+  height: 9px;
+  margin-top: 0.25rem;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+.turbo-bar i {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #56E0C8, var(--sun) 55%, var(--flame));
+  transition: width 0.08s linear;
+}
+
+.turbo[data-state="ready"] { border-color: var(--sun); }
+.turbo[data-state="ready"] .turbo-bar i { background: var(--sun); opacity: 0.5; }
+.turbo[data-state="on"] {
+  border-color: var(--flame);
+  background: rgba(60, 20, 6, 0.62);
+  animation: turboPulse 0.5s ease-in-out infinite alternate;
+}
+@keyframes turboPulse { to { box-shadow: 0 0 14px rgba(232, 121, 29, 0.75); } }
+.turbo[data-state="cool"] { opacity: 0.72; }
+.turbo[data-state="cool"] .turbo-bar i { background: rgba(255, 246, 224, 0.4); transition: width 0.3s linear; }
+
+.tc-btn--turbo {
+  background: rgba(232, 121, 29, 0.85);
+  font-weight: 800;
+  font-size: 1.1rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .turbo[data-state="on"] { animation: none; }
+}
+
 /* time-of-day picker in the menu */
 .tod-row {
   display: flex;

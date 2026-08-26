@@ -588,9 +588,19 @@
       t: 0, finished: false, finishT: 0,
       score: 0, coinCount: 0, bigAirs: 0,
       coinPtr: 0, wheelSpin: 0, lean: 0, power: 1, noCrash: false,
+      turboT: 0, turboCd: 0, throttle: 0, turboTaps: 0, turboUses: 0,
       offTrail: false
     };
   }
+
+  /* --- turbo: hit the key once to open the window, then tap like mad --- */
+  var TURBO_WINDOW = 10;      /* seconds the window stays open */
+  var TURBO_COOLDOWN = 18;    /* seconds before another one is available */
+  var TURBO_TAP = 0.10;       /* throttle gained per tap (4/s -> half, 8/s -> full) */
+  var TURBO_DECAY = 0.8;      /* throttle bled off per second */
+  var TURBO_PEDAL = 0.8;      /* extra pedal force at full throttle */
+  var TURBO_VCAP = 0.34;      /* extra top speed at full throttle */
+  var TURBO_THRUST = 9;       /* m/s2 of push at full throttle, cap-limited */
 
   var DEFAULT_STATS = { pedal: 1, vcap: 1, brake: 1, steer: 1, roll: 1, rough: 1, landSoft: 0, hop: 1 };
 
@@ -599,6 +609,39 @@
     var S = st.stats || DEFAULT_STATS;
 
     st.hopCd -= DT;
+
+    /* --- turbo window: one press opens it, every tap after that feeds the
+       throttle, and the throttle bleeds away if the tapping slows down --- */
+    if (st.turboCd > 0) {
+      st.turboCd -= DT;
+      if (st.turboCd < 0) st.turboCd = 0;
+    }
+    if (inp.turbo) {
+      if (st.turboT <= 0 && st.turboCd <= 0 && st.crashT <= 0) {
+        st.turboT = TURBO_WINDOW;
+        st.throttle = 0;
+        st.turboTaps = 0;
+        st.turboUses++;
+        ev.push({ t: "turboOn" });
+      } else if (st.turboT > 0) {
+        st.throttle += TURBO_TAP;
+        if (st.throttle > 1) st.throttle = 1;
+        st.turboTaps++;
+      }
+    }
+    if (st.turboT > 0) {
+      st.turboT -= DT;
+      /* decay proportional to the current throttle, so a steady tapping
+         rate settles at a steady level: taps/sec * TURBO_TAP / TURBO_DECAY */
+      st.throttle -= TURBO_DECAY * st.throttle * DT;
+      if (st.throttle < 0.004) st.throttle = 0;
+      if (st.turboT <= 0) {
+        st.turboT = 0;
+        st.throttle = 0;
+        st.turboCd = TURBO_COOLDOWN;
+        ev.push({ t: "turboOff" });
+      }
+    }
 
     /* --- crash state: tumble briefly, then respawn at the last gate --- */
     if (st.crashT > 0) {
@@ -639,7 +682,14 @@
 
       /* forces along the trail direction */
       speed += (-GRAV * f.y) * DT;                       /* slope: f.y<0 going down */
-      if (inp.pedal && speed < VCAP * S.vcap) speed += PEDAL_A * S.pedal * (speed < 6 ? 1.55 : 1) * st.power * DT;
+      /* turbo raises the ceiling and pushes on its own, which is what makes
+         it felt on a descent where pedalling alone is already capped out */
+      var boost = st.turboT > 0 ? st.throttle : 0;
+      var vlim = VCAP * S.vcap * (1 + boost * TURBO_VCAP);
+      if (inp.pedal && speed < vlim) {
+        speed += PEDAL_A * S.pedal * (speed < 6 ? 1.55 : 1) * st.power * (1 + boost * TURBO_PEDAL) * DT;
+      }
+      if (boost > 0 && speed < vlim) speed += TURBO_THRUST * boost * DT;
       if (inp.brake) { speed -= BRAKE_A * S.brake * DT; if (speed < 0) speed = 0; }
       var offT = st.trailD > CARVE_R;
       st.offTrail = offT;
@@ -948,7 +998,7 @@
     newRider3: newRider3, stepRider3: stepRider3, simulateAI3: simulateAI3, AI3_STYLES: AI3_STYLES,
     ghostPosAt3: ghostPosAt3, packGhost3: packGhost3, unpackGhost3: unpackGhost3,
     sanitizeName: sanitizeName, DT: DT, CARVE_R: CARVE_R, GHOST_HZ: GHOST_HZ, X_HALF: X_HALF,
-    trailPreview: trailPreview
+    trailPreview: trailPreview, TURBO_WINDOW: TURBO_WINDOW, TURBO_COOLDOWN: TURBO_COOLDOWN
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = CORE;

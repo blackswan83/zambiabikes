@@ -70,6 +70,7 @@
         <canvas id="game-canvas" width="960" height="540" aria-label="Zambia Rush — downhill biking game. Use the keyboard or on-screen buttons to play."></canvas>
         <div class="stage-vignette" aria-hidden="true"></div>
         <button type="button" class="fs-btn" id="btn-fs" aria-label="Full screen" title="Full screen (F)" hidden>⛶</button>
+        <button type="button" class="fs-btn exit-btn" id="btn-exit" aria-label="Pause and exit the race" title="Pause / exit (Esc)" hidden>❚❚</button>
 
         <div class="controls-hint" id="controls-hint" hidden aria-hidden="true">
           <div class="ch-row" id="hint-keys">
@@ -77,12 +78,14 @@
             <span class="ch-item"><kbd>A</kbd><kbd>D</kbd> steer</span>
             <span class="ch-item"><kbd>S</kbd> brake</span>
             <span class="ch-item"><kbd>Space</kbd> jump</span>
+            <span class="ch-item"><kbd>K</kbd> turbo</span>
             <span class="ch-item"><kbd>Esc</kbd> pause</span>
           </div>
           <div class="ch-row" id="hint-touch" hidden>
             <span class="ch-item">hold ▲ to pedal</span>
             <span class="ch-item">◀ ▶ steer</span>
             <span class="ch-item">⤒ jump</span>
+            <span class="ch-item">K turbo</span>
           </div>
         </div>
 
@@ -93,6 +96,14 @@
             <span class="hud-chip" id="hud-speed">0 km/h</span>
           </div>
           <div class="trick-toast" id="trick-toast"></div>
+          <div class="turbo" id="turbo" data-state="ready">
+            <div class="turbo-top">
+              <span class="turbo-name">Turbo</span>
+              <span class="turbo-state" id="turbo-state">Press <kbd>K</kbd></span>
+            </div>
+            <div class="turbo-bar"><i id="turbo-fill"></i></div>
+            <div class="turbo-foot"><span id="turbo-hint">tap <kbd>K</kbd> fast for a speed boost</span><span id="turbo-gain"></span></div>
+          </div>
           <div class="hud-progress"><div class="hud-progress__fill" id="hud-progress-fill"></div><span class="hud-progress__flag" aria-hidden="true">🏁</span></div>
         </div>
 
@@ -107,6 +118,7 @@
             <button type="button" class="tc-btn tc-btn--brake" id="tc-brake" aria-label="Brake">▼</button>
             <button type="button" class="tc-btn tc-btn--hop" id="tc-hop" aria-label="Jump">⤒</button>
             <button type="button" class="tc-btn tc-btn--pedal" id="tc-pedal" aria-label="Pedal">▲</button>
+            <button type="button" class="tc-btn tc-btn--turbo" id="tc-turbo" aria-label="Turbo — tap fast">K</button>
           </div>
         </div>
 
@@ -175,8 +187,11 @@
             <li><span class="key">▼ / S</span> — brake</li>
             <li><span class="key">◀ ▶ / A D</span> — steer down the mountain</li>
             <li><span class="key">Space</span> — bunny-hop (jump!)</li>
+            <li><span class="key">K</span> — <strong>TURBO!</strong> Press once to open a 10-second
+            window, then tap <span class="key">K</span> as fast as you can. The faster you tap, the
+            higher the throttle climbs and the faster you go. Then it needs 18 seconds to recharge.</li>
             <li><span class="key">B</span> — ring your bell (if you fitted one in the Garage)</li>
-            <li><span class="key">P</span> or <span class="key">Esc</span> — pause</li>
+            <li><span class="key">P</span> or <span class="key">Esc</span> — pause, restart or quit back to the menu (or tap ❚❚ on the screen)</li>
           </ul>
           <p style="max-width:46ch">Follow the dirt trail — it's the fast line — or cut your own
           across the mountain. Hit the kickers for big air, collect copper coins, and don't hug the
