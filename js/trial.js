@@ -639,7 +639,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     scene.add(root);
     scenery = {
       root: root, sun: sun, sky: sky, terrain: terrain, theme: theme,
-      night: night, banners: deco.banners, fogCol: fogCol
+      night: night, fogCol: fogCol
     };
     return scenery;
   }
@@ -657,7 +657,6 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     });
 
     var postGeos = [], tapeGeos = [], flagGeos = [];
-    var banners = [];
 
     function place(idx, kind) {
       var p = world.trail[Math.min(world.trailN - 1, Math.max(0, idx))];
@@ -701,7 +700,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     if (tapeGeos.length) group.add(new THREE.Mesh(mergeGeometries(tapeGeos), tapeMat));
     if (flagGeos.length) group.add(new THREE.Mesh(mergeGeometries(flagGeos), flagMat));
 
-    return { group: group, banners: banners };
+    return { group: group };
   }
 
   /* ==========================================================================
@@ -993,8 +992,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       node: cfg.node || null,
       paused: false, over: false, countdown: 2.2,
       camPos: new THREE.Vector3(), camLook: new THREE.Vector3(),
-      shake: 0, fov: 64, events: [],
-      popups: [], lastGate: 0
+      shake: 0, fov: 64, events: []
     };
     /* park the camera behind the start line before the countdown runs out */
     var p0 = world.trail[2];
@@ -1163,11 +1161,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
 
       if (scenery && scenery.sun) {
         scenery.sun.target.position.set(run.st.x, run.st.y, run.st.z);
-        scenery.sun.position.set(
-          run.st.x + scenery.sun.userData.ox || run.st.x + 90,
-          run.st.y + 150,
-          run.st.z - 90
-        );
+        scenery.sun.position.set(run.st.x + 90, run.st.y + 150, run.st.z - 90);
       }
       if (run.st.finished) endRun("finish");
       else if (run.st.dead && run.st.crashT <= 0) endRun("broken");

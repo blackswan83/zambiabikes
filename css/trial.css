@@ -172,6 +172,20 @@
 .screen .kicker { color: var(--sun); }
 .stack { display: flex; flex-direction: column; gap: 0.55rem; margin-top: 1.1rem; align-items: stretch; }
 
+/* the ghost button is built for warm paper; on these dark screens it needs
+   the light side of the palette or it disappears into the background */
+.screen .btn--ghost {
+  color: #FFF6E0;
+  border-color: rgba(255, 246, 224, 0.45);
+  background: transparent;
+}
+.screen .btn--ghost:hover,
+.screen .btn--ghost:focus-visible {
+  color: #0C2E1C;
+  background: #FFF6E0;
+  border-color: #FFF6E0;
+}
+
 /* ---------- the career map ---------- */
 
 .screen--map .screen-inner {
