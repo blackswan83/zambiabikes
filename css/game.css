@@ -140,6 +140,10 @@
   animation: turboPulse 0.5s ease-in-out infinite alternate;
 }
 @keyframes turboPulse { to { box-shadow: 0 0 14px rgba(232, 121, 29, 0.75); } }
+/* with on-screen controls the bottom corners belong to thumbs, so the
+   throttle readout moves up under the HUD chips */
+.has-touch-ui .turbo { bottom: auto; top: 3.2rem; left: 0.9rem; width: min(240px, 40%); }
+
 .turbo[data-state="cool"] { opacity: 0.72; }
 .turbo[data-state="cool"] .turbo-bar i { background: rgba(255, 246, 224, 0.4); transition: width 0.3s linear; }
 
@@ -663,7 +667,9 @@
 }
 .countdown[hidden] { display: none; }
 
-/* ---------- touch controls ---------- */
+/* ---------- touch controls: phone, and a roomier tablet layout ----------
+   Thumbs sit in the bottom corners in landscape, so steering lives on the
+   left and the action pad on the right, both clear of the home indicator. */
 
 .touch-controls {
   position: absolute;
@@ -671,27 +677,52 @@
   bottom: 0;
   display: flex;
   justify-content: space-between;
-  padding: 0 0.9rem 3rem;
+  align-items: flex-end;
+  padding: 0 clamp(0.9rem, 2.6vw, 2.2rem)
+           calc(clamp(1.2rem, 3vw, 2.2rem) + env(safe-area-inset-bottom, 0px));
   pointer-events: none;
   z-index: 6;
 }
 .touch-controls[hidden] { display: none; }
 
-.tc-cluster { display: flex; gap: 0.7rem; pointer-events: auto; }
+.tc-cluster { display: flex; gap: clamp(0.6rem, 1.6vw, 1.1rem); pointer-events: auto; }
+
+/* the right-hand action pad: hop and turbo on top, brake and pedal beneath */
+.tc-cluster--pad {
+  display: grid;
+  grid-template-columns: repeat(2, auto);
+  gap: clamp(0.5rem, 1.4vw, 0.9rem);
+}
 
 .tc-btn {
-  width: clamp(52px, 12vw, 68px);
-  height: clamp(52px, 12vw, 68px);
+  width: var(--tc-size, clamp(56px, 11vw, 74px));
+  height: var(--tc-size, clamp(56px, 11vw, 74px));
   border-radius: 50%;
   border: 3px solid rgba(255, 255, 255, 0.65);
   background: rgba(12, 46, 28, 0.55);
   color: #FFF3C4;
-  font-size: 1.5rem;
+  font-size: clamp(1.35rem, 2.6vw, 1.9rem);
   font-weight: 800;
   touch-action: none;
   -webkit-tap-highlight-color: transparent;
+  transition: transform 0.06s ease;
 }
-.tc-btn:active, .tc-btn.is-down { background: rgba(232, 121, 29, 0.8); }
+
+/* tablets (iPad and up): bigger targets, more breathing room */
+@media (min-width: 740px) {
+  .touch-controls { --tc-size: clamp(80px, 9.5vw, 104px); }
+  .tc-btn { border-width: 4px; }
+}
+
+/* short landscape screens: keep the pad clear of the progress bar */
+@media (max-height: 460px) {
+  .touch-controls {
+    --tc-size: clamp(48px, 13vh, 66px);
+    padding-bottom: calc(0.7rem + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+.tc-btn:active, .tc-btn.is-down { background: rgba(232, 121, 29, 0.85); transform: scale(0.93); }
 .tc-btn--pedal { background: rgba(31, 122, 72, 0.7); }
 .tc-btn--brake { background: rgba(214, 69, 51, 0.55); }
 .tc-btn--hop { background: rgba(247, 183, 51, 0.55); }

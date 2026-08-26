@@ -127,6 +127,11 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     turboOn: function () { tone(300, 0.22, "sawtooth", 0, 900); tone(680, 0.2, "square", 0.05, 1180); },
     turboOff: function () { tone(520, 0.22, "sawtooth", 0, 190); },
     turboTap: function () { tone(1180, 0.04, "square"); },
+    trick: function (combo) {
+      tone(620, 0.12, "triangle", 0, 1180);
+      tone(980, 0.14, "square", 0.07, 1560);
+      if (combo) tone(1320, 0.18, "triangle", 0.15, 1980);
+    },
     count: function (hi) { tone(hi ? 880 : 440, 0.14, "square"); },
     finish: function () { [523, 659, 784, 1047].forEach(function (f, i) { tone(f, 0.16, "triangle", i * 0.12); }); }
   };
@@ -228,8 +233,25 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     });
   })();
 
-  var isTouch = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+  var isTouch = (window.matchMedia && window.matchMedia("(pointer: coarse)").matches) ||
+    (navigator.maxTouchPoints || 0) > 1;
+  /* some tablets report a fine pointer when a keyboard case is attached, so
+     the first real finger anywhere turns the on-screen controls on for good */
+  window.addEventListener("touchstart", function () {
+    if (isTouch) return;
+    isTouch = true;
+    if (stageEl) stageEl.classList.add("has-touch-ui");
+    if (mode === "race" || mode === "count") {
+      el.touch.hidden = false;
+      el.hintKeys.hidden = true;
+      el.hintTouch.hidden = false;
+    }
+  }, { passive: true, once: true });
   var reducedMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (isTouch) {
+    var st0 = document.getElementById("game-stage");
+    if (st0) st0.classList.add("has-touch-ui");
+  }
 
   /* ---------- DOM refs ---------- */
 
@@ -301,15 +323,23 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     camera.updateProjectionMatrix();
     initComposer();
   }
+  /* Safari (iPad) still ships the webkit-prefixed API */
+  function fsElement() { return document.fullscreenElement || document.webkitFullscreenElement || null; }
+  function fsRequest(elm) {
+    var fn = elm.requestFullscreen || elm.webkitRequestFullscreen;
+    if (fn) fn.call(elm);
+  }
+  function fsExit() {
+    var fn = document.exitFullscreen || document.webkitExitFullscreen;
+    if (fn) fn.call(document);
+  }
+  function fsSupported(elm) { return !!(elm.requestFullscreen || elm.webkitRequestFullscreen); }
   function toggleFullscreen() {
-    if (document.fullscreenElement) {
-      if (document.exitFullscreen) document.exitFullscreen();
-    } else if (stageEl.requestFullscreen) {
-      stageEl.requestFullscreen();
-    }
+    if (fsElement()) fsExit();
+    else fsRequest(stageEl);
   }
   function syncRenderSize() {
-    if (document.fullscreenElement === stageEl) {
+    if (fsElement() === stageEl) {
       /* cap the buffer so weak GPUs keep their frame rate on huge screens */
       var s = Math.min(1, 1920 / window.innerWidth);
       setRenderSize(Math.round(window.innerWidth * s), Math.round(window.innerHeight * s));
@@ -317,16 +347,21 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       setRenderSize(960, 540);
     }
   }
-  if (el.fsBtn && stageEl && stageEl.requestFullscreen && document.fullscreenEnabled !== false) {
+  if (el.fsBtn && stageEl && fsSupported(stageEl)) {
     el.fsBtn.hidden = false;
     el.fsBtn.addEventListener("click", toggleFullscreen);
-    document.addEventListener("fullscreenchange", function () {
-      syncRenderSize();
-      el.fsBtn.textContent = document.fullscreenElement ? "🗗" : "⛶";
-      el.fsBtn.title = document.fullscreenElement ? "Exit full screen (F)" : "Full screen (F)";
+    ["fullscreenchange", "webkitfullscreenchange"].forEach(function (evt) {
+      document.addEventListener(evt, function () {
+        syncRenderSize();
+        el.fsBtn.textContent = fsElement() ? "🗗" : "⛶";
+        el.fsBtn.title = fsElement() ? "Exit full screen (F)" : "Full screen (F)";
+      });
     });
     window.addEventListener("resize", function () {
-      if (document.fullscreenElement === stageEl) syncRenderSize();
+      if (fsElement() === stageEl) syncRenderSize();
+    });
+    window.addEventListener("orientationchange", function () {
+      setTimeout(function () { if (fsElement() === stageEl) syncRenderSize(); }, 250);
     });
   }
 
@@ -1486,24 +1521,43 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
         g.quadraticCurveTo(46, 4, 32, 20);
         g.fill();
       });
-      var streamN = lightMode ? 1 : 3;
+      /* Each bat flies for itself: its own airspeed, its own wing-beat bob
+         and a slow wander, and when one leaves the far end it is recycled
+         alone — so the river keeps streaming instead of the whole cloud
+         snapping back. Altitude tracks the valley floor, which drops with
+         z, so nobody ever flies into a hill. */
+      var batZ0 = -160, batZ1 = zSpan + 260;
+      var streamN = lightMode ? 2 : 3;
       for (var si = 0; si < streamN; si++) {
-        var bn = lightMode ? 320 : 720;
-        var bp = new Float32Array(bn * 3);
+        var bn = lightMode ? 260 : 620;
+        var bats = new Array(bn);
+        var arr = new Float32Array(bn * 3);
         for (var bi2 = 0; bi2 < bn; bi2++) {
-          var bz2 = Math.random() * (zSpan + 400) - 150;
-          var bx2 = Math.sin(bz2 * 0.004 + si * 2.1) * 70 + (Math.random() - 0.5) * (70 + si * 34);
-          var by2 = -bz2 * world.def.slope + 46 + si * 18 + Math.random() * 30;
-          bp[bi2 * 3] = bx2; bp[bi2 * 3 + 1] = by2; bp[bi2 * 3 + 2] = bz2;
+          bats[bi2] = {
+            x: (Math.random() - 0.5) * (150 + si * 60),
+            z: batZ0 + Math.random() * (batZ1 - batZ0),
+            alt: 40 + si * 17 + Math.random() * 26,
+            spd: 7 + Math.random() * 5,          /* airspeed, m/s */
+            drift: (Math.random() - 0.5) * 1.6,  /* lateral wander */
+            amp: 0.5 + Math.random() * 0.7,      /* wing-beat bob */
+            fr: 5.5 + Math.random() * 3.5,       /* beats per second-ish */
+            ph: Math.random() * 6.283
+          };
         }
         var bGeo = new THREE.BufferGeometry();
-        bGeo.setAttribute("position", new THREE.BufferAttribute(bp, 3));
+        bGeo.setAttribute("position", new THREE.BufferAttribute(arr, 3));
+        bGeo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 60, zSpan / 2), zSpan);
         var bPts = new THREE.Points(bGeo, new THREE.PointsMaterial({
-          map: batTex, size: 3.4 + si * 0.9, transparent: true, depthWrite: false,
+          map: batTex, size: 2.0 + si * 0.7, transparent: true, depthWrite: false,
           color: 0xFFFFFF, alphaTest: 0.25
         }));
+        bPts.frustumCulled = false;
         scene.add(bPts);
-        batStreams.push(bPts);
+        batStreams.push({
+          pts: bPts, geo: bGeo, arr: arr, bats: bats,
+          z0: batZ0, z1: batZ1, slope: world.def.slope,
+          xSway: 0.5 + si * 0.35
+        });
       }
     }
     if (T.groundMist) {
@@ -2202,8 +2256,19 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
 
   /* ---------- event fx ---------- */
 
+  /* what to call what just happened in the air */
+  function trickName(e) {
+    var spinWord = { 1: "360", 2: "720", 3: "1080" }[e.spins] || (e.spins * 360 + "");
+    var flipWord = e.back ? "BACKFLIP" : "FRONTFLIP";
+    if (e.flips > 1) flipWord = e.flips + "x " + flipWord;
+    if (e.flips && e.spins) return spinWord + " " + flipWord + " COMBO! 🔥";
+    if (e.flips) return flipWord + "! 🚵";
+    return spinWord + " SPIN! 🌀";
+  }
+
   var CRASH_MSG = {
     landing: "OUCH! 💥 Bend those knees on big drops!",
+    trick: "SKETCHY! 🌀 Land it level next time!",
     croc: "CROC! 🐊 Give those teeth some space!",
     hippo: "HIPPO! 🦛 Two tonnes of do-not-touch!",
     elephant: "ELEPHANT! 🐘 Give the big fella room!",
@@ -2247,6 +2312,10 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
         toast("THE GORGE! 🌊 Respect the Smoke that Thunders!");
         SFX.splash();
         if (!reducedMotion) shakeT = 0.4;
+      }
+      else if (e.t === "trick") {
+        toast(trickName(e) + " +" + e.pts);
+        SFX.trick(e.combo);
       }
       else if (e.t === "turboOn") { toast("TURBO! ⚡ Tap K as fast as you can!"); SFX.turboOn(); }
       else if (e.t === "turboOff") SFX.turboOff();
@@ -2306,7 +2375,9 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
 
   function animatePlayer(st, dt) {
     var speed = Math.sqrt(st.vx * st.vx + st.vz * st.vz);
-    placeRig(playerRig, st.x, st.y, st.z, st.yaw, st.lean);
+    placeRig(playerRig, st.x, st.y, st.z, st.yaw + (st.spin || 0), st.lean);
+    /* flips rotate the whole rider round the bars */
+    playerRig.group.rotateX(st.pitch || 0);
     /* pitch to slope when grounded */
     if (st.onGround) {
       var ahead = CORE.heightAt(run.b.wc.world, st.x + Math.sin(st.yaw) * 1.2, st.z + Math.cos(st.yaw) * 1.2);
@@ -2402,11 +2473,26 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     for (var i = 0; i < sc.clouds.length; i++) {
       sc.clouds[i].position.x += Math.sin(i * 1.7) * 0.7 * dt;
     }
-    /* bat rivers drift down the valley */
+    /* bat rivers: every bat flies its own line down the valley */
     for (i = 0; i < sc.batStreams.length; i++) {
       var bs = sc.batStreams[i];
-      bs.position.z = ((t * (9 + i * 3)) % 420) - 210;
-      bs.position.x = Math.sin(t * 0.08 + i * 1.7) * 9;
+      var list = bs.bats, arr = bs.arr, span = bs.z1 - bs.z0;
+      for (var bq = 0; bq < list.length; bq++) {
+        var bt = list[bq];
+        bt.z += bt.spd * dt;
+        bt.x += (bt.drift + Math.sin(t * 0.35 + bt.ph) * bs.xSway) * dt;
+        if (bt.z > bs.z1) {                       /* recycle this one alone */
+          bt.z -= span;
+          bt.x = (Math.random() - 0.5) * 180;
+          bt.alt = 40 + Math.random() * 45;
+        }
+        if (bt.x > 150) bt.x -= 300;
+        else if (bt.x < -150) bt.x += 300;
+        arr[bq * 3] = bt.x;
+        arr[bq * 3 + 1] = -bt.z * bs.slope + bt.alt + Math.sin(t * bt.fr + bt.ph) * bt.amp;
+        arr[bq * 3 + 2] = bt.z;
+      }
+      bs.geo.attributes.position.needsUpdate = true;
     }
     /* birds wheel in slow circles, wings flapping */
     for (i = 0; i < sc.birds.length; i++) {
@@ -3009,6 +3095,12 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
         ev.length = 0;
         input.turbo = turboTaps > 0;
         if (input.turbo) turboTaps--;
+        /* in the air the same keys mean tricks: pedal/brake flip, steer spins */
+        var aloft = !run.st.onGround;
+        input.flipF = aloft && input.pedal;
+        input.flipB = aloft && input.brake;
+        input.spinL = aloft && input.left;
+        input.spinR = aloft && input.right;
         CORE.stepRider3(run.st, input, world, ev, run.taken);
         handleEvents(ev, run.st);
         if (run.step % 6 === 0) {

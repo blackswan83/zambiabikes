@@ -310,6 +310,51 @@
       }
     },
 
+    turbo: {
+      label: "Turbo",
+      options: {
+        t_mubanga: {
+          name: "Mubanga Ember", spec: "Level 1 · 10 s window · 18 s recharge",
+          desc: "A hardwood coal that will not quite go out. The club's starter boost: a short window and a lazy build, but it teaches your legs the rhythm.",
+          kg: 0.15, stats: { turboTap: 0.8, turboWindow: 1, turboCool: 1, turboPow: 0.8 }
+        },
+        t_nsimbi: {
+          name: "Nsimbi Pulse", spec: "Level 2 · 10 s · 17 s recharge",
+          desc: "Nsimbi is iron. A steadier beat that answers a little sooner and holds a little harder than the ember.",
+          kg: 0.18, stats: { turboTap: 0.9, turboWindow: 1, turboCool: 0.95, turboPow: 0.9 }
+        },
+        t_chishimba: {
+          name: "Chishimba Roar", spec: "Level 3 · 11 s · 16 s recharge",
+          desc: "Named for the falls on the Luombe. Every tap lands like water on rock — the standard club tune.",
+          kg: 0.2, stats: { turboTap: 1, turboWindow: 1.1, turboCool: 0.9, turboPow: 1 }
+        },
+        t_kalambo: {
+          name: "Kalambo Surge", spec: "Level 4 · 12 s · 15 s recharge",
+          desc: "Kalambo drops further in one go than any fall in Zambia. The window widens and the surge keeps coming.",
+          kg: 0.24, stats: { turboTap: 1.1, turboWindow: 1.2, turboCool: 0.85, turboPow: 1.1 },
+          unlock: { type: "finish", track: "kasanka", label: "Finish Kasanka Bat Storm" }
+        },
+        t_luangwa: {
+          name: "Luangwa Thunder", spec: "Level 5 · 12 s · 14 s recharge",
+          desc: "The valley's dry-season storm: it arrives before you hear it. Taps bite noticeably harder now.",
+          kg: 0.28, stats: { turboTap: 1.25, turboWindow: 1.2, turboCool: 0.8, turboPow: 1.2 },
+          unlock: { type: "medal", track: "any", medal: "silver", label: "Beat Arthur's ghost anywhere" }
+        },
+        t_nyami: {
+          name: "Nyami Nyami Rush", spec: "Level 6 · 13 s · 13 s recharge",
+          desc: "The river god of the Zambezi, said to still be swimming for the wife the dam took from him. Riders who run this swear the bike pulls itself downstream.",
+          kg: 0.3, stats: { turboTap: 1.4, turboWindow: 1.3, turboCool: 0.72, turboPow: 1.32 },
+          unlock: { type: "finish", track: "falls", label: "Finish Mosi Falls Drop" }
+        },
+        t_mosi: {
+          name: "Mosi-oa-Tunya Storm", spec: "Level 7 · 14 s · 12 s recharge",
+          desc: "The Smoke that Thunders. The fastest thing the Garage will build, and it answers a fast pair of hands like nothing else on the mountain.",
+          kg: 0.34, stats: { turboTap: 1.6, turboWindow: 1.4, turboCool: 0.66, turboPow: 1.5 },
+          unlock: { type: "medal", track: "falls", medal: "gold", label: "Gold on Mosi Falls Drop" }
+        }
+      }
+    },
+
     decal: {
       label: "Decals",
       options: {
@@ -378,6 +423,7 @@
     frame: "zambezi_fs", fork: "kafue_120", wheels: "w275", tires: "miombo_grip",
     drivetrain: "trail_1x11", brakes: "two_pot", seatpost: "rigid_post",
     bar: "bar_trail", ring: "ring_32", pedals: "pedal_comp", decal: "d_none",
+    turbo: "t_chishimba",
     extras: ["bottle"], paint: "p_forest"
   };
 
@@ -482,7 +528,8 @@
   }
 
   function computeStats(cfg) {
-    var S = { pedal: 1, vcap: 1, brake: 1, steer: 1, roll: 1, rough: 1, landSoft: 0, hop: 1 };
+    var S = { pedal: 1, vcap: 1, brake: 1, steer: 1, roll: 1, rough: 1, landSoft: 0, hop: 1,
+      turboTap: 1, turboWindow: 1, turboCool: 1, turboPow: 1 };
     var kg = BASE_KG;
     function apply(def) {
       if (!def) return;
@@ -504,6 +551,7 @@
     apply(getOption("ring", cfg.ring));
     apply(getOption("pedals", cfg.pedals));
     apply(getOption("decal", cfg.decal));
+    apply(getOption("turbo", cfg.turbo));
     (cfg.extras || []).forEach(function (id) { apply(getOption("extras", id)); });
 
     /* --- the tune bench: setup is real mechanics, not decoration --- */

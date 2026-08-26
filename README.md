@@ -47,8 +47,12 @@ two layers:
   respawn at the last gate), a tap-to-boost **turbo** (one press opens a
   10-second window; the throttle then tracks how fast you tap, settling at
   taps-per-second x 0.10 / 0.8, so ~4 taps/s is half throttle and ~8 is
-  full, with an 18-second recharge), trail-following AI riders, and Ghost
-  Code packing. Runs headless under node for tests (`module.exports`).
+  full, with an 18-second recharge scaled by the fitted turbo level),
+  **air tricks** (flips and spins wind up their own rotations while
+  airborne, level out when you let go, and bank points only on a level
+  landing — they never touch velocity or heading, so ghost times are
+  unaffected), trail-following AI riders, and Ghost Code packing. Runs
+  headless under node for tests (`module.exports`).
 - **`js/game3d.js`** — the Three.js renderer + UI. Full detail runs a
   physically-based pipeline: the three.js `Sky` shader (real Rayleigh/Mie
   atmospheric scattering with animated procedural clouds, tuned per track —

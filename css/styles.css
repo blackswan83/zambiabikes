@@ -221,13 +221,21 @@ a:hover { color: var(--copper-deep); }
 }
 .btn--ghost:hover { background: var(--forest-100); }
 
+/* every dark surface needs the light outline variant, or the button reads
+   as dark-green-on-dark-green and effectively disappears */
 .section--forest .btn--ghost,
-.site-footer .btn--ghost {
-  color: #fff;
-  box-shadow: inset 0 0 0 2.5px rgba(255, 255, 255, 0.75);
+.site-footer .btn--ghost,
+.overlay .btn--ghost,
+.callout--safety .btn--ghost,
+.ghost-box .btn--ghost {
+  color: #FFF6E0;
+  box-shadow: inset 0 0 0 2.5px rgba(255, 246, 224, 0.8);
 }
 .section--forest .btn--ghost:hover,
-.site-footer .btn--ghost:hover { background: rgba(255, 255, 255, 0.12); }
+.site-footer .btn--ghost:hover,
+.overlay .btn--ghost:hover,
+.callout--safety .btn--ghost:hover,
+.ghost-box .btn--ghost:hover { background: rgba(255, 255, 255, 0.18); }
 
 .btn--big { font-size: 1.18rem; padding: 0.95rem 2rem; }
 .btn--small { font-size: 0.92rem; padding: 0.5rem 1.05rem; }

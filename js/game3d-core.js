@@ -589,6 +589,7 @@
       score: 0, coinCount: 0, bigAirs: 0,
       coinPtr: 0, wheelSpin: 0, lean: 0, power: 1, noCrash: false,
       turboT: 0, turboCd: 0, throttle: 0, turboTaps: 0, turboUses: 0,
+      pitch: 0, pitchV: 0, spin: 0, spinV: 0, tricks: 0, trickPts: 0,
       offTrail: false
     };
   }
@@ -602,7 +603,19 @@
   var TURBO_VCAP = 0.34;      /* extra top speed at full throttle */
   var TURBO_THRUST = 9;       /* m/s2 of push at full throttle, cap-limited */
 
-  var DEFAULT_STATS = { pedal: 1, vcap: 1, brake: 1, steer: 1, roll: 1, rough: 1, landSoft: 0, hop: 1 };
+  /* --- air tricks: flips round the bars, spins round the sky --- */
+  var FLIP_ACC = 12;          /* how hard a flip winds up, rad/s2 */
+  var FLIP_MAX = 11;          /* fastest flip rate, rad/s */
+  var SPIN_ACC = 11;          /* how hard a spin winds up, rad/s2 */
+  var SPIN_MAX = 9;           /* fastest spin rate, rad/s */
+  var TAU = Math.PI * 2;
+  var TRICK_FLIP_PTS = 150;   /* per completed flip */
+  var TRICK_SPIN_PTS = 120;   /* per completed 360 spin */
+  var TRICK_SLOP = 2.0;       /* land beyond this off level and you go down */
+  var TRICK_ROUGH = 0.9;       /* beyond this it is merely an ugly landing */
+
+  var DEFAULT_STATS = { pedal: 1, vcap: 1, brake: 1, steer: 1, roll: 1, rough: 1, landSoft: 0, hop: 1,
+    turboTap: 1, turboWindow: 1, turboCool: 1, turboPow: 1 };
 
   function stepRider3(st, inp, world, ev, taken) {
     var speed, i, f;
@@ -618,13 +631,13 @@
     }
     if (inp.turbo) {
       if (st.turboT <= 0 && st.turboCd <= 0 && st.crashT <= 0) {
-        st.turboT = TURBO_WINDOW;
+        st.turboT = TURBO_WINDOW * (S.turboWindow || 1);
         st.throttle = 0;
         st.turboTaps = 0;
         st.turboUses++;
         ev.push({ t: "turboOn" });
       } else if (st.turboT > 0) {
-        st.throttle += TURBO_TAP;
+        st.throttle += TURBO_TAP * (S.turboTap || 1);
         if (st.throttle > 1) st.throttle = 1;
         st.turboTaps++;
       }
@@ -638,7 +651,7 @@
       if (st.turboT <= 0) {
         st.turboT = 0;
         st.throttle = 0;
-        st.turboCd = TURBO_COOLDOWN;
+        st.turboCd = TURBO_COOLDOWN * (S.turboCool || 1);
         ev.push({ t: "turboOff" });
       }
     }
@@ -684,7 +697,7 @@
       speed += (-GRAV * f.y) * DT;                       /* slope: f.y<0 going down */
       /* turbo raises the ceiling and pushes on its own, which is what makes
          it felt on a descent where pedalling alone is already capped out */
-      var boost = st.turboT > 0 ? st.throttle : 0;
+      var boost = st.turboT > 0 ? st.throttle * (S.turboPow || 1) : 0;
       var vlim = VCAP * S.vcap * (1 + boost * TURBO_VCAP);
       if (inp.pedal && speed < vlim) {
         speed += PEDAL_A * S.pedal * (speed < 6 ? 1.55 : 1) * st.power * (1 + boost * TURBO_PEDAL) * DT;
@@ -719,6 +732,7 @@
         st.y = yBallistic;                                /* just hopped */
       } else if (hNew < yBallistic - 0.32) {
         st.onGround = false; st.airT = 0;                 /* crest launch */
+        st.pitch = 0; st.pitchV = 0; st.spin = 0; st.spinV = 0;
         st.y = yBallistic;
         ev.push({ t: "takeoff" });
       } else {
@@ -730,6 +744,29 @@
       st.airT += DT;
       st.vy -= GRAV * DT;
       st.yaw += steer * 1.0 * DT;
+      /* Tricks are pure showmanship: flips and spins wind up their own
+         rotations and never touch velocity or heading, so where you land is
+         unchanged — and the AI, which never sets these inputs, is untouched. */
+      if (inp.flipF) st.pitchV += FLIP_ACC * DT;
+      if (inp.flipB) st.pitchV -= FLIP_ACC * DT;
+      if (st.pitchV > FLIP_MAX) st.pitchV = FLIP_MAX;
+      if (st.pitchV < -FLIP_MAX) st.pitchV = -FLIP_MAX;
+      st.pitch += st.pitchV * DT;
+      if (inp.spinR) st.spinV += SPIN_ACC * DT;
+      if (inp.spinL) st.spinV -= SPIN_ACC * DT;
+      if (st.spinV > SPIN_MAX) st.spinV = SPIN_MAX;
+      if (st.spinV < -SPIN_MAX) st.spinV = -SPIN_MAX;
+      st.spin += st.spinV * DT;
+      /* let go and the rider tucks back to level — that release is the skill:
+         hold long enough to come round, let go in time to land it */
+      if (!inp.flipF && !inp.flipB) {
+        st.pitchV *= Math.max(0, 1 - 4 * DT);
+        st.pitch += (Math.round(st.pitch / TAU) * TAU - st.pitch) * Math.min(1, 3.2 * DT);
+      }
+      if (!inp.spinL && !inp.spinR) {
+        st.spinV *= Math.max(0, 1 - 4 * DT);
+        st.spin += (Math.round(st.spin / TAU) * TAU - st.spin) * Math.min(1, 3.2 * DT);
+      }
       st.lean += ((-steer * 0.35) - st.lean) * Math.min(1, 5 * DT);
       st.x += st.vx * DT; st.y += st.vy * DT; st.z += st.vz * DT;
       var hg = heightAt(world, st.x, st.z);
@@ -738,22 +775,43 @@
         var nl = normalAt(world, st.x, st.z);
         var impact = -(st.vx * nl.x + st.vy * nl.y + st.vz * nl.z);
         var wasBig = st.airT > 0.9;
-        if (impact > CRASH_IMPACT * (1 + S.landSoft) && !st.noCrash) {
+        /* how far from level the bike is, after taking off whole rotations */
+        var resid = st.pitch - Math.round(st.pitch / TAU) * TAU;
+        var spun = Math.abs(st.pitch) > 0.6;
+        var sketchy = spun && Math.abs(resid) > TRICK_SLOP;
+        var untidy = spun && Math.abs(resid) > TRICK_ROUGH;
+        if ((impact > CRASH_IMPACT * (1 + S.landSoft) || sketchy) && !st.noCrash) {
           st.crashT = 1.0;
           st.crashes++;
-          ev.push({ t: "crash", why: "landing" });
+          ev.push({ t: "crash", why: sketchy ? "trick" : "landing" });
+          st.pitch = 0; st.pitchV = 0; st.spin = 0; st.spinV = 0;
         } else {
           /* keep the tangent component of velocity */
           var vn = st.vx * nl.x + st.vy * nl.y + st.vz * nl.z;
           st.vx -= nl.x * vn; st.vy -= nl.y * vn; st.vz -= nl.z * vn;
-          if (impact > 8.5 * (1 + 0.5 * S.landSoft)) {
-            var keep = 0.75 + 0.2 * S.landSoft;
+          if (impact > 8.5 * (1 + 0.5 * S.landSoft) || untidy) {
+            var keep = untidy ? 0.6 : 0.75 + 0.2 * S.landSoft;
             st.vx *= keep; st.vy *= keep; st.vz *= keep;
             ev.push({ t: "land", q: "hard" });
           } else {
             ev.push({ t: "land", q: "clean" });
           }
           if (wasBig) { st.bigAirs++; st.score += 75; ev.push({ t: "bigair" }); }
+          /* landed it: bank whatever was completed in the air */
+          var flips = untidy ? 0 : Math.floor(Math.abs(st.pitch) / TAU + 0.02);
+          var spins = Math.floor(Math.abs(st.spin) / TAU + 0.02);
+          if (flips || spins) {
+            var pts = flips * TRICK_FLIP_PTS + spins * TRICK_SPIN_PTS;
+            if (flips && spins) pts = Math.round(pts * 1.5);   /* combo */
+            st.score += pts;
+            st.tricks += flips + spins;
+            st.trickPts += pts;
+            ev.push({
+              t: "trick", flips: flips, spins: spins, pts: pts,
+              back: st.pitch < 0, combo: !!(flips && spins)
+            });
+          }
+          st.pitch = 0; st.pitchV = 0; st.spin = 0; st.spinV = 0;
         }
         st.onGround = true;
       }
