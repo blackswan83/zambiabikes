@@ -35,13 +35,15 @@
     grass: { label: "Grass", wear: 0.75, note: "Soft and forgiving" }
   };
 
+  /* grip feeds the bike's steering and braking, rainK how hard it is coming
+     down, bolts whether there is lightning about */
   var WEATHER = {
-    dry: { label: "Dry", icon: "☀️", grip: 1, wear: 1 },
-    dust: { label: "Dusty", icon: "🌪️", grip: 0.97, wear: 1.15 },
-    hot: { label: "Hot haze", icon: "🔥", grip: 1, wear: 1.08 },
-    rain: { label: "Rain", icon: "🌧️", grip: 0.92, wear: 1.25 },
-    mist: { label: "Mist", icon: "🌫️", grip: 0.96, wear: 1.05 },
-    dusk: { label: "Falling light", icon: "🌆", grip: 0.98, wear: 1 }
+    dry: { label: "Dry", icon: "☀️", grip: 1, wear: 1, rainK: 0, bolts: 0 },
+    dust: { label: "Dusty", icon: "🌪️", grip: 0.97, wear: 1.15, rainK: 0, bolts: 0 },
+    hot: { label: "Hot haze", icon: "🔥", grip: 1, wear: 1.08, rainK: 0, bolts: 0 },
+    rain: { label: "Rain", icon: "🌧️", grip: 0.92, wear: 1.25, rainK: 1, bolts: 1 },
+    mist: { label: "Mist", icon: "🌫️", grip: 0.96, wear: 1.05, rainK: 0.35, bolts: 0 },
+    dusk: { label: "Falling light", icon: "🌆", grip: 0.98, wear: 1, rainK: 0, bolts: 0 }
   };
 
   /* the spares a rider can carry — one of each, six slots in the bag */
@@ -112,7 +114,7 @@
       gorge: { fromFrac: 0.82, offset: 32, width: 95, depth: 60 },
       hazards: [{ type: "antelope", from: 300, every: 380, lat: 2.4, spread: 1.4, r: 1.0 }],
       pool: [["miombo", 4, 2.0], ["palm", 2, 1.4], ["rock", 3, 1.4], ["fern", 3, 0], ["grass", 3, 0], ["bush", 1, 0]],
-      fauna: ["antelope", "elephant"],
+      fauna: ["antelope", "elephant", "rhino"],
       theme: theme({ fog: 0xCDE9E2, water: 0xBFE8E2, canopy: 0x2A6E48 })
     },
     {
@@ -212,14 +214,15 @@
     {
       id: "gt9", n: 9, name: "Luangwa Valley Run",
       from: "Bangweulu", to: "South Luangwa", surface: "sand", weather: "hot",
-      blurb: "Down the escarpment into the valley, where the sand is deep in the riverbeds and the elephants have absolute right of way. The wildest leg of the tour, and the one riders talk about afterwards.",
+      blurb: "Down the escarpment into the valley, where the sand is deep in the riverbeds and the elephants have absolute right of way. Black rhino were brought back to North Luangwa after Zambia lost every last one, and this is the only leg of the tour where you might meet one. The wildest day on the road.",
       seed: 30110909, length: 1800, slope: 0.115, wobble: 1.1, kickerEvery: 110,
       hazards: [
         { type: "elephant", from: 240, every: 300, lat: 3.0, spread: 1.6, r: 1.8 },
-        { type: "croc", from: 420, every: 460, lat: 2.0, spread: 1.5, r: 1.05 }
+        { type: "croc", from: 420, every: 460, lat: 2.0, spread: 1.5, r: 1.05 },
+        { type: "rhino", from: 620, every: 520, lat: 2.9, spread: 1.4, r: 1.7 }
       ],
       pool: [["baobab", 2, 2.4], ["miombo", 3, 2.0], ["bush", 3, 0], ["grass", 3, 0], ["rock", 2, 1.2]],
-      fauna: ["elephant", "giraffe", "zebra", "antelope"],
+      fauna: ["elephant", "giraffe", "zebra", "antelope", "rhino"],
       theme: theme({ sky: 0xF0D8A8, skyLow: 0xFFD088, fog: 0xE0B888, fogFar: 470,
         sun: 0xFFE9B0, sunPos: [-200, 90, -270], ambient: 0xD9B08C,
         turbidity: 7, cloudCover: 0.15, sunI: 1.5, hemiGround: 0x7A5A30,
@@ -288,11 +291,14 @@
       total: base + coinPay + bonus + tidy };
   }
 
-  /* a generous par time: a rider who keeps moving will beat it */
+  /* A generous par time: a rider who keeps moving will beat it. Weather is in
+     here because grip really does slow a leg down now — without this, the wet
+     stages would quietly lose their under-par bonus the day rain landed. */
   function targetMs(stage) {
     var pace = 10.5 - stage.slope * 12;          /* m/s a steady rider holds */
     var rough = SURFACES[stage.surface].wear;
-    return Math.round((stage.length / pace) * (0.94 + rough * 0.1) * 1000);
+    var grip = WEATHER[stage.weather].grip;
+    return Math.round((stage.length / pace) * (0.94 + rough * 0.1) * (1 + (1 - grip) * 1.1) * 1000);
   }
 
   /* How much a leg takes out of the bike. Tuned so the condition bar visibly

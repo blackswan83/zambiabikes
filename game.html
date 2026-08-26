@@ -87,6 +87,10 @@
             <span class="ch-item">⤒ jump</span>
             <span class="ch-item">K turbo</span>
           </div>
+          <div class="ch-row ch-row--2p" id="hint-keys-2p" hidden>
+            <span class="ch-item"><b>P1</b> WASD · space jump · Q turbo</span>
+            <span class="ch-item"><b>P2</b> arrows · / jump · enter turbo</span>
+          </div>
         </div>
 
         <div class="hud" id="hud" hidden>
@@ -128,9 +132,11 @@
             <span class="hud2-flag" id="p2-flag" hidden></span>
           </div>
           <span class="hud2-seam" aria-hidden="true"></span>
+          <div class="trick-toast trick-toast--p2" id="trick-toast-2"></div>
         </div>
 
         <div class="countdown" id="countdown" hidden>3</div>
+        <div class="countdown countdown--p2" id="countdown-2" hidden>3</div>
 
         <div class="touch-controls" id="touch-controls" hidden>
           <div class="tc-cluster">
@@ -175,8 +181,8 @@
               </span>
             </div>
             <p class="two-up-keys" id="two-up-keys" hidden>
-              <b>Player 1</b> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> · hop <kbd>shift</kbd> · turbo <kbd>Q</kbd>
-              &nbsp;&nbsp;<b>Player 2</b> <kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd> · hop <kbd>⇧ right</kbd> · turbo <kbd>enter</kbd>
+              <b>Player 1</b> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> · jump <kbd>space</kbd> · turbo <kbd>Q</kbd>
+              &nbsp;&nbsp;<b>Player 2</b> <kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd> · jump <kbd>/</kbd> · turbo <kbd>enter</kbd>
             </p>
             <p class="gr-tag" id="menu-bike" style="margin:0"></p>
             <div class="tod-row" id="tod-row" role="group" aria-label="Time of day">
@@ -186,6 +192,12 @@
               <button type="button" class="tod-chip" data-tod="day">☀️ Midday</button>
               <button type="button" class="tod-chip" data-tod="sunset">🌇 Sunset</button>
               <button type="button" class="tod-chip" data-tod="dusk">🌆 Dusk</button>
+            </div>
+            <div class="tod-row" id="wx-row" role="group" aria-label="Weather">
+              <span class="tod-label">Weather</span>
+              <button type="button" class="tod-chip" data-wx="clear">☀️ Clear</button>
+              <button type="button" class="tod-chip" data-wx="rain">🌧️ Rain</button>
+              <button type="button" class="tod-chip" data-wx="storm">⛈️ Storm</button>
             </div>
             <div class="menu-row">
               <label class="ghost-toggle"><input type="checkbox" id="ghost-toggle" checked> Race the ghosts 👻</label>

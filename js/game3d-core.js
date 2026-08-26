@@ -56,7 +56,7 @@
         sky: 0xBFE8F2, skyLow: 0xFFF6D9, fog: 0xD8EFDC, fogNear: 60, fogFar: 420,
         sun: 0xFFF7DC, sunPos: [140, 220, -160], ambient: 0x9CC5A8,
         turbidity: 4, rayleigh: 1.4, mieCoeff: 0.003, mieG: 0.78, cloudCover: 0.42, exposure: 0.52,
-        grass: 0x4E9B58, grassDry: 0x7FAE5A, dirt: 0x8A6238, dirtDark: 0x6B4826, rock: 0x8B8570,
+        grass: 0x4E9B58, grassDry: 0x7FAE5A, dirt: 0x75522E, dirtDark: 0x5A3C1E, rock: 0x8B8570,
         trunk: 0x5A4028, canopy: 0x2F7A44, canopy2: 0x57944B, accent: 0xE8791D,
         water: 0x6FBFB4
       }
@@ -71,7 +71,8 @@
       theme: {
         sky: 0xFFC969, skyLow: 0xF7B733, fog: 0xE09B55, fogNear: 80, fogFar: 480,
         sun: 0xFFE9B0, sunPos: [-200, 70, -280], ambient: 0xD9B08C,
-        sunI: 1.6, hemiI: 1.05, ambI: 0.45, hemiGround: 0x7A5A30, cloudTint: 0xFFD9C0,
+        sunI: 1.75, hemiI: 1.5, ambI: 0.8, hemiGround: 0x7A5A30, cloudTint: 0xFFD9C0,
+        hemiSky: 0xFFD9A8, ambient: 0xE0C0A0,
         turbidity: 7, rayleigh: 1.7, mieCoeff: 0.0035, mieG: 0.8, cloudCover: 0.22, exposure: 0.46,
         grass: 0xA8933E, grassDry: 0xC2A94E, dirt: 0x7E4A20, dirtDark: 0x5E3616, rock: 0x8A6A4C,
         trunk: 0x6E4A26, canopy: 0x6E5A2A, canopy2: 0x8A6F33, accent: 0xE8791D,
@@ -91,7 +92,10 @@
         turbidity: 6, rayleigh: 3.2, mieCoeff: 0.009, mieG: 0.85, cloudCover: 0.25, exposure: 0.56,
         grass: 0x2E6E44, grassDry: 0x6E8448, dirt: 0x6B4E36, dirtDark: 0x4E3826, rock: 0x686458,
         trunk: 0x4A3828, canopy: 0x1F5438, canopy2: 0x2E6E44, accent: 0xE8791D,
-        water: 0x2E5E56, bats: true, groundMist: true, cloudTint: 0xD9A8A0, ridgeDim: 0.45
+        water: 0x2E5E56, bats: true, groundMist: true, cloudTint: 0xD9A8A0, ridgeDim: 0.45,
+        /* the deep purple above is the SKY; the ground is lit separately, or
+           dusk in the swamp forest is not moody, it is simply black */
+        hemiSky: 0xC6BCE8, hemiI: 2.05, ambient: 0xCCC4D8, ambI: 1.1, sunI: 2.0
       }
     },
     zambezi: {
@@ -116,12 +120,15 @@
       /* the finale rides the Knife-Edge rim: a transverse chasm opens on +x
          and the mile-wide Victoria Falls curtain forms its far wall */
       gorge: { fromFrac: 0.84, offset: 32, width: 95, depth: 60 },
-      hazards: [{ type: "croc", from: 220, every: 300, lat: 2.0, spread: 1.7, r: 1.05 }],
+      /* Mosi-oa-Tunya National Park really does keep white rhino, and the
+         guides really do walk you up to them. Here you ride past. */
+      hazards: [{ type: "croc", from: 220, every: 300, lat: 2.0, spread: 1.7, r: 1.05 },
+                { type: "rhino", from: 420, every: 470, lat: 2.8, spread: 1.5, r: 1.7 }],
       desc: "Steep canyon to the thundering Victoria Falls",
       unique: "The hero line. The steepest, longest descent in the game, finishing along the Knife-Edge rim with Victoria Falls thundering across the gorge beside you. Beat Armand here and you have beaten the mountain.",
       feats: ["Victoria Falls", "The gorge", "Steepest drop"],
       theme: {
-        sky: 0xC6ECEF, skyLow: 0xEAF9F4, fog: 0xCDE9E2, fogNear: 45, fogFar: 380,
+        sky: 0xC6ECEF, skyLow: 0xEAF9F4, fog: 0xA6C4BE, fogNear: 110, fogFar: 620,
         sun: 0xF6FFF0, sunPos: [180, 260, -60], ambient: 0x8FB8A8,
         turbidity: 3, rayleigh: 1.0, mieCoeff: 0.003, mieG: 0.76, cloudCover: 0.5, exposure: 0.55,
         grass: 0x3F8A50, grassDry: 0x5E9B58, dirt: 0x74583A, dirtDark: 0x54402A, rock: 0x6E6A5E,
@@ -290,13 +297,16 @@
           var wx2 = -X_HALF + gx * GRID_STEP;
           var dEdge = wx2 - edge;
           var vi2 = gz * nx + gx;
-          if (dEdge <= -14) {
+          if (dEdge <= -30) {
             /* the floodplain never dips under the waterline — the only
                place to get wet is the river itself */
             if (H[vi2] < wY + 1.3) H[vi2] = wY + 1.3;
           } else if (dEdge < 12) {
-            /* beach: ease the bank down toward the water */
-            var k = smoothstepN(dEdge, -14, 12);
+            /* The beach starts thirty metres inland, not fourteen. At
+               fourteen the bank crest stood above the rider's eye-to-water
+               sight line, so the Zambezi — the whole point of the track —
+               was a lozenge on the horizon instead of a river beside you. */
+            var k = smoothstepN(dEdge, -30, 12);
             var hLand = H[vi2] < wY + 1.3 ? wY + 1.3 : H[vi2];
             H[vi2] = hLand * (1 - k) + (wY - 1.2) * k;
           } else if (dEdge < def.river.width) {
@@ -436,9 +446,11 @@
 
     /* ---- Lower Zambezi hazards & riverside life ---- */
     if (def.river) {
-      /* crocs sun themselves ON the trail edges — the racing line stays open,
+      /* Crocs sun themselves ON the trail edges — the racing line stays open,
          but a lazy line meets teeth. Straight-ish segments only, so the AI
-         ghosts' centre line never clips one. */
+         ghosts' centre line never clips one. The lateral offset is measured
+         so that even the nearest croc leaves most of a metre of clean line
+         beside it: tight enough to be frightening, wide enough to be fair. */
       var cz2 = 140;
       var side2 = 1;
       while (cz2 < def.length - 120) {
@@ -449,7 +461,7 @@
           var bend = Math.abs(yawA - yawB);
           if (bend < 0.14) {
             var cp = pts[ciT];
-            var lat = side2 * (1.7 + rng() * 1.9);
+            var lat = side2 * (2.05 + rng() * 1.9);
             world.props.push({
               type: "croc", x: cp.x + lat, z: cp.z, y: heightAt(world, cp.x + lat, cp.z),
               s: 0.85 + rng() * 0.4, rot: rng() * 6.28, r: 1.05
@@ -481,7 +493,7 @@
       }
     }
     /* wildlife, well away from the trail */
-    var FAUNA = { miombo: ["antelope", "antelope", "zebra"], baobab: ["giraffe", "elephant", "zebra", "antelope"], kasanka: ["antelope", "antelope", "elephant"], zambezi: ["elephant", "antelope", "zebra"], falls: ["antelope", "elephant"] };
+    var FAUNA = { miombo: ["antelope", "antelope", "zebra"], baobab: ["giraffe", "elephant", "zebra", "antelope", "rhino"], kasanka: ["antelope", "antelope", "elephant"], zambezi: ["elephant", "antelope", "zebra"], falls: ["antelope", "elephant", "rhino"] };
     var fz = 150;
     while (fz < zEnd - 150) {
       var side = rng() < 0.5 ? -1 : 1;

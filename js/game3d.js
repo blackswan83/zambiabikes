@@ -136,7 +136,13 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       if (combo) tone(1320, 0.18, "triangle", 0.15, 1980);
     },
     count: function (hi) { tone(hi ? 880 : 440, 0.14, "square"); },
-    finish: function () { [523, 659, 784, 1047].forEach(function (f, i) { tone(f, 0.16, "triangle", i * 0.12); }); }
+    finish: function () { [523, 659, 784, 1047].forEach(function (f, i) { tone(f, 0.16, "triangle", i * 0.12); }); },
+    /* thunder rolls in a while after the flash — delay is distance */
+    thunder: function (delay) {
+      tone(58, 1.5, "sine", delay, 32);
+      tone(41, 2.1, "sine", delay + 0.12, 26);
+      tone(96, 0.7, "triangle", delay + 0.05, 44);
+    }
   };
 
   /* ---------- input ---------- */
@@ -164,15 +170,24 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     ArrowRight: "right", KeyD: "right",
     Space: "hop"
   };
+  /* Hop is deliberately NOT on either Shift: five taps of Shift raises the
+     Windows Sticky Keys dialog, which would stop a race dead. Player two hops
+     on the slash key, which sits directly above the arrow cluster. */
   var KEYMAP_2 = {
     KeyW: [0, "pedal"], KeyS: [0, "brake"], KeyA: [0, "left"], KeyD: [0, "right"],
-    ShiftLeft: [0, "hop"], Space: [0, "hop"],
+    Space: [0, "hop"],
     ArrowUp: [1, "pedal"], ArrowDown: [1, "brake"],
     ArrowLeft: [1, "left"], ArrowRight: [1, "right"],
-    ShiftRight: [1, "hop"]
+    Slash: [1, "hop"], NumpadDecimal: [1, "hop"]
   };
   var TURBO_KEY_1 = { KeyK: 0 };
   var TURBO_KEY_2 = { KeyQ: 0, Enter: 1, NumpadEnter: 1 };
+
+  /* what a rider's turbo key is called, for the things that tell them to hit it */
+  function turboKeyName(p) {
+    if (players() !== 2) return "K";
+    return p === 1 ? "ENTER" : "Q";
+  }
 
   /* which rider does this key belong to, and what does it do? */
   function keyBinding(code) {
@@ -221,7 +236,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     }
     var bind = keyBinding(e.code);
     if (bind) {
-      if (mode === "race" || mode === "count") e.preventDefault();
+      if (run) e.preventDefault();      /* Space and the arrows scroll pages */
       inputs[bind.p][bind.k] = true;
     }
   });
@@ -310,17 +325,21 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     lbTabs: $("lb-tabs"), lbList: $("lb-list"),
     ghostList: $("ghost-list"), ghostInput: $("ghost-input"), ghostMsg: $("ghost-import-msg"),
     fsBtn: $("btn-fs"), hint: $("controls-hint"), hintKeys: $("hint-keys"), hintTouch: $("hint-touch"),
-    hud2: $("hud2"),
+    hud2: $("hud2"), countdown2: $("countdown-2"), hintKeys2: $("hint-keys-2p"),
     tour: $("screen-tour"), brief: $("screen-brief"), shop: $("screen-shop"),
     exitBtn: $("btn-exit"), turbo: $("turbo"), turboState: $("turbo-state"),
     turboFill: $("turbo-fill"), turboGain: $("turbo-gain"), turboHint: $("turbo-hint")
   };
 
-  function toast(txt) {
-    el.toast.textContent = txt;
-    el.toast.classList.remove("pop");
-    void el.toast.offsetWidth;
-    el.toast.classList.add("pop");
+  /* every toast belongs to a rider; with two of them it lands in that
+     rider's own half instead of shouting across both */
+  function toast(txt, p) {
+    var t = (players() === 2 && p === 1) ? $("trick-toast-2") : el.toast;
+    if (!t) t = el.toast;
+    t.textContent = txt;
+    t.classList.remove("pop");
+    void t.offsetWidth;
+    t.classList.add("pop");
   }
 
   /* ====================================================================
@@ -331,6 +350,10 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   var numPlayers = 1;
   function players() { return numPlayers; }
 
+  /* how sharp textures can stay at a grazing angle; filled in once the
+     renderer exists and read by aniso() below */
+  var MAX_ANISO = 1;
+
   var viewW = 960, viewH = 540;
   var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: !lightMode });
   renderer.setSize(viewW, viewH, false);
@@ -340,6 +363,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   renderer.toneMappingExposure = 1.12;
   renderer.shadowMap.enabled = !lightMode;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  MAX_ANISO = renderer.capabilities.getMaxAnisotropy();   /* declared above */
 
   /* A "view" is one player's window on the world: a camera and the chase
      state that drives it. One player has one view; two players have two,
@@ -370,7 +394,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
      composer processes half-height buffers (no wasted fill, no bloom bleeding
      across the seam) and its last pass lands in whichever slice the renderer's
      viewport and scissor are pointing at. One composer serves both players. */
-  var composer = null, cRenderPass = null, composerH = 0;
+  var composer = null, cRenderPass = null, composerH = 0, bloomPass = null;
   function initComposer() {
     if (composer) { composer.dispose(); composer = null; }
     composerH = 0;
@@ -383,11 +407,27 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     composerH = vh;
     cRenderPass = new RenderPass(new THREE.Scene(), camera);
     composer.addPass(cRenderPass);
-    composer.addPass(new UnrealBloomPass(new THREE.Vector2(viewW, vh), 0.14, 0.45, 1.0));
+    /* BLOOM GOES AFTER TONE MAPPING. UnrealBloom thresholds whatever buffer it
+       is handed, and before OutputPass that buffer is un-tone-mapped linear
+       radiance where the physical sky sits far above 1.0 — so a threshold of
+       1.0 selected the ENTIRE sky and smeared it back over the frame as a
+       milky veil. Measured on the Copperbelt at midday, the red laterite road
+       came out at HLS saturation 0.09 with the veil and 0.65 without it, and
+       ground at 80 m went from luminance 186 to 72. After OutputPass the
+       threshold means what it looks like it means: only the genuine
+       highlights bloom. */
     composer.addPass(new OutputPass());
+    bloomPass = new UnrealBloomPass(new THREE.Vector2(viewW, vh), 0.28, 0.3, 0.86);
+    composer.addPass(bloomPass);
     var fxaa = new FXAAPass();
     fxaa.setSize(viewW * pr, vh * pr);
     composer.addPass(fxaa);
+    /* the composer's targets default to no multisampling, so every edge in
+       the scene relies on FXAA alone */
+    if (renderer.capabilities.isWebGL2) {
+      composer.renderTarget1.samples = 4;
+      composer.renderTarget2.samples = 4;
+    }
   }
   layoutViews();
   initComposer();
@@ -437,9 +477,16 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   }
   function syncRenderSize() {
     if (fsElement() === stageEl) {
+      var availW = window.innerWidth, availH = window.innerHeight;
+      /* two strips on a 16:9 screen would be 16:4.5 each — a letterbox slot.
+         Letterbox the whole thing to 4:3 instead and give each of them room. */
+      if (players() === 2) {
+        var w2 = Math.min(availW, availH * 4 / 3);
+        availW = w2; availH = w2 * 3 / 4;
+      }
       /* cap the buffer so weak GPUs keep their frame rate on huge screens */
-      var s = Math.min(1, 1920 / window.innerWidth);
-      setRenderSize(Math.round(window.innerWidth * s), Math.round(window.innerHeight * s));
+      var s = Math.min(1, 1920 / availW);
+      setRenderSize(Math.round(availW * s), Math.round(availH * s));
       return;
     }
     /* windowed: 16:9 for one rider, 4:3 for two so each strip has some height */
@@ -471,6 +518,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     worldTexLoader.load(url, function (t) {
       if (srgb) t.colorSpace = THREE.SRGBColorSpace;
       t.wrapS = t.wrapT = THREE.RepeatWrapping;
+      aniso(t);
       done(t);
     }, undefined, function () { /* asset absent — procedural stays */ });
   }
@@ -495,11 +543,19 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
      they have to be re-placed for each view right before that view is drawn. */
   function renderFrame(sc) {
     renderer.toneMappingExposure = sc.exposure;
+    /* rain flattens the highlights, and lightning is all highlight */
+    if (bloomPass) bloomPass.strength = 0.28 * (1 - 0.42 * (sc.wxK || 0)) + 0.34 * (sc.flash || 0);
     var n = players();
     for (var i = 0; i < n; i++) {
       var v = views[i];
       useView(v);
       parkBackdrop(sc);
+      /* the shadow map is redrawn per view anyway, so spend each pass on a
+         tight box round that view's own rider instead of one wide soft box */
+      if (run && run.riders && run.riders[i]) {
+        var rst = run.riders[i].st;
+        aimSun(sc, rst.x, rst.y, rst.z, 0);
+      }
       renderView(sc, v);
     }
     renderer.setScissorTest(false);
@@ -545,9 +601,20 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
 
   var dustTex = radialSprite("rgba(210,175,120,0.85)", "rgba(210,175,120,0)", 64);
   var mistTex = radialSprite("rgba(255,255,255,0.75)", "rgba(255,255,255,0)", 128);
+  var sprayTex = radialSprite("rgba(226,240,244,0.92)", "rgba(226,240,244,0)", 64);
   var sunTex = radialSprite("rgba(255,250,225,1)", "rgba(255,250,225,0)", 256);
 
   /* ---------- procedural textures (no external assets) ---------- */
+
+  /* The terrain map is tiled about sixty times across the course, so at a
+     grazing angle — which is every angle a rider sees the ground at — plain
+     mipmapping blurs it to a brown smear about eight metres out. Anisotropic
+     filtering is the whole fix, it is one line, and the Garage has been using
+     it all along while the game never did. */
+  function aniso(tx) {
+    if (MAX_ANISO > 1) tx.anisotropy = Math.min(8, MAX_ANISO);
+    return tx;
+  }
 
   function canvasTexture(w, h, draw, wrap) {
     var c = document.createElement("canvas");
@@ -556,7 +623,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     var tx = new THREE.CanvasTexture(c);
     tx.colorSpace = THREE.SRGBColorSpace;
     if (wrap) { tx.wrapS = THREE.RepeatWrapping; tx.wrapT = THREE.RepeatWrapping; }
-    return tx;
+    return aniso(tx);
   }
 
   /* soft grey mottling — multiplied over terrain vertex colors for surface detail */
@@ -1110,12 +1177,78 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   var todSel = lsGet("zr3_tod", "auto");
   if (TOD_ORDER.indexOf(todSel) < 0) todSel = "auto";
 
+  /* ---------- weather ----------
+     One knob, k: 0 is dry, 1 is honest rain, 1.25 is a storm. It drives the
+     look (colours, fog, mist, rain itself), the sound and — through the bike's
+     own stats, never through the core — how much grip the tyres have. */
+  var WX_MODES = {
+    clear: { id: "clear", label: "Clear", k: 0, grip: 1, bolts: 0 },
+    rain: { id: "rain", label: "Rain", k: 1, grip: 0.92, bolts: 0 },
+    storm: { id: "storm", label: "Storm", k: 1.25, grip: 0.88, bolts: 1 }
+  };
+  var wxSel = lsGet("zr3_wx", "clear");
+  if (!WX_MODES[wxSel]) wxSel = "clear";
+  var wxForced = null;         /* the Grand Tour decides its own weather */
+  function curWx() { return WX_MODES[wxForced || wxSel] || WX_MODES.clear; }
+
+  function mixHex(a, b2, k) {
+    return new THREE.Color(a).lerp(new THREE.Color(b2), k).getHex();
+  }
+  /* darken a colour towards wet, and pull some of the life out of it */
+  function wetHex(hex, mul, greyK, k) {
+    var c = new THREE.Color(hex).multiplyScalar(1 - (1 - mul) * k);
+    var l = c.r * 0.2126 + c.g * 0.7152 + c.b * 0.0722;
+    return c.lerp(new THREE.Color(l, l, l), greyK * k).getHex();
+  }
+
+  /* the dry world, rained on */
+  function rainTheme(T, k) {
+    if (k <= 0) return T;
+    var d = Object.assign({}, T);
+    /* the air closes in: grey-green above, and you cannot see as far */
+    d.sky = mixHex(T.sky, 0x6E7A72, 0.62 * k);
+    d.skyLow = mixHex(T.skyLow, 0x8E968C, 0.58 * k);
+    d.fog = mixHex(T.fog, 0x93A09A, 0.66 * k);
+    d.fogNear = Math.max(18, (T.fogNear || 60) * (1 - 0.42 * k));
+    d.fogFar = Math.max(120, (T.fogFar || 420) * (1 - 0.44 * k));
+    d.cloudCover = Math.min(0.95, (T.cloudCover || 0.4) + 0.42 * k);
+    d.cloudTint = mixHex(T.cloudTint || 0xFFFFFF, 0x8A9098, 0.6 * k);
+    d.turbidity = (T.turbidity || 4) + 5 * k;
+    d.mieCoeff = (T.mieCoeff || 0.003) + 0.006 * k;
+    /* the sun goes flat and the fill light does the work */
+    d.sun = mixHex(T.sun, 0xCBD4D0, 0.55 * k);
+    d.sunI = (T.sunI || 1.35) * (1 - 0.45 * k);
+    /* the sun is gone, so the fill light has to carry the whole scene */
+    d.hemiSky = mixHex(T.hemiSky || T.sky, 0xC2CCC6, 0.7 * k);
+    d.hemiI = (T.hemiI || 0.95) * (1 + 0.85 * k);
+    d.ambient = mixHex(T.ambient, 0xBCC4C0, 0.6 * k);
+    d.ambI = (T.ambI || 0.35) * (1 + 1.1 * k);
+    d.exposure = (T.exposure || 0.6) * (1 - 0.04 * k);
+    /* Wet ground is darker and much less colourful — the drop in colour is
+       what reads as rain, and it does the work without crushing the trail
+       into black. Overcooking the darkening put three quarters of the falls
+       under L=32, which is unrideable, not atmospheric. */
+    ["grass", "grassDry", "dirt", "dirtDark", "rock", "trunk", "canopy", "canopy2", "sand"].forEach(function (key) {
+      if (T[key] !== undefined) d[key] = wetHex(T[key], 0.82, 0.34, k);
+    });
+    d.water = mixHex(T.water, 0x55636A, 0.4 * k);
+    d.wet = Math.min(1, k);
+    if (k >= 0.8) d.groundMist = true;
+    return d;
+  }
+
   function todTheme(T) {
     if (todSel === "auto") return T;
     var d = Object.assign({}, T);
+    /* Mood comes from HUE, not from turning the lights off. Every preset now
+       carries its own hemiSky so the ground keeps its fill light, and the sun
+       sits high enough that direct light still reaches the trail — a six
+       degree sun laid shadows across the whole valley and made dusk
+       unrideable rather than atmospheric. */
     if (todSel === "dawn") {
-      d.sunPos = [-190, 48, -240];
-      d.sun = 0xFFE2C0; d.ambient = 0xB8B2C4;
+      d.sunPos = [-190, 90, -240];
+      d.sun = 0xFFE2C0; d.ambient = 0xB8B2C4; d.ambI = (T.ambI || 0.35) * 1.15;
+      d.hemiSky = 0xBFC6E6; d.hemiI = (T.hemiI || 0.95) * 1.15;
       d.turbidity = 4.5; d.rayleigh = 1.9; d.mieCoeff = 0.005; d.mieG = 0.8;
       d.exposure = (T.exposure || 0.6) * 0.98;
       d.fog = 0xE8DCE4; d.sky = 0xA8B8E0; d.skyLow = 0xF5C9A8;
@@ -1123,37 +1256,42 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     } else if (todSel === "day") {
       d.sunPos = [40, 330, -180];
       d.sun = 0xFFFDF4; d.ambient = 0xC2CCB8;
+      d.hemiSky = 0xBBD9F2;
       d.turbidity = 2.6; d.rayleigh = 1.1; d.mieCoeff = 0.0025; d.mieG = 0.76;
-      d.exposure = (T.exposure || 0.6) * 1.08;
-      d.fog = 0xE2EEE8; d.sky = 0x8EC8EE; d.skyLow = 0xEAF4F0;
+      d.exposure = (T.exposure || 0.6) * 0.94;
+      d.fog = 0xC6D4CC; d.sky = 0x8EC8EE; d.skyLow = 0xEAF4F0;
       d.cloudTint = 0xFFFFFF; d.ridgeDim = 0.05;
     } else if (todSel === "sunset") {
-      d.sunPos = [-200, 52, -250];
-      d.sun = 0xFFC384; d.ambient = 0xC0A088;
+      d.sunPos = [-200, 95, -250];
+      d.sun = 0xFFC384; d.ambient = 0xCCAE94; d.ambI = (T.ambI || 0.35) * 1.6;
+      d.hemiSky = 0xE8C6A4; d.hemiI = (T.hemiI || 0.95) * 1.55; d.sunI = (T.sunI || 1.35) * 1.25;
       d.turbidity = 7.5; d.rayleigh = 2.9; d.mieCoeff = 0.008; d.mieG = 0.84;
-      d.exposure = (T.exposure || 0.6) * 0.9;
+      d.exposure = (T.exposure || 0.6) * 0.94;
       d.fog = 0xE8C8A0; d.sky = 0xE8A868; d.skyLow = 0xFFDCA8;
       d.cloudTint = 0xF5C098; d.ridgeDim = 0.4;
     } else if (todSel === "dusk") {
-      d.sunPos = [-170, 30, -230];
-      d.sun = 0xE0A87A; d.ambient = 0x9AA4C0;
+      d.sunPos = [-170, 80, -230];
+      d.sun = 0xE8B48A; d.ambient = 0xB6BDD4; d.ambI = (T.ambI || 0.35) * 2.1;
+      d.hemiSky = 0xA2ACC8; d.hemiI = (T.hemiI || 0.95) * 1.9; d.sunI = (T.sunI || 1.35) * 1.45;
       d.turbidity = 4.5; d.rayleigh = 3.6; d.mieCoeff = 0.005; d.mieG = 0.8;
-      d.exposure = (T.exposure || 0.6) * 0.78;
-      d.fog = 0x9AA4BC; d.sky = 0x3A4A74; d.skyLow = 0xB88C88;
+      d.exposure = (T.exposure || 0.6) * 0.9;
+      d.fog = 0x8A93AE; d.sky = 0x3A4A74; d.skyLow = 0xB88C88;
       d.cloudTint = 0x707A90; d.ridgeDim = 0.55;
     }
     return d;
   }
 
   function buildScene(id) {
-    var key = id + "|" + todSel;
+    var key = id + "|" + todSel + "|" + curWx().id;
     if (sceneCache[key]) return sceneCache[key];
     /* keep at most one other scene alive */
     Object.keys(sceneCache).forEach(function (k) { if (k !== key) disposeScene(k); });
 
     var wc = getWorld(id);
     var world = wc.world;
-    var T = todTheme(world.def.theme);
+    var wx = curWx();
+    var wxK = wx.k, bolts = wx.bolts;
+    var T = rainTheme(todTheme(world.def.theme), wxK);
     var sceneLeafMats = [];
     function addSway(mat, amp, freq) {
       mat.onBeforeCompile = function (shader) {
@@ -1204,9 +1342,16 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     var ridgeNear = buildRidge(520, 90, 80, ridgeBase.clone().lerp(new THREE.Color(0x1A2A1A), 0.22), (world.def.seed % 10) + 3);
     scene.add(ridgeFar, ridgeNear);
 
-    /* physical-sky exposure is low, so lights compensate to keep the ground lit */
-    var lightBoost = lightMode ? 1 : Math.min(2.4, 1.05 / exposure);
-    scene.add(new THREE.HemisphereLight(T.sky, T.hemiGround || T.dirtDark, (T.hemiI || 0.95) * lightBoost));
+    /* Physical-sky exposure is low, so lights compensate to keep the ground lit.
+       T.sky used to do two unrelated jobs: paint the scenic backdrop AND light
+       the ground. That is why Kasanka went black — its deep purple dusk sky
+       delivered thirteen times less fill than the falls' pale blue, and the
+       trail came out at a median of 3 out of 255. hemiSky splits the two, so
+       a mood can be dark to look at without being dark to ride in. */
+    var lightBoost = lightMode ? 1 : Math.min(3.2, 1.05 / exposure);
+    var hemiLight = new THREE.HemisphereLight(T.hemiSky || T.sky, T.hemiGround || T.dirtDark,
+      (T.hemiI || 0.95) * lightBoost);
+    scene.add(hemiLight);
     var sun = new THREE.DirectionalLight(T.sun, (T.sunI || 1.35) * lightBoost);
     sun.position.set(T.sunPos[0], T.sunPos[1], T.sunPos[2]);
     scene.add(sun);
@@ -1214,11 +1359,20 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     if (!lightMode) {
       sun.castShadow = true;
       sun.shadow.mapSize.set(2048, 2048);
-      sun.shadow.camera.left = -60; sun.shadow.camera.right = 60;
-      sun.shadow.camera.top = 60; sun.shadow.camera.bottom = -60;
+      /* A 120 m shadow box over a 2048 map is 5.9 cm a texel, which needed a
+         normalBias of 1.2 WORLD METRES to hide the acne — twenty texels, which
+         pushed every contact shadow off its own object. Nothing smaller than a
+         tree cast a shadow at all. A 68 m box is 3.3 cm a texel and takes a
+         normal bias two orders of magnitude smaller, so the bike, the rider
+         and every animal sit on their own shadow again. Past 34 m from the
+         rider a shadow is not readable at this camera distance anyway. */
+      sun.shadow.camera.left = -34; sun.shadow.camera.right = 34;
+      sun.shadow.camera.top = 34; sun.shadow.camera.bottom = -34;
       sun.shadow.camera.near = 20; sun.shadow.camera.far = 520;
-      sun.shadow.bias = -0.0004;
-      sun.shadow.normalBias = 1.2;
+      sun.shadow.bias = -0.0009;
+      sun.shadow.normalBias = 0.06;
+      /* a floor under shadowed ground, so a low sun does not black it out */
+      if (sun.shadow.intensity !== undefined) sun.shadow.intensity = 0.72;
     }
     var sunDir = sunDirEarly;
     var amb = new THREE.AmbientLight(T.ambient, (T.ambI || 0.35) * lightBoost);
@@ -1444,9 +1598,9 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       });
     });
 
-    /* wildlife: little primitive sculptures */
-    var crocs = [];
-    world.props.forEach(function (p) {
+    /* wildlife: little primitive sculptures, each one alive in place */
+    var crocs = [], fauna = [];
+    world.props.forEach(function (p, pIdx) {
       var g2 = null;
       if (p.type === "elephant") g2 = buildElephant();
       else if (p.type === "giraffe") g2 = buildGiraffe();
@@ -1454,12 +1608,39 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       else if (p.type === "antelope") g2 = buildAntelope();
       else if (p.type === "croc") { g2 = buildCroc(); crocs.push(g2); }
       else if (p.type === "hippo") g2 = buildHippo(p.r > 0);
+      else if (p.type === "rhino") g2 = buildRhino();
       if (g2) {
         g2.scale.setScalar((p.s || 1) * (p.type === "croc" ? 1.25 : 1));
         g2.position.set(p.x, p.y, p.z);
         g2.rotation.y = p.rot;
         if (!lightMode) g2.traverse(function (o) { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
         scene.add(g2);
+        /* A HAZARD RING. Even counter-shaded, a big animal standing in long
+           grass at fifty metres is a shape among shapes. Every animal that can
+           actually be HIT gets a soft accent-coloured ring on the ground under
+           it, which reads as "go round this" long before the animal itself
+           resolves. Decorative wildlife well off the trail gets nothing. */
+        if (p.r > 0 && !lightMode) {
+          var ringM = new THREE.MeshBasicMaterial({
+            color: T.accent, transparent: true, opacity: 0.34,
+            depthWrite: false, side: THREE.DoubleSide, fog: true
+          });
+          var ring = new THREE.Mesh(new THREE.RingGeometry(p.r * 1.15, p.r * 1.5, 22), ringM);
+          ring.rotation.x = -Math.PI / 2;
+          ring.position.set(p.x, p.y + 0.07, p.z);
+          ring.renderOrder = 2;
+          scene.add(ring);
+        }
+        if (g2.userData.anim) {
+          fauna.push({
+            g: g2, a: g2.userData.anim,
+            x: p.x, z: p.z, rot: p.rot,
+            /* everybody on their own clock, so the herd never moves as one */
+            ph: (pIdx * 2.399) % 6.283,
+            rate: 0.75 + ((pIdx * 37) % 50) / 100,
+            alert: 0, look: 0
+          });
+        }
       }
     });
 
@@ -1518,22 +1699,34 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     scene.add(coinMesh);
 
     /* ---- gates + finish ---- */
-    var poleG = new THREE.CylinderGeometry(0.07, 0.07, 2.6, 6);
-    var poleM = lam(0x0C2E1C);
+    /* A gate used to be two dark-green sticks 7 cm across: under half a pixel
+       wide past sixty metres, where FXAA simply erased them. Now they are pale
+       posts with a banner slung between them, so a gate reads as a GATE — a
+       horizontal edge eight metres wide — from as far as you can see it. */
+    var poleG = new THREE.CylinderGeometry(0.16, 0.16, 3.4, 7);
+    var poleM = lam(0xF4EFE4);
     var flagM = lam(T.accent);
+    var bannerG = new THREE.BoxGeometry(8.4, 0.5, 0.12);
     world.gates.forEach(function (gi) {
       var p = world.trail[gi];
       var q = world.trail[Math.min(world.trailN - 1, gi + 1)];
       var yaw = Math.atan2(q.x - p.x, q.z - p.z);
       var side = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
+      var topY = -1e9;
       [-1, 1].forEach(function (s) {
+        var px = p.x + side.x * 4 * s, pz = p.z + side.z * 4 * s;
         var pole = new THREE.Mesh(poleG, poleM);
-        pole.position.set(p.x + side.x * 4 * s, CORE.heightAt(world, p.x + side.x * 4 * s, p.z + side.z * 4 * s) + 1.3, p.z + side.z * 4 * s);
+        pole.position.set(px, CORE.heightAt(world, px, pz) + 1.7, pz);
         scene.add(pole);
-        var flag = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.7, 4), flagM);
-        flag.position.copy(pole.position).add(new THREE.Vector3(0, 1.55, 0));
+        var flag = new THREE.Mesh(new THREE.ConeGeometry(0.55, 1.3, 4), flagM);
+        flag.position.copy(pole.position).add(new THREE.Vector3(0, 2.05, 0));
         scene.add(flag);
+        if (pole.position.y > topY) topY = pole.position.y;
       });
+      var banner = new THREE.Mesh(bannerG, flagM);
+      banner.position.set(p.x, topY + 1.5, p.z);
+      banner.rotation.y = yaw;
+      scene.add(banner);
     });
     /* finish arch */
     (function () {
@@ -1641,56 +1834,101 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
         g.quadraticCurveTo(46, 4, 32, 20);
         g.fill();
       });
-      /* Each bat flies for itself: its own airspeed, its own wing-beat bob
-         and a slow wander, and when one leaves the far end it is recycled
-         alone — so the river keeps streaming instead of the whole cloud
-         snapping back. Altitude tracks the valley floor, which drops with
-         z, so nobody ever flies into a hill. */
-      var batZ0 = -160, batZ1 = zSpan + 260;
-      var streamN = lightMode ? 2 : 3;
-      for (var si = 0; si < streamN; si++) {
-        var bn = lightMode ? 260 : 620;
-        var bats = new Array(bn);
-        var arr = new Float32Array(bn * 3);
-        for (var bi2 = 0; bi2 < bn; bi2++) {
+
+      /* A THREE.Points cloud can never look like a bat: one static sprite,
+         no silhouette change, no way to point a bat along its own flight.
+         So each bat is now an instance of a little horizontal wing card —
+         which is exactly how you see a bat from underneath — turned to its
+         heading and SQUASHED ACROSS THE WINGSPAN on every beat. That squash
+         is the wing beat, and it is one number per bat per frame.
+
+         The other half of "stuck" was the geometry of the thing: bats used
+         to fly downhill at 7-12 m/s while the rider does up to 21, so they
+         hung in the sky like stickers. Now the streams fly ACROSS and UP the
+         valley, so they sweep past you, and the lowest stream comes down to
+         head height where you can actually see the wings working. */
+      var batGeo = new THREE.PlaneGeometry(1, 1);
+      batGeo.rotateX(-Math.PI / 2);            /* lie flat: seen from below */
+      var batMat = new THREE.MeshBasicMaterial({
+        map: batTex, transparent: true, depthWrite: false, alphaTest: 0.28,
+        side: THREE.DoubleSide, color: 0x2A1F17, fog: true
+      });
+
+      /* TWO THINGS DECIDE WHETHER YOU SEE ANY OF THIS.
+
+         Altitude. The chase camera looks about 17 degrees down the hill with
+         34 degrees of vertical view, so the sky is only the top third of the
+         screen and anything above roughly 12 degrees of elevation is off the
+         top edge. Bats used to fly 60 m up: never once on screen.
+
+         Density. Spreading a fixed number of bats over the whole two
+         kilometres of valley puts about a dozen of them inside the view at
+         any moment, which is a few specks, not the largest mammal migration
+         on Earth. So the river is recycled AROUND THE RIDER: a bat that
+         passes behind you comes back in at the far end of the window, and
+         every bat in the scene is always in the 300 m of valley you can
+         actually see. Same cost, forty times the spectacle. */
+      var STREAMS = lightMode
+        ? [{ n: 240, alt: 14, spread: 10, wide: 70, size: 2.2, spd: 13, cross: 0.4 },
+           { n: 120, alt: 5, spread: 3.5, wide: 26, size: 2.8, spd: 17, cross: 0.9 }]
+        : [{ n: 430, alt: 22, spread: 12, wide: 95, size: 2.0, spd: 12, cross: 0.3 },
+           { n: 330, alt: 12, spread: 7, wide: 60, size: 2.5, spd: 15, cross: 0.55 },
+           { n: 190, alt: 4.5, spread: 3.2, wide: 22, size: 3.0, spd: 19, cross: 0.9 }];
+
+      var BAT_BEHIND = 70, BAT_AHEAD = 300;   /* the window that follows you */
+
+      STREAMS.forEach(function (S) {
+        var bats = new Array(S.n);
+        for (var bi2 = 0; bi2 < S.n; bi2++) {
           bats[bi2] = {
-            x: (Math.random() - 0.5) * (150 + si * 60),
-            z: batZ0 + Math.random() * (batZ1 - batZ0),
-            alt: 40 + si * 17 + Math.random() * 26,
-            spd: 7 + Math.random() * 5,          /* airspeed, m/s */
-            drift: (Math.random() - 0.5) * 1.6,  /* lateral wander */
-            amp: 0.5 + Math.random() * 0.7,      /* wing-beat bob */
-            fr: 5.5 + Math.random() * 3.5,       /* beats per second-ish */
-            ph: Math.random() * 6.283
+            x: (Math.random() - 0.5) * S.wide * 2,
+            z: -BAT_BEHIND + Math.random() * (BAT_BEHIND + BAT_AHEAD),
+            alt: S.alt + Math.random() * S.spread,
+            spd: S.spd * (0.8 + Math.random() * 0.45),
+            /* they cross the valley as well as run up it, so they sweep
+               through the view instead of pacing the rider */
+            cross: (Math.random() < 0.5 ? -1 : 1) * S.cross * (0.6 + Math.random() * 0.8),
+            amp: 0.4 + Math.random() * 0.6,      /* how much it rises and falls */
+            fr: 6.5 + Math.random() * 4.5,       /* wing beats per second */
+            ph: Math.random() * 6.283,
+            size: S.size * (0.82 + Math.random() * 0.4)
           };
         }
-        var bGeo = new THREE.BufferGeometry();
-        bGeo.setAttribute("position", new THREE.BufferAttribute(arr, 3));
-        bGeo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 60, zSpan / 2), zSpan);
-        var bPts = new THREE.Points(bGeo, new THREE.PointsMaterial({
-          map: batTex, size: 2.0 + si * 0.7, transparent: true, depthWrite: false,
-          color: 0xFFFFFF, alphaTest: 0.25
-        }));
-        bPts.frustumCulled = false;
-        scene.add(bPts);
+        var im = new THREE.InstancedMesh(batGeo, batMat, S.n);
+        im.frustumCulled = false;
+        im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        scene.add(im);
         batStreams.push({
-          pts: bPts, geo: bGeo, arr: arr, bats: bats,
-          z0: batZ0, z1: batZ1, slope: world.def.slope,
-          xSway: 0.5 + si * 0.35
+          mesh: im, bats: bats, behind: BAT_BEHIND, ahead: BAT_AHEAD,
+          wide: S.wide, alt: S.alt, spread: S.spread,
+          slope: world.def.slope, dummy: new THREE.Object3D()
         });
-      }
+      });
     }
+    /* GROUND MIST.
+       Ten sprites 130 m wide and 18 m tall, hung five metres up, is not mist
+       lying on a swamp — it is a haze band on the far ridge, which is where
+       it read. Mist wants to be many small patches sitting ON the trail, at
+       about the height of your wheels, recycled around the rider so there is
+       always some of it just ahead. */
+    var mistPatches = [];
     if (T.groundMist) {
-      for (var gm = 0; gm < 10; gm++) {
-        var gmi = Math.min(world.trailN - 1, Math.floor(world.trailN * (0.06 + gm * 0.1)));
-        var gmp = world.trail[gmi];
-        var gmSp = new THREE.Sprite(new THREE.SpriteMaterial({
-          map: mistTex, transparent: true, opacity: 0.3, depthWrite: false
-        }));
-        gmSp.scale.set(130 + (gm % 3) * 30, 18 + (gm % 2) * 7, 1);
-        gmSp.position.set(gmp.x + ((gm % 2) ? -22 : 18), gmp.y + 5, gmp.z);
+      var mistN = lightMode ? 26 : 58;
+      var mistMat = new THREE.SpriteMaterial({
+        map: mistTex, transparent: true, depthWrite: false, fog: true,
+        opacity: 0.24 + 0.16 * (T.wet || 0), color: T.fog
+      });
+      for (var gm = 0; gm < mistN; gm++) {
+        var gmSp = new THREE.Sprite(mistMat);
+        gmSp.scale.set(26 + (gm % 4) * 9, 5.5 + (gm % 3) * 2.2, 1);
         scene.add(gmSp);
-        clouds.push(gmSp);
+        mistPatches.push({
+          sp: gmSp,
+          lat: (Math.random() - 0.5) * 46,
+          z: Math.random() * 320 - 40,
+          lift: 1.1 + Math.random() * 1.8,
+          drift: (Math.random() - 0.5) * 0.9
+        });
       }
     }
 
@@ -1717,9 +1955,14 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       var waterTexB = streakTex.clone(); waterTexB.needsUpdate = true;
       waterTexB.repeat.set(4, 1.7);
       wf.waterTexA = waterTexA; wf.waterTexB = waterTexB;
-      var basaltM = new THREE.MeshStandardMaterial({ color: 0x3E4440, roughness: 0.97 });
-      var curtainM = new THREE.MeshBasicMaterial({
-        map: waterTexA, transparent: true, opacity: 0.96, color: 0xEAF9F6,
+      /* The curtain used to be an UNLIT white at sRGB 245 against a fog colour
+         of 227: white on white, and at dusk it stayed bright while the world
+         around it went dark. Darkening the basalt behind it gives the water
+         something to be white against, and a lit material lets the falls
+         follow the mood of the day like everything else. */
+      var basaltM = new THREE.MeshStandardMaterial({ color: 0x272D2A, roughness: 0.97 });
+      var curtainM = new THREE.MeshLambertMaterial({
+        map: waterTexA, transparent: true, opacity: 0.96, color: 0xF2FFFB,
         depthWrite: false, side: THREE.DoubleSide
       });
       var shimmerM = new THREE.MeshBasicMaterial({
@@ -1728,7 +1971,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       });
       var lipM = new THREE.MeshBasicMaterial({ color: 0xDFF3EE, transparent: true, opacity: 0.9, depthWrite: false });
       var floorM = new THREE.MeshPhongMaterial({
-        color: 0x16342E, shininess: 90, specular: 0x88BCB0, transparent: true, opacity: 0.94
+        color: 0x0E211C, shininess: 90, specular: 0x88BCB0, transparent: true, opacity: 0.94
       });
 
       /* smoothed wall line: anchors average the trail over ±45 m so the
@@ -1878,112 +2121,353 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       scene.add(wf);
     }
 
+    /* ---- RAIN ----
+       One draw call, and the CPU never touches a drop. Every streak is an
+       instance of a single quad; the vertex shader takes its seed, adds the
+       drift (one uniform, advanced once a frame) and wraps it inside a box
+       that is anchored to the camera — so the rain is always around you and
+       nothing ever has to be respawned. The streak leans back as you speed
+       up, which is what rain does when you ride into it. */
+    var rain = null;
+    if (wxK > 0) {
+      var RAIN_N = lightMode ? 420 : 1200;
+      var RAIN_BOX = new THREE.Vector3(58, 34, 58);
+      var quadG = new THREE.PlaneGeometry(1, 1);
+      var rGeo = new THREE.InstancedBufferGeometry();
+      rGeo.index = quadG.index;
+      rGeo.setAttribute("position", quadG.attributes.position.clone());
+      rGeo.setAttribute("uv", quadG.attributes.uv.clone());
+      var rSeed = new Float32Array(RAIN_N * 4);
+      for (var rq = 0; rq < RAIN_N; rq++) {
+        rSeed[rq * 4] = Math.random();
+        rSeed[rq * 4 + 1] = Math.random();
+        rSeed[rq * 4 + 2] = Math.random();
+        rSeed[rq * 4 + 3] = 0.55 + Math.random() * 0.55;
+      }
+      rGeo.setAttribute("aSeed", new THREE.InstancedBufferAttribute(rSeed, 4));
+      rGeo.instanceCount = RAIN_N;
+      rGeo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 90);
+      var rainMat = new THREE.ShaderMaterial({
+        transparent: true, depthWrite: false, blending: THREE.NormalBlending,
+        uniforms: {
+          uCam: { value: new THREE.Vector3() },
+          uDrift: { value: new THREE.Vector3() },
+          uBox: { value: RAIN_BOX },
+          uLean: { value: new THREE.Vector2(0, 0) },   /* how far the streak lies over */
+          uLen: { value: 1.0 },
+          uTint: { value: new THREE.Color(0xC9DCE4) },
+          uAlpha: { value: Math.min(0.85, 0.34 + 0.3 * wxK) }
+        },
+        vertexShader: [
+          "attribute vec4 aSeed;",
+          "uniform vec3 uCam; uniform vec3 uDrift; uniform vec3 uBox;",
+          "uniform vec2 uLean; uniform float uLen;",
+          "varying float vFade;",
+          "void main() {",
+          "  vec3 base = (aSeed.xyz - 0.5) * uBox;",
+          "  vec3 p = base + uDrift;",
+          "  p = mod(p + uBox * 0.5, uBox) - uBox * 0.5;",   /* wrap inside the box */
+          "  vec3 world = p + uCam;",
+          /* the quad: y is the streak's length, x its (thin) width */
+          "  float len = (1.6 + aSeed.w * 2.2) * uLen;",
+          "  float wid = 0.035 + aSeed.w * 0.035;",
+          "  vec3 up = normalize(vec3(uLean.x, -1.0, uLean.y));",
+          "  vec3 side = normalize(cross(up, normalize(uCam - world + vec3(0.0, 0.001, 0.0))));",
+          "  world += up * (position.y * len) + side * (position.x * wid);",
+          "  vec4 mv = modelViewMatrix * vec4(world, 1.0);",
+          /* fade the far ones out so the box has no visible edge */
+          "  vFade = 1.0 - smoothstep(uBox.x * 0.24, uBox.x * 0.5, length(p.xz));",
+          "  gl_Position = projectionMatrix * mv;",
+          "}"
+        ].join("\n"),
+        fragmentShader: [
+          "uniform vec3 uTint; uniform float uAlpha;",
+          "varying float vFade;",
+          "void main() {",
+          "  if (vFade <= 0.01) discard;",
+          "  gl_FragColor = vec4(uTint, uAlpha * vFade);",
+          "}"
+        ].join("\n")
+      });
+      rain = new THREE.Mesh(rGeo, rainMat);
+      rain.frustumCulled = false;
+      rain.renderOrder = 10;      /* after the opaque world, never before it */
+      scene.add(rain);
+    }
+
     var cached = {
       scene: scene, coinMesh: coinMesh, clouds: clouds, wf: wf,
+      rain: rain, rainDrift: new THREE.Vector3(), wxK: wxK, bolts: bolts,
+      hemi: hemiLight, amb: amb, hemiI0: hemiLight.intensity, ambI0: amb.intensity,
+      fogBase: scene.fog ? scene.fog.color.clone() : null,
+      flash: 0, flashT: -99, nextFlash: 0,
       dome: dome, sky: skyObj, ridges: [ridgeFar, ridgeNear], sunSp: sunSp, sun: sun, sunDir: sunDir,
       birds: birds, exposure: exposure, swayMats: sceneLeafMats.slice(),
-      crocs: crocs, riverTex: riverTex, batStreams: batStreams
+      crocs: crocs, riverTex: riverTex, batStreams: batStreams, fauna: fauna,
+      mist: mistPatches, world: world
     };
     sceneCache[key] = cached;
     return cached;
   }
 
   /* wildlife builders */
+  /* ---------------------------------------------------------------
+     Wildlife.
+
+     Every animal is built round a few named, movable parts hung on
+     g.userData.anim: a head that can lift and turn, ears that flick, a
+     tail that swishes. Nothing here moves the animal's POSITION — the
+     collision body for a hazard is fixed at world-build time inside the
+     deterministic core, shared with the AI riders and with server-side
+     ghost checking, so an elephant that wandered would quietly change
+     everybody's times. They react in place, and honestly: what you see
+     is exactly what you can hit.
+     --------------------------------------------------------------- */
+
+  /* a tail on a hinge, so it can swish */
+  function tailOn(parent, len, rad, m, x, y, z) {
+    var t = new THREE.Group();
+    t.position.set(x, y, z);
+    var seg = new THREE.Mesh(new THREE.CylinderGeometry(rad * 0.6, rad, len, 5), m);
+    seg.position.y = -len / 2;
+    t.add(seg);
+    parent.add(t);
+    return t;
+  }
+  /* an ear on a hinge at its inner edge */
+  function earOn(parent, geo, m, x, y, z, sign) {
+    var e = new THREE.Group();
+    e.position.set(x, y, z);
+    var mesh = new THREE.Mesh(geo, m);
+    mesh.position.x = sign * 0.32;
+    e.add(mesh);
+    parent.add(e);
+    return e;
+  }
+
   function buildElephant() {
-    var m = lam(0x7A7168), g = new THREE.Group();
+    var m = lam(0x6E655C), g = new THREE.Group();
     var body = new THREE.Mesh(new THREE.SphereGeometry(1.5, 9, 7).scale(1.25, 1, 0.85), m);
     body.position.y = 2.0;
+    g.add(body);
+    /* dust-bathed elephants really do carry a pale line along the belly */
+    counterShade(g, 1.85, 1.42, 1.25, 2.0, { pale: 0xC9BEAE, dark: 0x2A241F });
+
+    /* head, trunk and those enormous ears all swing together */
+    var headG = new THREE.Group();
+    headG.position.set(0, 2.45, 1.0);
     var head = new THREE.Mesh(new THREE.SphereGeometry(0.85, 8, 6), m);
-    head.position.set(0, 2.5, 1.55);
-    var trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.24, 1.7, 6), m);
-    trunk.position.set(0, 1.6, 2.1);
+    head.position.set(0, 0.05, 0.55);
+    headG.add(head);
+    var trunk = new THREE.Group();
+    trunk.position.set(0, -0.5, 1.05);
+    var trunkM = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.24, 1.7, 6), m);
+    trunkM.position.y = -0.8;
+    trunk.add(trunkM);
     trunk.rotation.x = 0.35;
+    headG.add(trunk);
     var earG = new THREE.SphereGeometry(0.55, 6, 5).scale(0.2, 1, 0.8);
-    var earL = new THREE.Mesh(earG, m); earL.position.set(-0.85, 2.65, 1.35);
-    var earR = new THREE.Mesh(earG, m); earR.position.set(0.85, 2.65, 1.35);
-    g.add(body, head, trunk, earL, earR);
+    var earL = earOn(headG, earG, m, -0.62, 0.2, 0.35, -1);
+    var earR = earOn(headG, earG, m, 0.62, 0.2, 0.35, 1);
+    g.add(headG);
+
+    var tail = tailOn(g, 1.0, 0.07, m, 0, 2.2, -1.75);
     [[-0.7, 0.55], [0.7, 0.55], [-0.7, -0.7], [0.7, -0.7]].forEach(function (l) {
       var leg = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.3, 1.5, 6), m);
       leg.position.set(l[0], 0.75, l[1]);
       g.add(leg);
     });
+    g.userData.anim = { kind: "elephant", head: headG, trunk: trunk, earL: earL, earR: earR, tail: tail, body: body, graze: 0.2 };
     return g;
   }
+
   function buildGiraffe() {
     var m = lam(0xC9973F), g = new THREE.Group();
     var body = new THREE.Mesh(new THREE.SphereGeometry(0.95, 8, 6).scale(1.35, 0.9, 0.7), m);
     body.position.y = 2.2;
+    g.add(body);
+    /* the whole neck hinges at the shoulders — that IS a giraffe */
+    var headG = new THREE.Group();
+    headG.position.set(0, 2.5, 0.55);
     var neck = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.26, 2.6, 6), m);
-    neck.position.set(0, 3.6, 0.9);
+    neck.position.set(0, 1.2, 0.4);
     neck.rotation.x = -0.35;
     var head = new THREE.Mesh(new THREE.SphereGeometry(0.32, 7, 5).scale(1, 0.8, 1.4), m);
-    head.position.set(0, 4.85, 1.4);
-    g.add(body, neck, head);
+    head.position.set(0, 2.4, 0.95);
+    headG.add(neck, head);
+    g.add(headG);
+    var tail = tailOn(g, 0.9, 0.05, m, 0, 2.4, -1.25);
     [[-0.5, 0.55], [0.5, 0.55], [-0.5, -0.55], [0.5, -0.55]].forEach(function (l) {
       var leg = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.13, 2.2, 5), m);
       leg.position.set(l[0], 1.1, l[1]);
       g.add(leg);
     });
+    g.userData.anim = { kind: "giraffe", head: headG, tail: tail, body: body, graze: 0.16 };
     return g;
   }
+
   function buildZebra() {
-    var m = lam(0xE8E2D4), dm = lam(0x3A342C), g = new THREE.Group();
+    /* a zebra is already the highest-contrast animal in Africa; it only needs
+       its stripes to survive being small on screen */
+    var m = lam(0xF2EDE2), dm = lam(0x241F18), g = new THREE.Group();
     var body = new THREE.Mesh(new THREE.SphereGeometry(0.8, 8, 6).scale(1.4, 0.85, 0.65), m);
     body.position.y = 1.35;
+    g.add(body);
+    var headG = new THREE.Group();
+    headG.position.set(0, 1.55, 0.55);
     var neck = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.24, 1.0, 6), m);
-    neck.position.set(0, 1.95, 0.85);
+    neck.position.set(0, 0.4, 0.3);
     neck.rotation.x = -0.5;
     var head = new THREE.Mesh(new THREE.SphereGeometry(0.24, 7, 5).scale(1, 0.8, 1.5), m);
-    head.position.set(0, 2.35, 1.15);
-    g.add(body, neck, head);
+    head.position.set(0, 0.8, 0.6);
+    var earG = new THREE.ConeGeometry(0.07, 0.22, 4);
+    var earL = earOn(headG, earG, m, -0.1, 0.95, 0.45, 0);
+    var earR = earOn(headG, earG, m, 0.1, 0.95, 0.45, 0);
+    headG.add(neck, head);
+    g.add(headG);
     for (var i = 0; i < 4; i++) {
       var ring = new THREE.Mesh(new THREE.TorusGeometry(0.62 - Math.abs(i - 1.5) * 0.07, 0.05, 5, 10), dm);
       ring.rotation.y = Math.PI / 2;
       ring.position.set(-0.6 + i * 0.42, 1.35, 0);
       g.add(ring);
     }
+    var tail = tailOn(g, 0.75, 0.045, dm, 0, 1.5, -1.05);
     [[-0.45, 0.4], [0.45, 0.4], [-0.45, -0.4], [0.45, -0.4]].forEach(function (l) {
       var leg = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.1, 1.35, 5), m);
       leg.position.set(l[0], 0.68, l[1]);
       g.add(leg);
     });
+    g.userData.anim = { kind: "zebra", head: headG, earL: earL, earR: earR, tail: tail, body: body, graze: -0.55 };
     return g;
   }
+
+  /* COUNTER-SHADING.
+     A hippo lying on the racing line measured 1.12:1 luminance contrast
+     against its own background at every distance from 27 m to 158 m: the
+     animal palettes and the trail dirt are the same handful of browns. Real
+     antelope are counter-shaded — pale belly, dark flank line — and that is
+     also the thing that makes them readable at speed, because a hard
+     light-to-dark edge survives distance, fog and bloom in a way that a flat
+     brown mass does not. Every hazard now wears one. */
+  var HIDE_PALE = 0xF4E9D6, HIDE_DARK = 0x231B12;
+  function counterShade(g, w, h, d, y, opts) {
+    opts = opts || {};
+    var pale = lam(opts.pale || HIDE_PALE), dark = lam(opts.dark || HIDE_DARK);
+    var belly = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 6).scale(w * 0.96, h * 0.42, d * 0.9), pale);
+    belly.position.set(0, y - h * 0.5, opts.z || 0);
+    var band = new THREE.Mesh(new THREE.BoxGeometry(w * 2.05, h * 0.2, d * 1.55), dark);
+    band.position.set(0, y - h * 0.16, opts.z || 0);
+    g.add(belly, band);
+    return { belly: belly, band: band };
+  }
+
   function buildAntelope() {
     var m = lam(0x9A6B3F), g = new THREE.Group();
     var body = new THREE.Mesh(new THREE.SphereGeometry(0.6, 8, 6).scale(1.35, 0.8, 0.6), m);
     body.position.y = 1.05;
+    g.add(body);
+    counterShade(g, 0.81, 0.48, 0.36, 1.05);
+    /* and a rump patch, which is the bit you actually see going away from you */
+    var rump = new THREE.Mesh(new THREE.SphereGeometry(0.26, 7, 5), lam(0xF8F1E2));
+    rump.position.set(0, 1.12, -0.72);
+    g.add(rump);
+    var headG = new THREE.Group();
+    headG.position.set(0, 1.2, 0.45);
     var neck = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.16, 0.8, 5), m);
-    neck.position.set(0, 1.5, 0.62);
+    neck.position.set(0, 0.32, 0.2);
     neck.rotation.x = -0.4;
     var head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 6, 5).scale(1, 0.8, 1.4), m);
-    head.position.set(0, 1.85, 0.85);
-    g.add(body, neck, head);
+    head.position.set(0, 0.65, 0.42);
+    headG.add(neck, head);
     for (var i = 0; i < 2; i++) {
       var horn = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.045, 0.7, 4), lam(0x4A3A28));
-      horn.position.set(i === 0 ? -0.08 : 0.08, 2.2, 0.75);
+      horn.position.set(i === 0 ? -0.08 : 0.08, 1.0, 0.32);
       horn.rotation.x = -0.3;
       horn.rotation.z = i === 0 ? 0.25 : -0.25;
-      g.add(horn);
+      headG.add(horn);
     }
+    var earG = new THREE.ConeGeometry(0.06, 0.2, 4);
+    var earL = earOn(headG, earG, m, -0.09, 0.75, 0.3, 0);
+    var earR = earOn(headG, earG, m, 0.09, 0.75, 0.3, 0);
+    g.add(headG);
+    var tail = tailOn(g, 0.4, 0.03, m, 0, 1.2, -0.8);
     [[-0.32, 0.32], [0.32, 0.32], [-0.32, -0.32], [0.32, -0.32]].forEach(function (l) {
       var leg = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 1.05, 4), m);
       leg.position.set(l[0], 0.5, l[1]);
       g.add(leg);
     });
+    g.userData.anim = { kind: "antelope", head: headG, earL: earL, earR: earR, tail: tail, body: body, graze: -0.7 };
+    return g;
+  }
+
+  /* The black rhino: a grey armoured wedge with two horns and a bad temper.
+     Wider and lower than the elephant, and it holds its head DOWN — which is
+     exactly what makes it read as a rhino from forty metres out. */
+  function buildRhino() {
+    var m = lam(0x6E6A66), horn = lam(0xD8D2C4), g = new THREE.Group();
+    /* barrel body, hips higher than shoulders, with a shoulder hump */
+    var body = new THREE.Mesh(new THREE.SphereGeometry(1.0, 10, 7).scale(1.0, 0.92, 1.9), m);
+    body.position.set(0, 1.35, -0.15);
+    var hump = new THREE.Mesh(new THREE.SphereGeometry(0.62, 8, 6).scale(1.0, 0.62, 1.25), m);
+    hump.position.set(0, 1.95, 0.35);
+    g.add(body, hump);
+    counterShade(g, 1.0, 0.92, 1.55, 1.35, { pale: 0xBDB6AE, dark: 0x262320, z: -0.15 });
+
+    /* the head hangs low off a thick neck and swings side to side */
+    var headG = new THREE.Group();
+    headG.position.set(0, 1.65, 1.35);
+    var neck = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.5, 0.7, 7), m);
+    neck.position.set(0, -0.05, -0.2);
+    neck.rotation.x = 1.15;
+    var head = new THREE.Mesh(new THREE.SphereGeometry(0.45, 8, 6).scale(0.85, 0.8, 1.5), m);
+    head.position.set(0, -0.42, 0.62);
+    var snout = new THREE.Mesh(new THREE.SphereGeometry(0.26, 7, 5).scale(0.9, 0.75, 1.1), m);
+    snout.position.set(0, -0.55, 1.2);
+    headG.add(neck, head, snout);
+    /* the front horn is the long one; the second sits behind and above it */
+    var h1 = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.95, 7), horn);
+    h1.position.set(0, -0.18, 1.32);
+    h1.rotation.x = -0.55;
+    var h2 = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.42, 6), horn);
+    h2.position.set(0, -0.02, 0.86);
+    h2.rotation.x = -0.3;
+    headG.add(h1, h2);
+    /* little tube ears, the give-away that a rhino is listening to you */
+    var earG = new THREE.CylinderGeometry(0.09, 0.11, 0.24, 6);
+    var earL = earOn(headG, earG, m, -0.24, 0.05, 0.1, 0);
+    var earR = earOn(headG, earG, m, 0.24, 0.05, 0.1, 0);
+    g.add(headG);
+
+    var tail = tailOn(g, 0.55, 0.05, m, 0, 1.5, -1.95);
+    [[-0.55, 1.0], [0.55, 1.0], [-0.55, -1.05], [0.55, -1.05]].forEach(function (l) {
+      var leg = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.3, 1.15, 6), m);
+      leg.position.set(l[0], 0.58, l[1]);
+      g.add(leg);
+      var foot = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.3, 0.16, 7), lam(0x565250));
+      foot.position.set(l[0], 0.08, l[1]);
+      g.add(foot);
+    });
+    g.userData.anim = { kind: "rhino", head: headG, earL: earL, earR: earR, tail: tail, body: body, graze: 0.18 };
     return g;
   }
 
   function buildCroc() {
     /* khaki back + near-black scutes + cream jaw: reads as "croc!" from 40 m
        out on green ground, which the kids need to dodge it in time */
-    var olive = lam(0x767B3B), oliveD = lam(0x2E351A), teeth = lam(0xF2EBD8);
+    var olive = lam(0x39441F), oliveD = lam(0x161A0C), teeth = lam(0xF2EBD8);
     var g = new THREE.Group();
     /* body + ridged tail */
     var body = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 8), olive);
     body.scale.set(0.44, 0.26, 1.05);
     body.position.set(0, 0.26, -0.2);
     g.add(body);
+    /* a cream flank stripe along the waterline of the body: a real crocodile
+       has one, and it is the only thing that separates a basking croc from
+       the sand it is basking on at forty metres */
+    var flank = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 6), teeth);
+    flank.scale.set(0.455, 0.09, 1.0);
+    flank.position.set(0, 0.17, -0.2);
+    g.add(flank);
     var tail = new THREE.Group();
     tail.position.set(0, 0.24, -1.1);
     var seg1 = new THREE.Mesh(new THREE.ConeGeometry(0.22, 1.1, 6), olive);
@@ -2052,13 +2536,15 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   }
 
   function buildHippo(land) {
-    var grey = lam(0x6E5A64), greyD = lam(0x59464F);
+    var grey = lam(0x574752), greyD = lam(0x2E2429);
     var g = new THREE.Group();
     var back = new THREE.Mesh(new THREE.SphereGeometry(1.3, 10, 8), grey);
     back.scale.set(0.85, land ? 0.62 : 0.5, 1.15);
     back.position.set(0, land ? 0.62 : -0.25, -0.4);
     g.add(back);
     if (land) {
+      /* a hippo out of the water is pink-bellied and dark-backed */
+      counterShade(g, 1.1, 0.8, 1.35, 0.62, { pale: 0xE8B8A8, dark: 0x1F1A1D, z: -0.4 });
       [[-0.45, 0.35], [0.45, 0.35], [-0.45, -1.1], [0.45, -1.1]].forEach(function (lp) {
         var leg = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.19, 0.6, 8), grey);
         leg.position.set(lp[0], 0.3, lp[1]);
@@ -2087,25 +2573,39 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   /* ---------- dust particles ---------- */
 
   var dustPool = [];
+  var wetSpray = false;
   function initDust(scene) {
     dustPool.forEach(function (d) { if (d.sp.parent) d.sp.parent.remove(d.sp); });
     dustPool = [];
+    /* on a wet trail a wheel does not raise dust, it throws water */
+    wetSpray = curWx().k > 0;
+    var tex = wetSpray ? sprayTex : dustTex;
     for (var i = 0; i < 26; i++) {
-      var sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: dustTex, transparent: true, depthWrite: false, opacity: 0 }));
+      var sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, opacity: 0 }));
       sp.scale.set(0.9, 0.9, 1);
       scene.add(sp);
       dustPool.push({ sp: sp, life: 0, vx: 0, vy: 0, vz: 0 });
     }
   }
   var dustIdx = 0;
-  function spawnDust(x, y, z, n) {
+  function spawnDust(x, y, z, n, yaw) {
     for (var i = 0; i < n; i++) {
       var d = dustPool[dustIdx++ % dustPool.length];
-      d.life = 0.55;
       d.sp.position.set(x + (Math.random() - 0.5) * 0.8, y + 0.15, z + (Math.random() - 0.5) * 0.8);
-      d.vx = (Math.random() - 0.5) * 2.2;
-      d.vy = 1 + Math.random() * 1.6;
-      d.vz = (Math.random() - 0.5) * 2.2;
+      if (wetSpray) {
+        /* water is heavier than dust: it goes backwards off the tyre in a
+           rooster tail and dies quickly instead of hanging in the air */
+        d.life = 0.38;
+        d.vy = 0.6 + Math.random() * 0.9;
+        var sy = yaw === undefined ? 0 : yaw;
+        d.vx = -Math.sin(sy) * 3.5 + (Math.random() - 0.5) * 1.6;
+        d.vz = -Math.cos(sy) * 3.5 + (Math.random() - 0.5) * 1.6;
+      } else {
+        d.life = 0.55;
+        d.vx = (Math.random() - 0.5) * 2.2;
+        d.vy = 1 + Math.random() * 1.6;
+        d.vz = (Math.random() - 0.5) * 2.2;
+      }
     }
   }
   function updateDust(dt) {
@@ -2115,8 +2615,8 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       d.sp.position.x += d.vx * dt;
       d.sp.position.y += d.vy * dt;
       d.sp.position.z += d.vz * dt;
-      d.sp.material.opacity = Math.max(0, d.life * 1.4);
-      var s = 0.9 + (0.55 - d.life) * 2.2;
+      d.sp.material.opacity = Math.max(0, d.life * (wetSpray ? 1.9 : 1.4));
+      var s = 0.9 + ((wetSpray ? 0.38 : 0.55) - d.life) * (wetSpray ? 1.5 : 2.2);
       d.sp.scale.set(s, s, 1);
     });
   }
@@ -2185,7 +2685,9 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       coinDummy.quaternion.copy(q);
       /* hide taken coins and coins about to hit the camera lens */
       var dcx = c.x - camPos.x, dcy = c.y - camPos.y, dcz = c.z - camPos.z;
-      var nearCam = dcx * dcx + dcy * dcy + dcz * dcz < 9;
+      /* hiding a coin about to clip the lens is right for one player and
+         maddening for two, where it vanishes out of the other's view */
+      var nearCam = players() === 1 && dcx * dcx + dcy * dcy + dcz * dcz < 9;
       coinDummy.scale.copy((taken && taken[i]) || nearCam ? s0 : s1);
       coinDummy.updateMatrix();
       sc.coinMesh.setMatrixAt(i, coinDummy.matrix);
@@ -2195,11 +2697,27 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
 
   /* ---------- race lifecycle ---------- */
 
+  /* Rain does not change the bike, it changes what the bike can do with the
+     ground: less bite when you turn, a lot less when you grab the brakes, and
+     a shade less drive out of the pedals. */
+  function weatherStats(base, grip) {
+    if (!grip || grip >= 0.999) return base;
+    var k = 1 - grip;
+    var out = Object.assign({}, base || {});
+    Object.keys(CORE.DEFAULT_STATS || {}).forEach(function (key) {
+      if (out[key] === undefined) out[key] = CORE.DEFAULT_STATS[key];
+    });
+    out.steer = (out.steer || 1) * (1 - k * 1.6);
+    out.brake = (out.brake || 1) * (1 - k * 2.8);
+    out.pedal = (out.pedal || 1) * (1 - k * 1.0);
+    return out;
+  }
+
   /* Build one rider, ready to roll. Everything that used to be spread across
      startRace for the single player now happens once per person on the sofa. */
   function makeRider(i, b, world, devAt, bikeCfg, bikeStats) {
     var st = CORE.newRider3(world);
-    if (bikeStats) st.stats = bikeStats;
+    if (bikeStats) st.stats = Object.assign({}, bikeStats);   /* never shared */
     /* dev spawn point, e.g. game.html#at=0.9 — handy for testing the finish */
     if (devAt) {
       var gi = Math.max(2, Math.min(world.finishIdx - 4, Math.floor(world.finishIdx * parseFloat(devAt[1]))));
@@ -2224,7 +2742,10 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       recorder: [],
       step: 0,
       idx: i,
-      name: CORE.sanitizeName(riderProfile(i).name) || (players() === 2 ? "Player " + (i + 1) : "Rider"),
+      /* sanitizeName never returns empty, so test the raw string first */
+      name: (riderProfile(i).name || "").trim()
+        ? CORE.sanitizeName(riderProfile(i).name)
+        : (players() === 2 ? "Player " + (i + 1) : "Rider"),
       jersey: riderProfile(i).jersey || (i ? "#E8791D" : "#1F7A48"),
       place: 0,
       bikeName: bikeCfg && BIKES ? BIKES.riderNameForBike(bikeCfg) : "",
@@ -2240,6 +2761,14 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     var devAt = /^#at=(0?\.[0-9]+)$/.exec(location.hash || "");
     var practice = !!devAt;
     var ghosts = [];
+
+    /* Weather reaches the bike as numbers the bike already understands, so the
+       core, the AI riders and the ghost pipeline never learn that rain exists.
+       The AI ghosts deliberately stay DRY: they are the fixed benchmark you
+       measure yourself against, exactly as a worn tour bike still races the
+       same ghosts. Do not "fix" that. */
+    var grip = curWx().grip;
+    bikeStats = weatherStats(bikeStats, grip);
 
     /* on the tour a tired bike really is a tired bike: worn pads, a dragging
        chain and a loose headset all show up in the numbers the physics uses */
@@ -2298,10 +2827,17 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       st: riders[0].st, recorder: riders[0].recorder,
       step: 0, ghosts: ghosts, countT: 2.7, endT: 0, lastBeep: 3,
       practice: practice, finishers: 0,
+      /* a run with the weather against you cannot set a record */
+      handicapped: grip < 0.999,
+      /* the world's own clock, so it keeps turning when rider one is home */
+      clock: 0,
       bikeName: riders[0].bikeName,
       hasBell: riders[0].hasBell
     };
     clearInput();
+    /* Enter is player two's turbo, so a button left focused by the last click
+       would swallow it (and re-fire that button) */
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
     acc = 0;
     snapAllViews();
     mode = "count";
@@ -2311,7 +2847,8 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     if (el.shop) el.shop.hidden = true;
     el.hud.hidden = false;
     el.countdown.hidden = false;
-    el.touch.hidden = !isTouch;
+    if (el.countdown2) el.countdown2.hidden = players() !== 2;
+    el.touch.hidden = !isTouch || players() === 2;
     if (el.exitBtn) el.exitBtn.hidden = false;
     if (el.hud2) {
       el.hud2.hidden = players() !== 2;
@@ -2323,7 +2860,8 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
         updateHUD2(world);
       }
     }
-    el.hintKeys.hidden = isTouch;
+    el.hintKeys.hidden = isTouch || players() === 2;
+    if (el.hintKeys2) el.hintKeys2.hidden = isTouch || players() !== 2;
     el.hintTouch.hidden = !isTouch;
     el.hint.hidden = false;
     el.hint.classList.remove("is-fading");
@@ -2336,6 +2874,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     mode = "pause";
     clearInput();
     stopRumble();
+    stopRain();
     el.pause.hidden = false;
     el.touch.hidden = true;
     if (el.exitBtn) el.exitBtn.hidden = true;
@@ -2359,8 +2898,10 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     run = null;
     clearInput();
     stopRumble();
+    stopRain();
     el.pause.hidden = true; el.results.hidden = true; el.hud.hidden = true;
     el.countdown.hidden = true; el.touch.hidden = true; el.hint.hidden = true;
+    if (el.countdown2) el.countdown2.hidden = true;
     if (el.hud2) el.hud2.hidden = true;
     if (el.exitBtn) el.exitBtn.hidden = true;
     if (wasTour && TOUR) { openTour(); return; }
@@ -2385,7 +2926,9 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     var gold = Math.min(wc.armand.timeMs, wc.arthur.timeMs);
     var silver = Math.max(wc.armand.timeMs, wc.arthur.timeMs);
     var bronze = Math.round(silver * 1.35);
-    var medal = timeMs <= gold ? "gold" : timeMs <= silver ? "silver" : timeMs <= bronze ? "bronze" : "none";
+    /* the ghosts ride dry, so a wet run is not measured against them */
+    var medal = run.handicapped ? "none"
+      : timeMs <= gold ? "gold" : timeMs <= silver ? "silver" : timeMs <= bronze ? "bronze" : "none";
 
     /* workshop career: real riding unlocks garage parts (never in practice) */
     function lockedList() {
@@ -2400,7 +2943,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       return out;
     }
     var newlyUnlocked = [];
-    if (!run.practice && BIKES) {
+    if (!run.practice && !run.handicapped && BIKES) {
       var beforeLocked = lockedList();
       career.runs = (career.runs || 0) + 1;
       career.coins = (career.coins || 0) + st.coinCount;
@@ -2415,7 +2958,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
 
     /* practice spawns (dev #at= hash) never count: no bests, no ghosts, no board */
     var prevBest = bests[selTrack] || Infinity;
-    var isBest = !run.practice && timeMs < prevBest;
+    var isBest = !run.practice && !run.handicapped && timeMs < prevBest;
     if (isBest) {
       bests[selTrack] = timeMs;
       lsSet("zr3_best", bests);
@@ -2424,7 +2967,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       if ((profile.name || "").trim()) submitClubGhost(name, timeMs, run.recorder);
     }
 
-    if (!run.practice) {
+    if (!run.practice && !run.handicapped) {
       var list = scores[selTrack] || [];
       list.push({ name: name, timeMs: timeMs, score: st.score, bike: run.bikeName });
       list.sort(function (a, b2) { return a.timeMs - b2.timeMs; });
@@ -2462,12 +3005,16 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       '<p class="results-note">' + (run.bikeName ? "Bike: " + run.bikeName + " · " : "") +
       "Armand: " + fmtTime(wc.armand.timeMs) + " · Arthur: " + fmtTime(wc.arthur.timeMs) +
       (st.crashes ? " · Crashes: " + st.crashes + " (helmets, always!)" : " · Clean run — no crashes!") + "</p>" +
-      '<p class="results-note">Copy your Ghost Code below and hand it to a club friend — they can race you without any chat.</p>';
+      (run.handicapped
+        ? '<p class="results-note">🌧️ You rode that in the wet — brilliant, but weather runs don\'t set records. ' +
+          "Switch the weather back to Clear for a time that counts.</p>"
+        : '<p class="results-note">Copy your Ghost Code below and hand it to a club friend — they can race you without any chat.</p>');
 
     mode = "results";
     el.results.hidden = false;
     hideRideChrome();
     stopRumble();
+    stopRain();
     SFX.finish();
     refreshLeaderboard();
   }
@@ -2490,6 +3037,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     croc: "CROC! 🐊 Give those teeth some space!",
     hippo: "HIPPO! 🦛 Two tonnes of do-not-touch!",
     elephant: "ELEPHANT! 🐘 Give the big fella room!",
+    rhino: "RHINO! 🦏 Two horns and no sense of humour!",
     antelope: "PUKU! 🦌 Nearly a puku pancake!",
     miombo: "Tree! 🌳 Keep it on the trail!",
     baobab: "That baobab is 1000 years old — and solid! 💥",
@@ -2498,49 +3046,52 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     rock: "Rock! 🪨 Eyes up the trail!",
     termite: "Termite tower! 💥",
     elephant: "Whoa! Give animals space! 🐘",
+    rhino: "Whoa! Give the rhino room! 🦏",
     giraffe: "Whoa! Give animals space! 🦒",
     zebra: "Whoa! Give animals space! 🦓",
     antelope: "Whoa! Give animals space!"
   };
 
-  function handleEvents(ev, st, v) {
+  function handleEvents(ev, st, v, pi) {
     v = v || views[0];
+    pi = pi || 0;
+    var say = function (txt) { toast(txt, pi); };
     for (var i = 0; i < ev.length; i++) {
       var e = ev[i];
       if (e.t === "coin") SFX.coin();
       else if (e.t === "hop") SFX.hop();
       else if (e.t === "land") {
-        spawnDust(st.x, st.y, st.z, e.q === "hard" ? 8 : 4);
+        spawnDust(st.x, st.y, st.z, e.q === "hard" ? 8 : 4, st.yaw);
         v.dip = e.q === "hard" ? 0.55 : 0.25;
-        if (e.q === "hard") { SFX.hard(); toast("Heavy landing!"); }
+        if (e.q === "hard") { SFX.hard(); say("Heavy landing!"); }
         else SFX.land();
       }
-      else if (e.t === "bigair") { toast("BIG AIR! +75"); SFX.bigair(); }
+      else if (e.t === "bigair") { say("BIG AIR! +75"); SFX.bigair(); }
       else if (e.t === "crash") {
-        toast(CRASH_MSG[e.why] || CRASH_MSG.landing);
+        say(CRASH_MSG[e.why] || CRASH_MSG.landing);
         SFX.crash();
         spawnDust(st.x, st.y, st.z, 14);
         if (!reducedMotion) v.shake = 0.5;
       }
       else if (e.t === "splash") {
-        toast("SPLASH! 🐊 The Zambezi is NOT a shortcut!");
+        say("SPLASH! 🐊 The Zambezi is NOT a shortcut!");
         SFX.splash();
         spawnDust(st.x, st.y + 0.5, st.z, 12);
       }
       else if (e.t === "gorge") {
-        toast("THE GORGE! 🌊 Respect the Smoke that Thunders!");
+        say("THE GORGE! 🌊 Respect the Smoke that Thunders!");
         SFX.splash();
         if (!reducedMotion) v.shake = 0.4;
       }
       else if (e.t === "trick") {
-        toast(trickName(e) + " +" + e.pts);
+        say(trickName(e) + " +" + e.pts);
         SFX.trick(e.combo);
       }
-      else if (e.t === "turboOn") { toast("TURBO! ⚡ Tap K as fast as you can!"); SFX.turboOn(); }
+      else if (e.t === "turboOn") { say("TURBO! ⚡ Tap " + turboKeyName(pi) + " as fast as you can!"); SFX.turboOn(); }
       else if (e.t === "turboOff") SFX.turboOff();
-      else if (e.t === "respawn") toast("Back on track! 🚵");
+      else if (e.t === "respawn") say("Back on track! 🚵");
       else if (e.t === "gate") SFX.gate();
-      else if (e.t === "reset") toast("Whoops — back to the trail!");
+      else if (e.t === "reset") say("Whoops — back to the trail!");
     }
   }
 
@@ -2652,10 +3203,19 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     }
     playerRig.blob.visible = lightMode && st.onGround;
     /* pedal dust at speed */
-    if (st.onGround && speed > 9 && Math.random() < 0.25) spawnDust(st.x, st.y, st.z, 1);
+    if (st.onGround && speed > 9 && Math.random() < (wetSpray ? 0.55 : 0.25)) spawnDust(st.x, st.y, st.z, 1, st.yaw);
   }
 
   /* ---------- two riders, one sofa ---------- */
+
+  /* where everybody is, for anything that reacts to a rider */
+  function riderSpots() {
+    var out = [];
+    for (var i = 0; i < run.riders.length; i++) {
+      out.push({ x: run.riders[i].st.x, z: run.riders[i].st.z });
+    }
+    return out;
+  }
 
   function eachRider(fn) {
     for (var i = 0; i < run.riders.length; i++) fn(run.riders[i], i);
@@ -2663,14 +3223,6 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   function allRidersDone() {
     for (var i = 0; i < run.riders.length; i++) if (!run.riders[i].st.finished) return false;
     return true;
-  }
-  /* the light aims at the middle of the pack and widens to cover the spread */
-  function aimRiderSun(sc) {
-    var n = run.riders.length;
-    if (n === 1) { aimSun(sc, run.st.x, run.st.y, run.st.z, 0); return; }
-    var a = run.riders[0].st, b2 = run.riders[1].st;
-    var dx = a.x - b2.x, dz = a.z - b2.z;
-    aimSun(sc, (a.x + b2.x) / 2, (a.y + b2.y) / 2, (a.z + b2.z) / 2, Math.sqrt(dx * dx + dz * dz));
   }
   function announceFinish(r) {
     if (r.place === 1) {
@@ -2706,6 +3258,8 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     sc.ridges[0].position.set(camera.position.x, camera.position.y - 55, camera.position.z);
     sc.ridges[1].position.set(camera.position.x, camera.position.y - 55, camera.position.z);
     if (sc.sunSp) sc.sunSp.position.copy(camera.position).addScaledVector(sc.sunDir, 700);
+    /* the rain box is anchored to the camera, so both players ride through it */
+    if (sc.rain) sc.rain.material.uniforms.uCam.value.copy(camera.position);
   }
 
   /* The shadow camera is a fixed 120-unit box, so with two riders it aims at
@@ -2716,7 +3270,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     sc.sun.position.set(fx, fy, fz).addScaledVector(sc.sunDir, 220);
     sc.sun.target.position.set(fx, fy, fz);
     if (!sc.sun.castShadow) return;
-    var want = Math.max(60, Math.min(130, 60 + (spread || 0) * 0.6));
+    var want = Math.max(34, Math.min(80, 34 + (spread || 0) * 0.6));
     if (Math.abs(want - sc.sun.shadow.camera.right) > 1) {
       var c = sc.sun.shadow.camera;
       c.left = -want; c.right = want; c.top = want; c.bottom = -want;
@@ -2729,6 +3283,32 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     parkBackdrop(sc);
     aimSun(sc, fx, fy, fz, 0);
   }
+
+  /* the sound of rain: filtered noise, not an oscillator */
+  var FLASH_COL = new THREE.Color(0xE8F0FF);
+  var rainGain = null;
+  function rainHiss(level) {
+    var ac = audio();
+    if (!ac) return;
+    if (!rainGain) {
+      var len = ac.sampleRate * 2;
+      var buf = ac.createBuffer(1, len, ac.sampleRate);
+      var d = buf.getChannelData(0);
+      for (var i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * 0.6;
+      var src = ac.createBufferSource();
+      src.buffer = buf; src.loop = true;
+      var hp = ac.createBiquadFilter();
+      hp.type = "highpass"; hp.frequency.value = 900;
+      var lp = ac.createBiquadFilter();
+      lp.type = "lowpass"; lp.frequency.value = 7000;
+      rainGain = ac.createGain();
+      rainGain.gain.value = 0;
+      src.connect(hp); hp.connect(lp); lp.connect(rainGain); rainGain.connect(masterGain);
+      src.start();
+    }
+    rainGain.gain.value = level * 0.09;
+  }
+  function stopRain() { if (rainGain) rainGain.gain.value = 0; }
 
   /* low waterfall rumble that swells as you approach the falls */
   var rumbleGain = null;
@@ -2757,30 +3337,179 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   }
   function stopRumble() { if (rumbleGain) rumbleGain.gain.value = 0; }
 
-  function animateScene(sc, t, dt, riderX, riderY, riderZ) {
+  /* Idle, then alert, then startled: what a big animal does when a bicycle
+     comes down the hill at it. Nothing here MOVES an animal — the collision
+     body is fixed in the deterministic core — so all of it is head, ears,
+     tail and a shift of weight, which is plenty. */
+  var ALERT_R = 34;       /* it looks up from here in */
+  var STARTLE_R = 11;     /* and properly flinches from here in */
+
+  function animateFauna(sc, t, dt, who) {
+    var list = sc.fauna;
+    if (!list || !list.length) return;
+    for (var i = 0; i < list.length; i++) {
+      var f = list[i], a = f.a;
+
+      /* how close is the nearest rider, and which way are they? */
+      var near = 1e9, nx = 0, nz = 0;
+      for (var w = 0; w < who.length; w++) {
+        var dx = who[w].x - f.x, dz = who[w].z - f.z;
+        var d2 = dx * dx + dz * dz;
+        if (d2 < near) { near = d2; nx = dx; nz = dz; }
+      }
+      near = Math.sqrt(near);
+      /* far away costs almost nothing: idle only, no maths for the head */
+      if (near > 120) { f.alert += (0 - f.alert) * Math.min(1, 2 * dt); }
+      else {
+        var want = near < STARTLE_R ? 1 : near < ALERT_R ? 0.55 : 0;
+        f.alert += (want - f.alert) * Math.min(1, (want > f.alert ? 7 : 1.4) * dt);
+      }
+      var k = f.alert;
+      var ph = t * f.rate + f.ph;
+
+      /* the head: grazing when calm, up and turned to the rider when not */
+      if (a.head) {
+        var graze = (a.graze || 0) + Math.sin(ph * 0.9) * 0.06;
+        a.head.rotation.x = graze * (1 - k) + (a.kind === "rhino" ? 0.1 : -0.12) * k;
+        /* turn to face the intruder, but only as far as a neck really goes */
+        var toRider = Math.atan2(nx, nz) - f.rot;
+        while (toRider > Math.PI) toRider -= 6.283;
+        while (toRider < -Math.PI) toRider += 6.283;
+        var turn = Math.max(-1.1, Math.min(1.1, toRider));
+        a.head.rotation.y = turn * k + Math.sin(ph * 0.55) * 0.14 * (1 - k);
+      }
+      /* ears swivel forward and flick */
+      var flick = Math.max(0, Math.sin(ph * 2.1 + 1.7)) * Math.pow(Math.abs(Math.sin(ph * 0.7)), 6);
+      if (a.earL) a.earL.rotation.z = -0.25 * k - flick * 0.5;
+      if (a.earR) a.earR.rotation.z = 0.25 * k + flick * 0.5;
+      /* an elephant's ears are the whole story: they fan hard when bothered */
+      if (a.kind === "elephant") {
+        var fan = Math.sin(ph * 1.5) * (0.12 + k * 0.5);
+        if (a.earL) a.earL.rotation.y = 0.5 + fan;
+        if (a.earR) a.earR.rotation.y = -0.5 - fan;
+        if (a.trunk) a.trunk.rotation.x = 0.35 + Math.sin(ph * 0.8) * 0.22 - k * 0.75;
+      }
+      /* the tail: a slow swish, faster when the rider is close */
+      if (a.tail) {
+        a.tail.rotation.z = Math.sin(ph * (1.3 + k * 2.6)) * (0.18 + k * 0.3);
+        a.tail.rotation.x = -k * 0.5;
+      }
+      /* weight shifts back off the front feet as it tenses */
+      if (a.body) a.body.rotation.x = -k * 0.06 + Math.sin(ph * 0.7) * 0.012;
+      /* and the whole animal braces, without ever leaving its spot */
+      f.g.rotation.z = Math.sin(ph * 1.1) * 0.01 + Math.sin(t * 9 + f.ph) * 0.02 * Math.max(0, k - 0.6);
+    }
+  }
+
+  function animateScene(sc, t, dt, riderX, riderY, riderZ, who) {
     for (var i = 0; i < sc.clouds.length; i++) {
       sc.clouds[i].position.x += Math.sin(i * 1.7) * 0.7 * dt;
     }
-    /* bat rivers: every bat flies its own line down the valley */
+    /* Bat rivers. Every bat flies its own line — its own airspeed, its own
+       angle across the valley, its own wing beat — and when one runs off the
+       end it is recycled alone, so the river keeps streaming instead of the
+       whole cloud snapping back. The wing beat is a squash across the
+       wingspan, which from underneath is exactly what wings look like. */
+    /* anchored on the TRAILING rider: the window reaches 300 m ahead and only
+       70 m behind, so following the leader would fly the second player
+       through empty sky */
+    var anchor = (who && who.length) ? who[0] : { x: riderX || 0, z: riderZ || 0 };
+    for (var wq = 1; wq < (who ? who.length : 0); wq++) {
+      if (who[wq].z < anchor.z) anchor = who[wq];
+    }
+    var batAnchorZ = anchor.z, batAnchorX = anchor.x;
+
+    /* mist lies on the trail ahead of you, and there is always some of it */
+    if (sc.mist && sc.mist.length) {
+      var mw = sc.world, mz0 = batAnchorZ - 40, mSpan = 340;
+      for (var mq = 0; mq < sc.mist.length; mq++) {
+        var mp = sc.mist[mq];
+        mp.lat += mp.drift * dt;
+        if (mp.lat > 26) mp.lat -= 52; else if (mp.lat < -26) mp.lat += 52;
+        var mzz = mz0 + ((mp.z - mz0) % mSpan + mSpan) % mSpan;
+        mp.z = mzz;
+        var mi = Math.max(0, Math.min(mw.trailN - 1, Math.floor(mzz / 5)));
+        var mtp = mw.trail[mi];
+        mp.sp.position.set(mtp.x + mp.lat, mtp.y + mp.lift, mzz);
+      }
+    }
+
+    /* ---- rain: one uniform advanced per frame, nothing per drop ---- */
+    if (sc.rain) {
+      var spd = (run && run.st) ? Math.sqrt(run.st.vx * run.st.vx + run.st.vz * run.st.vz) : 0;
+      var dr = sc.rainDrift, bx = sc.rain.material.uniforms.uBox.value;
+      dr.x += 4.5 * dt;                    /* a steady slant of wind */
+      dr.y -= (24 + 10 * sc.wxK) * dt;     /* fall rate */
+      dr.z += 1.5 * dt;
+      dr.x %= bx.x; dr.y %= bx.y; dr.z %= bx.z;
+      var u = sc.rain.material.uniforms;
+      /* ride into it and the streaks lie over and stretch out */
+      u.uLean.value.set(0.22 + spd * 0.035, spd * 0.012);
+      u.uLen.value = 1 + spd * 0.09;
+    }
+
+    /* ---- lightning: rare, soft, and never twice in a hurry ---- */
+    if (sc.bolts > 0 && !reducedMotion) {
+      if (sc.nextFlash === 0) sc.nextFlash = t + 7 + Math.random() * 12;
+      if (t >= sc.nextFlash) {
+        sc.flashT = t;
+        sc.nextFlash = t + 12 + Math.random() * 16;
+        SFX.thunder(2.0 + Math.random() * 4.5);
+      }
+      var age = t - sc.flashT;
+      /* a double blink: up fast, most of the way down, up again, then out */
+      sc.flash = age < 0 || age > 0.34 ? 0
+        : age < 0.05 ? age / 0.05
+        : age < 0.13 ? 1 - (age - 0.05) / 0.08 * 0.75
+        : age < 0.18 ? 0.25 + (age - 0.13) / 0.05 * 0.6
+        : 1 - (age - 0.18) / 0.16;
+      sc.flash = Math.max(0, Math.min(1, sc.flash)) * 0.55;
+      if (sc.hemi) sc.hemi.intensity = sc.hemiI0 * (1 + sc.flash * 2.6);
+      if (sc.amb) sc.amb.intensity = sc.ambI0 * (1 + sc.flash * 3.2);
+      if (sc.scene.fog && sc.fogBase) {
+        sc.scene.fog.color.copy(sc.fogBase).lerp(FLASH_COL, sc.flash * 0.75);
+      }
+    }
+    if (sc.wxK > 0) rainHiss(muted ? 0 : Math.min(1, sc.wxK));
+    var batGroundY = riderY !== undefined ? riderY : 0;
     for (i = 0; i < sc.batStreams.length; i++) {
       var bs = sc.batStreams[i];
-      var list = bs.bats, arr = bs.arr, span = bs.z1 - bs.z0;
+      var list = bs.bats, d3 = bs.dummy;
+      var zLo = batAnchorZ - bs.behind, zHi = batAnchorZ + bs.ahead;
+      var span = zHi - zLo;
       for (var bq = 0; bq < list.length; bq++) {
         var bt = list[bq];
-        bt.z += bt.spd * dt;
-        bt.x += (bt.drift + Math.sin(t * 0.35 + bt.ph) * bs.xSway) * dt;
-        if (bt.z > bs.z1) {                       /* recycle this one alone */
+        /* upstream, against the rider, so they sweep past instead of hanging */
+        bt.z -= bt.spd * dt;
+        bt.x += bt.cross * bt.spd * dt;
+        /* the window travels with the rider: anything that drops off the back
+           comes straight back in at the far end, with a fresh line */
+        if (bt.z < zLo) {
+          bt.z += span;
+          bt.x = batAnchorX + (Math.random() - 0.5) * bs.wide * 2;
+          bt.alt = bs.alt + Math.random() * bs.spread;
+        } else if (bt.z > zHi) {
           bt.z -= span;
-          bt.x = (Math.random() - 0.5) * 180;
-          bt.alt = 40 + Math.random() * 45;
         }
-        if (bt.x > 150) bt.x -= 300;
-        else if (bt.x < -150) bt.x += 300;
-        arr[bq * 3] = bt.x;
-        arr[bq * 3 + 1] = -bt.z * bs.slope + bt.alt + Math.sin(t * bt.fr + bt.ph) * bt.amp;
-        arr[bq * 3 + 2] = bt.z;
+        var dx = bt.x - batAnchorX;
+        if (dx > bs.wide) bt.x -= bs.wide * 2;
+        else if (dx < -bs.wide) bt.x += bs.wide * 2;
+
+        var beat = Math.sin(t * bt.fr + bt.ph);
+        /* altitude is measured above the valley floor, which falls away with z */
+        d3.position.set(
+          bt.x,
+          batGroundY - (bt.z - batAnchorZ) * bs.slope + bt.alt + beat * bt.amp,
+          bt.z
+        );
+        /* nose into the flight direction, and bank into the turn */
+        d3.rotation.set(0, Math.atan2(bt.cross, -1), beat * 0.5);
+        /* the beat: wings sweep in on the downstroke, out on the upstroke */
+        d3.scale.set(bt.size * (0.42 + 0.58 * Math.abs(beat)), 1, bt.size * 0.72);
+        d3.updateMatrix();
+        bs.mesh.setMatrixAt(bq, d3.matrix);
       }
-      bs.geo.attributes.position.needsUpdate = true;
+      bs.mesh.instanceMatrix.needsUpdate = true;
     }
     /* birds wheel in slow circles, wings flapping */
     for (i = 0; i < sc.birds.length; i++) {
@@ -2802,6 +3531,8 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       var sm = sc.swayMats[i];
       if (sm.userData.swayShader) sm.userData.swayShader.uniforms.uZbTime.value = t;
     }
+    animateFauna(sc, t, dt, who || [{ x: riderX || 0, z: riderZ || 0 }]);
+
     /* crocs yawn slowly and sweep their tails; the river flows */
     for (i = 0; i < sc.crocs.length; i++) {
       var cr = sc.crocs[i].userData;
@@ -2964,6 +3695,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   /* the tour borrows selTrack for its stages; the main menu gets its own back */
   function leaveTour() {
     tourMode = false;
+    wxForced = null;              /* give the menu its own weather back */
     pendingFault = null;
     if (preTourTrack && CORE.TRACK3_ORDER.indexOf(selTrack) < 0) selectTrack(preTourTrack);
     preTourTrack = null;
@@ -2993,7 +3725,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
 
   function openTour() {
     if (!TOUR) return;
-    setPlayers(1);                 /* the tour is one rider, one clock */
+    setPlayers(1, false);          /* the tour is one rider, one clock */
     if (!tour) tour = loadTour() || TOUR.freshTour(profile.name);
     if (!preTourTrack) preTourTrack = CORE.TRACK3_ORDER.indexOf(selTrack) >= 0 ? selTrack : CORE.TRACK3_ORDER[0];
     tour.rider = profile.name || tour.rider;
@@ -3171,6 +3903,10 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     /* Seeded off the rider's race number and the stage, so a rider's luck is
        their own and riding the same leg again meets the same mechanical.
        You can ride better; you cannot re-roll your luck. */
+    /* the roadbook says 🌧️, so the roadbook gets rain */
+    var stW = TOUR.WEATHER[st.weather] || {};
+    wxForced = stW.rainK >= 0.8 ? "rain" : stW.rainK > 0 ? "rain" : null;
+    if (stW.rainK > 0 && stW.rainK < 0.8) wxForced = "rain";
     pendingFault = TOUR.rollFault(st, tour.condition, tour.bag, tour.number + tour.stage);
     selTrack = st.id;
     tourMode = true;
@@ -3282,9 +4018,11 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     }
     el.results.classList.toggle("is-finale", last);
     tourMode = false;
+    wxForced = null;
     mode = "results";
     hideRideChrome();
     stopRumble();
+    stopRain();
     SFX.finish();
     showOnly(el.results);
   }
@@ -3295,6 +4033,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     el.hud.hidden = true;          /* the turbo meter lives inside the HUD */
     if (el.hud2) el.hud2.hidden = true;
     el.countdown.hidden = true;
+    if (el.countdown2) el.countdown2.hidden = true;
     el.touch.hidden = true;
     el.hint.hidden = true;
     if (el.exitBtn) el.exitBtn.hidden = true;
@@ -3346,6 +4085,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     el.results.hidden = false;
     hideRideChrome();
     stopRumble();
+    stopRain();
     SFX.finish();
   }
 
@@ -3417,11 +4157,13 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
 
   /* ---------- one rider or two ---------- */
 
-  function setPlayers(n) {
+  function setPlayers(n, persist) {
     n = n === 2 ? 2 : 1;
     if (n === numPlayers) return;
     numPlayers = n;
-    lsSet("zr3_players", n);
+    /* the Grand Tour forces one rider for its own duration; it must not
+       quietly throw away a two-up choice made in the menu */
+    if (persist !== false) lsSet("zr3_players", n);
     if (stageEl) stageEl.classList.toggle("is-2p", n === 2);
     var row2 = $("rider-row-2"), keys = $("two-up-keys");
     if (row2) row2.hidden = n !== 2;
@@ -3633,7 +4375,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     el.btnSound.textContent = muted ? "🔇 Sound off" : "🔊 Sound on";
     el.btnSound.setAttribute("aria-pressed", muted ? "false" : "true");
     if (el.btnDetail) el.btnDetail.textContent = lightMode ? "✨ Detail: light" : "✨ Detail: full";
-    document.querySelectorAll(".jersey").forEach(function (b) {
+    document.querySelectorAll(".jersey:not(.jersey2)").forEach(function (b) {
       b.classList.toggle("is-selected", b.getAttribute("data-jersey") === profile.jersey);
     });
     snapAllViews();
@@ -3647,8 +4389,11 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
 
   /* time-of-day chips */
   function refreshTodChips() {
-    document.querySelectorAll(".tod-chip").forEach(function (c) {
+    document.querySelectorAll("[data-tod]").forEach(function (c) {
       c.classList.toggle("is-selected", c.getAttribute("data-tod") === todSel);
+    });
+    document.querySelectorAll("[data-wx]").forEach(function (c) {
+      c.classList.toggle("is-selected", c.getAttribute("data-wx") === wxSel);
     });
   }
   refreshTodChips();
@@ -3663,7 +4408,20 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     snapAllViews();   /* menu attract loop rebuilds against the relit scene */
   });
 
-  document.querySelectorAll(".jersey").forEach(function (b) {
+  /* weather chips */
+  var wxRow = $("wx-row");
+  if (wxRow) wxRow.addEventListener("click", function (e) {
+    var chip = e.target.closest("[data-wx]");
+    if (!chip) return;
+    wxSel = chip.getAttribute("data-wx");
+    if (!WX_MODES[wxSel]) wxSel = "clear";
+    lsSet("zr3_wx", wxSel);
+    refreshTodChips();
+    refreshMenu();
+    snapAllViews();
+  });
+
+  document.querySelectorAll(".jersey:not(.jersey2)").forEach(function (b) {
     b.addEventListener("click", function () {
       profile.jersey = b.getAttribute("data-jersey");
       lsSet("zr_profile", profile);
@@ -3685,7 +4443,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   $("btn-sound").addEventListener("click", function () {
     muted = !muted;
     lsSet("zr3_muted", muted);
-    if (muted) stopRumble();
+    if (muted) { stopRumble(); stopRain(); }
     refreshMenu();
   });
 
@@ -3910,19 +4668,19 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       var dur = b.wc.armand.timeMs / 1000;
       var gt = menuT % (dur + 2.5);
       var gp = CORE.ghostPosAt3(b.wc.armand, Math.min(gt, dur));
-      if (!menuGhostRig || menuGhostRig.sceneId !== selTrack + "|" + todSel) {
+      if (!menuGhostRig || menuGhostRig.sceneId !== selTrack + "|" + todSel + "|" + curWx().id) {
         if (menuGhostRig && menuGhostRig.rig.group.parent) menuGhostRig.rig.group.parent.remove(menuGhostRig.rig.group);
         var rig = buildRiderMesh(0x1F7A48);
         enableRigShadows(rig);
         rig.blob.visible = lightMode;
         b.sc.scene.add(rig.group);
-        menuGhostRig = { rig: rig, sceneId: selTrack + "|" + todSel };
+        menuGhostRig = { rig: rig, sceneId: selTrack + "|" + todSel + "|" + curWx().id };
       }
       placeRig(menuGhostRig.rig, gp.x, gp.y, gp.z, gp.yaw, 0);
       menuGhostRig.rig.wheelF.rotation.x -= 14 * dt;
       menuGhostRig.rig.wheelB.rotation.x -= 14 * dt;
       updateCoins(b.sc, b.wc.world, null, menuT);
-      animateScene(b.sc, menuT, dt);
+      animateScene(b.sc, menuT, dt, gp.x, gp.y, gp.z, [{ x: gp.x, z: gp.z }]);
       /* orbiting-ish chase cam for the attract loop */
       var st0 = { x: gp.x, y: gp.y, z: gp.z, yaw: gp.yaw, vx: 0, vz: 0, offTrail: false, onGround: true };
       updateCamera(views[0], st0, dt, b.wc.world);
@@ -3944,9 +4702,12 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       run.countT -= dt;
       var n = Math.ceil(run.countT);
       if (n !== run.lastBeep && n > 0) { run.lastBeep = n; SFX.count(false); }
-      el.countdown.textContent = run.countT > 0 ? String(Math.max(1, n)) : "GO!";
+      var cdTxt = run.countT > 0 ? String(Math.max(1, n)) : "GO!";
+      el.countdown.textContent = cdTxt;
+      if (el.countdown2) el.countdown2.textContent = cdTxt;
       if (run.countT <= -0.7) {
         el.countdown.hidden = true;
+        if (el.countdown2) el.countdown2.hidden = true;
         el.hint.classList.add("is-fading");   /* linger, then melt away */
         mode = "race";
       } else if (run.countT <= 0 && run.lastBeep !== 0) {
@@ -3957,9 +4718,8 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
         updateCamera(r.view, r.st, dt, world);
       });
       animateGhosts(0, dt);
-      updateCoins(sc, world, run.taken, run.st.t);
-      animateScene(sc, run.st.t, dt, run.st.x, run.st.y, run.st.z);
-      aimRiderSun(sc);
+      updateCoins(sc, world, run.taken, run.clock);
+      animateScene(sc, run.clock, dt, run.st.x, run.st.y, run.st.z, riderSpots());
       updateHUD(world);
       renderFrame(sc);
       return;
@@ -3987,8 +4747,8 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
           inp.spinR = aloft && inp.right;
           ev.length = 0;
           CORE.stepRider3(rr.st, inp, world, ev, run.taken);
-          handleEvents(ev, rr.st, rr.view);
-          if (rr.step % 6 === 0) {
+          handleEvents(ev, rr.st, rr.view, rr.idx);
+          if (players() === 1 && rr.step % 6 === 0) {
             rr.recorder.push([Math.round(rr.st.x * 10), Math.round(rr.st.y * 10), Math.round(rr.st.z * 10), Math.round(rr.st.yaw * 100)]);
           }
           rr.step++;
@@ -4000,6 +4760,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
           }
         }
         run.step++;
+        run.clock += DT;
         acc -= DT;
         steps++;
       }
@@ -4021,15 +4782,21 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
         }
       }
 
+      /* a rider who is home watches whoever is still out there, rather than
+         staring at their own parked bike for the rest of the grace period */
+      var live = null;
+      for (var li = 0; li < run.riders.length; li++) {
+        if (!run.riders[li].st.finished) { live = run.riders[li]; break; }
+      }
       eachRider(function (r) {
         animatePlayer(r, dt);
-        updateCamera(r.view, r.st, dt, world);
+        updateCamera(r.view, (r.st.finished && live) ? live.st : r.st, dt, world);
       });
-      animateGhosts(run.st.t, dt);
-      updateCoins(sc, world, run.taken, run.st.t);
-      animateScene(sc, run.st.t, dt, run.st.x, run.st.y, run.st.z);
+      var lead = live || run.riders[0];
+      animateGhosts(run.clock, dt);
+      updateCoins(sc, world, run.taken, run.clock);
+      animateScene(sc, run.clock, dt, lead.st.x, lead.st.y, lead.st.z, riderSpots());
       updateDust(dt);
-      aimRiderSun(sc);
       updateHUD(world);
       renderFrame(sc);
       if (location.search.indexOf("dbg3d") !== -1) {
@@ -4056,6 +4823,13 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   refreshLeaderboard();
   /* a saved two-up choice survives a reload — restored here, once everything
      the menu reads from actually exists */
-  if (lsGet("zr3_players", 1) === 2) setPlayers(2);
+  /* two children cannot share one set of thumb controls, so a touch-only
+     device is not offered the two-up mode at all */
+  if (isTouch && !(window.matchMedia && window.matchMedia("(pointer: fine)").matches)) {
+    var chip2 = document.querySelector('[data-players="2"]');
+    if (chip2) chip2.hidden = true;
+  } else if (lsGet("zr3_players", 1) === 2) {
+    setPlayers(2);
+  }
   requestAnimationFrame(loop);
 })();

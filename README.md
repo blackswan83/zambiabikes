@@ -18,7 +18,7 @@ Zambia Tour**, a ten-stage rally around the whole country.
 | --- | --- |
 | `index.html` | Home — animated hero, next-ride countdown, club overview |
 | `tours.html` | Tour & event calendar with "Request to join" flow |
-| `game.html` | **Zambia Rush 3D** — the full 3D downhill game |
+| `game.html` | **Zambia Rush 3D** — the full 3D downhill game (one player or two, same screen) |
 | `game2d.html` | **Zambia Rush Classic** — the 2D version, runs on anything |
 | `garage.html` | **The Garage** — build and mod your bike in 3D |
 | `join.html` | Membership request form (vetted, never automatic) |
@@ -66,7 +66,11 @@ two layers:
   injection), a real reflective `Water` plunge pool under the animated Mosi
   Falls (plus spray, foam rings, sun shafts, rainbow and a distance-based
   rumble), per-instance colour-varied vegetation, wheeling bird flocks,
-  low-poly wildlife, an articulated rider with crank-driven pedalling legs,
+  **wildlife that notices you** — elephants, rhinos, hippos, zebra and antelope
+  graze on their own clocks, lift their heads, swivel their ears and swish their
+  tails, and turn to face a rider who gets close, all strictly in place because
+  the collision bodies are fixed in the deterministic core; a rider with
+  crank-driven pedalling legs,
   a banking chase camera with landing dips, and hazy layered horizon
   ridges. The Detail: light toggle falls back to the cheap pipeline (gradient
   sky dome, no composer/shadows/water, fewer props) for older devices. All
@@ -92,6 +96,44 @@ clicks and tire pressure psi — real setup mechanics with recommended bands
 and verdicts, all of which change the ride. Dream parts are **earned by
 riding** (finish tracks, beat ghosts, collect coins — tracked in
 `zr3_career`), never bought.
+
+**Two players, one screen** — two children on one keyboard, racing each other
+at the same time. The canvas is cut into a top strip and a bottom strip; a
+downhill rider needs to see left and right to pick a line round a tree, so the
+split runs horizontally and each of them keeps the full width, and the stage
+goes from 16:9 to 4:3 so both strips still have some height. Player one takes
+the left of the keyboard (**W A S D**, space to jump, **Q** for turbo), player
+two the right (**arrows**, **/** to jump, **enter** for turbo) — hop is
+deliberately not on either Shift, because five taps of Shift raises the Windows
+Sticky Keys dialog and would stop a race dead. Each has their own name, jersey,
+camera, readout and turbo. First past the arch wins; the other gets 45 seconds
+to get home before the flag drops, so a race can never stall on a kid stuck in a
+river. Two-up is a race between *them*: no medals, no personal bests, no ghost
+recording and nothing goes to the club board.
+
+Under the hood the EffectComposer is sized to **one view**, not to the canvas —
+three.js applies a render target's own viewport while rendering into it and only
+applies the renderer's viewport to the final draw, so a half-height composer
+processes half-height buffers and its last pass lands in whichever strip the
+scissor points at. Both players keep bloom and FXAA, with no wasted fill and no
+bloom bleeding across the seam. Field of view is solved from a target
+*horizontal* angle rather than set vertically, so a wide, short strip does not
+fish-eye.
+
+**Weather.** A chip row beside the time-of-day chips: Clear, 🌧️ Rain, ⛈️ Storm.
+Rain is a single instanced sheet whose vertex shader wraps every streak inside a
+box anchored to the camera, so the CPU never touches a drop and both players ride
+through the same downpour; the streaks lean back and stretch as you speed up. The
+world goes grey-green and closes in (heavier fog, thicker cloud, a flat sun, more
+fill light so it never goes black), wheels throw water instead of dust, mist lies
+on the trail, and a storm adds soft, infrequent, `prefers-reduced-motion`-aware
+lightning with thunder that rolls in afterwards. It also **changes how the bike
+rides** — less bite when you turn, a lot less on the brakes — and it does that
+through the bike's own stats, so `js/game3d-core.js` never learns that rain
+exists and the AI ghosts stay dry as the fixed benchmark. A wet run is
+deliberately locked out of personal bests, medals, unlocks and the club board.
+Grand Tour legs whose roadbook says 🌧️ get real rain, and their par times carry
+a matching allowance.
 
 **The Great Zambia Tour** (`js/tour.js` + the tour screens in `js/game3d.js`):
 ten legs and 16.5 km around the real country, on one clock that never stops —
@@ -128,7 +170,9 @@ lap of the whole country in `zr3_tourbest`.
 
 Five 3D mountains: **Miombo Meander** (1.25 km), **Baobab Ridge** (1.5 km,
 sunset), **Kasanka Bat Storm** (1.4 km of dusk swamp forest under rivers of
-ten million straw-coloured fruit bats, with mist on the ground), **Lower Zambezi** (1.6 km riverside — a flowing river with sandy
+ten million straw-coloured fruit bats flying on instanced wing cards with a real
+wing beat, recycled around the rider so the sky is always full, with mist lying
+on the trail), **Lower Zambezi** (1.6 km riverside — a flowing river with sandy
 beaches, reed beds, hippo pods, and crocodiles basking right on the trail
 edge; clip one and you crash, ride into the river and you splash), and
 **Mosi Falls Drop** (1.75 km canyon). Armand and Arthur's ghosts
@@ -150,6 +194,8 @@ which shares the same design and its own `ZRG1…` ghost codes.
   characters, and live only on the player's device.
 - Ghost Codes are validated and sanitized on import and contain nothing but
   rider positions, a time and a first name.
+- **Two-player is local only** — two children on one sofa sharing one keyboard.
+  There is no networked play, no lobby, no matchmaking and nobody to meet.
 
 ## Wiring it up for real
 
