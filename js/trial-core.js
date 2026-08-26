@@ -577,7 +577,7 @@
       nx: nx, nz: nz, z0: z0, x0: -X_HALF, step: GRID_STEP,
       H: H, TD: TD, trail: pts, trailN: n, trailDS: TRAIL_DS,
       wid: F.wid, bank: F.bank, rough: F.rough,
-      features: features, gates: [], props: [], hash: {}, hashCell: 8,
+      features: features, gates: [], props: [], cover: [], hash: {}, hashCell: 8,
       finishIdx: n - 3, lengthM: spec.length, xHalf: X_HALF
     };
 
@@ -615,8 +615,8 @@
     for (i = 0; i < table.length; i++) totalW += table[i][1];
 
     var area = (X_HALF * 2) * (world.nz * GRID_STEP);
-    var count = Math.floor(area * 0.0022 * spec.treeDensity);
-    count = Math.min(count, 5200);
+    var count = Math.floor(area * 0.0062 * spec.treeDensity);
+    count = Math.min(count, 7000);
 
     for (i = 0; i < count; i++) {
       var px = -X_HALF + rng() * X_HALF * 2;
@@ -657,6 +657,8 @@
       }
     }
 
+    placeCover(world, spec, mulberry32(spec.seed + 4457));
+
     /* spatial hash for collision, solid props only */
     for (i = 0; i < world.props.length; i++) {
       var pr = world.props[i];
@@ -664,6 +666,34 @@
       var key = Math.floor(pr.x / world.hashCell) + "," + Math.floor(pr.z / world.hashCell);
       (world.hash[key] || (world.hash[key] = [])).push(i);
     }
+  }
+
+  /* Ground cover: tufts and scrub crowding the trail corridor. Kept out of
+     world.props so nothing here can ever be collided with, and generated at
+     a density the renderer can instance in one draw call per type. */
+  function placeCover(world, spec, rng) {
+    var cover = [];
+    var pts = world.trail;
+    var perStep = 9 * (0.6 + spec.treeDensity * 0.5);
+    for (var i = 2; i < world.trailN - 2; i++) {
+      var p = pts[i];
+      var wid = world.wid[i];
+      for (var k = 0; k < perStep; k++) {
+        if (rng() < 0.35) continue;
+        /* push the tufts out past the worn line, thinning with distance */
+        var lat = (wid * 0.75 + Math.pow(rng(), 1.7) * 30) * (rng() < 0.5 ? -1 : 1);
+        var along = (rng() - 0.5) * TRAIL_DS;
+        var cx = p.x + Math.cos(p.yaw) * lat + Math.sin(p.yaw) * along;
+        var cz = p.z - Math.sin(p.yaw) * lat + Math.cos(p.yaw) * along;
+        if (Math.abs(cx) > X_HALF - 8) continue;
+        cover.push({
+          type: rng() < 0.82 ? "grass" : "fern",
+          x: cx, z: cz, y: heightAt(world, cx, cz),
+          s: 0.6 + rng() * 0.9, rot: rng() * 6.28, r: 0
+        });
+      }
+    }
+    world.cover = cover;
   }
 
   /* ================= terrain sampling ================= */

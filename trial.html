@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trial — the freeride game — Zambia Bikes</title>
+<meta name="description" content="Trial is the free freeride mountain-bike game from Zambia Bikes. Every mountain is generated from one number: ride Nyika, Miombo, the Kalahari, Batoka Gorge and the Mafinga Hills, spin and flip off jumps that were never built the same way twice, and keep the bail bar full. No chat, ever.">
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/styles.css">
+<link rel="stylesheet" href="css/game.css">
+<link rel="stylesheet" href="css/trial.css">
+</head>
+<body class="page-game">
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="site-header">
+  <div class="container header-inner">
+    <a class="brand" href="index.html" aria-label="Zambia Bikes — home">
+      <svg class="brand-mark" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+        <defs>
+          <linearGradient id="bmSky" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#FFE9A8"/><stop offset="1" stop-color="#E8791D"/>
+          </linearGradient>
+          <clipPath id="bmDisc"><circle cx="32" cy="32" r="28"/></clipPath>
+        </defs>
+        <circle cx="32" cy="32" r="31" fill="#0C2E1C"/>
+        <circle cx="32" cy="32" r="28" fill="url(#bmSky)"/>
+        <g clip-path="url(#bmDisc)">
+          <circle cx="32" cy="26" r="9" fill="#FFF3C4"/>
+          <path d="M 2 46 Q 18 38 34 44 T 62 43 L 62 64 L 2 64 Z" fill="#0C2E1C"/>
+          <path d="M 20 44 C 19.5 38 19.6 34 19 30 C 15 28.6 11.4 25.6 10 22 C 13 24.2 16.2 25.7 19 26 C 18.2 23.6 16.6 21.6 14.6 19.6 C 17.6 21 19.8 23 21.2 25 C 21.6 21.6 21 18.4 19.8 15.4 C 22.4 18.2 23.7 21.7 24 25 C 25.8 22.8 28.4 21.4 32 21 C 29.4 23.2 27.2 25.4 25.8 27.8 C 28.8 27.4 31.4 27.8 33.6 29 C 30.6 29.4 27.6 30.4 25.4 31.6 C 24.8 35.6 24.8 39.6 25.4 44 Z" fill="#0C2E1C"/>
+        </g>
+      </svg>
+      <span class="brand-word">Zambia<em>Bikes</em></span>
+    </a>
+    <button class="nav-toggle" aria-expanded="false" aria-controls="site-nav" aria-label="Open menu">
+      <span class="nav-toggle-bars"></span>
+    </button>
+    <nav class="site-nav" id="site-nav" aria-label="Main">
+      <a href="index.html">Home</a>
+      <a href="tours.html">Tours &amp; Events</a>
+      <a href="game.html">Zambia Rush</a>
+      <a href="trial.html" class="is-active" aria-current="page">Trial</a>
+      <a href="about.html">Our Story</a>
+      <a href="safety.html">Parents &amp; Safety</a>
+      <a class="btn btn--copper btn--nav" href="join.html">Join the Club</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+  <section class="page-hero">
+    <div class="container">
+      <p class="kicker">Free to play · No chat · No ads · No downloads</p>
+      <h1>Trial <em>freeride</em> 🏔️</h1>
+      <p class="lede">Pick a mountain and it grows itself — the ridge, the trail, the banked corners and
+      every jump cut into them, all from one number you can write down and share. Send the lips, spin
+      and flip on the way down, and keep the bail bar full: style is the only thing that patches you up.</p>
+    </div>
+    <div class="hero-hills" aria-hidden="true"><svg viewBox="0 0 1440 90" preserveAspectRatio="none" focusable="false"><path d="M0 60 Q 240 20 480 52 T 960 46 T 1440 40 L 1440 90 L 0 90 Z" fill="#FFF9EE"/></svg></div>
+  </section>
+
+  <section class="section">
+    <div class="container game-shell">
+
+      <div class="game-stage trial-stage" id="trial-stage">
+        <canvas id="trial-canvas" width="960" height="540" aria-label="Trial — freeride mountain-biking game. Use the keyboard or the on-screen buttons to play."></canvas>
+        <div class="stage-vignette" aria-hidden="true"></div>
+        <button type="button" class="fs-btn" id="btn-fs" aria-label="Full screen" title="Full screen (F)">⛶</button>
+
+        <!-- ---------- HUD ---------- -->
+        <div class="hud trial-hud" id="hud" hidden>
+          <div class="hud-top">
+            <span class="hud-chip" id="hud-time">0:00.0</span>
+            <span class="hud-chip" id="hud-speed">0 km/h</span>
+          </div>
+
+          <div class="t-style">
+            <span class="t-style__num" id="hud-style">0</span>
+            <span class="t-style__label">style</span>
+            <span class="t-combo" id="hud-combo" hidden>×1</span>
+          </div>
+
+          <div class="t-bail" aria-label="Bail bar">
+            <div class="t-bail__fill" id="hud-bail-fill"></div>
+            <span class="t-bail__cap" aria-hidden="true"></span>
+          </div>
+
+          <canvas class="t-mini" id="minimap" width="150" height="210" aria-hidden="true"></canvas>
+
+          <div class="t-objective" id="hud-objective">
+            <div class="ob-fill"></div>
+          </div>
+
+          <div class="t-trick" id="hud-trick" hidden></div>
+          <div class="t-countdown" id="hud-countdown" hidden>Ready</div>
+
+          <div class="hud-progress"><div class="hud-progress__fill" id="hud-progress-fill"></div><span class="hud-progress__flag" aria-hidden="true">🏁</span></div>
+        </div>
+
+        <!-- ---------- touch controls ---------- -->
+        <div class="touch-controls trial-touch" id="touch-controls" hidden>
+          <div class="tc-cluster tc-left-cluster">
+            <button type="button" class="tc-btn" id="tc-left" aria-label="Steer left / spin left">◀</button>
+            <button type="button" class="tc-btn" id="tc-right" aria-label="Steer right / spin right">▶</button>
+          </div>
+          <div class="tc-cluster tc-right-cluster">
+            <button type="button" class="tc-btn tc-btn--whip" id="tc-whipl" aria-label="Whip left">↰</button>
+            <button type="button" class="tc-btn tc-btn--whip" id="tc-whipr" aria-label="Whip right">↱</button>
+            <button type="button" class="tc-btn tc-btn--brake" id="tc-brake" aria-label="Brake / front flip">▼</button>
+            <button type="button" class="tc-btn tc-btn--hop" id="tc-hop" aria-label="Hop">⤒</button>
+            <button type="button" class="tc-btn tc-btn--pedal" id="tc-pedal" aria-label="Pedal / back flip">▲</button>
+          </div>
+        </div>
+
+        <!-- ---------- the map ---------- -->
+        <div class="screen screen--map" id="screen-map">
+          <div class="screen-inner">
+            <div class="map-head">
+              <div>
+                <p class="kicker">The career</p>
+                <h2>Pick your mountain</h2>
+              </div>
+              <div class="rep"><b id="rep-total">0</b><span>rep</span></div>
+            </div>
+
+            <div class="career-scroll">
+              <div id="career-stages"></div>
+            </div>
+
+            <div class="map-side">
+              <div class="side-card">
+                <h3>Free ride</h3>
+                <p>Any mountain, any weather, no objective. Leave the code blank for a brand new one.</p>
+                <label class="fld"><span>Where</span><select id="fr-biome"></select></label>
+                <label class="fld"><span>Twist</span><select id="fr-mod"></select></label>
+                <label class="fld"><span>Trail code</span><input id="fr-code" type="text" placeholder="e.g. 5PR-MAP" maxlength="9" autocomplete="off" spellcheck="false"></label>
+                <button type="button" class="btn btn--copper btn--small" id="btn-freeride">Drop in</button>
+              </div>
+              <div class="side-card">
+                <h3>Today's mountain</h3>
+                <p>The same hill for everyone, everywhere, until midnight. One run, best style wins.</p>
+                <button type="button" class="btn btn--forest btn--small" id="btn-daily">Ride today's</button>
+              </div>
+              <div class="side-actions">
+                <button type="button" class="btn btn--ghost btn--small" id="btn-howto">How to play</button>
+                <button type="button" class="btn btn--ghost btn--small" id="btn-assist" aria-pressed="true">🪂 Landing assist: on</button>
+                <button type="button" class="btn btn--ghost btn--small" id="btn-detail">✨ Detail: full</button>
+                <a class="btn btn--ghost btn--small" href="game.html">🎮 Zambia Rush</a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ---------- briefing ---------- -->
+        <div class="screen screen--brief" id="screen-brief" hidden>
+          <div class="screen-inner brief-inner">
+            <p class="kicker">Trail code <b id="brief-code">···-···</b></p>
+            <h2 id="brief-where">Nyika Plateau</h2>
+            <p class="brief-desc" id="brief-desc"></p>
+            <p class="brief-mod" id="brief-mod"></p>
+            <p class="brief-obj-label">Your objective</p>
+            <p class="brief-obj" id="brief-obj"></p>
+            <p class="brief-meta" id="brief-meta"></p>
+            <div class="brief-actions">
+              <button type="button" class="btn btn--copper btn--big" id="btn-start">Drop in 🚵</button>
+              <button type="button" class="btn btn--ghost" id="btn-brief-back">Back to the map</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ---------- how to play ---------- -->
+        <div class="screen screen--howto" id="screen-howto" hidden>
+          <div class="screen-inner howto-inner">
+            <h2>How to ride</h2>
+            <div class="howto-cols">
+              <div>
+                <h3>On the ground</h3>
+                <ul class="howto-list">
+                  <li><kbd>W</kbd> pedal</li>
+                  <li><kbd>S</kbd> brake — the fix for every jump that scares you</li>
+                  <li><kbd>A</kbd> <kbd>D</kbd> steer, and lean into the berms</li>
+                  <li><kbd>Space</kbd> <em>hold</em> to squash the bike, <em>release</em> to hop. Let go right on a lip for extra height.</li>
+                </ul>
+              </div>
+              <div>
+                <h3>In the air</h3>
+                <ul class="howto-list">
+                  <li><kbd>A</kbd> <kbd>D</kbd> spin — 360, 720, keep going</li>
+                  <li><kbd>W</kbd> <kbd>S</kbd> backflip and frontflip</li>
+                  <li><kbd>Q</kbd> <kbd>E</kbd> whip the back end out</li>
+                  <li>Bring it all the way round before the wheels touch, or you go down.</li>
+                </ul>
+              </div>
+              <div>
+                <h3>The bail bar</h3>
+                <ul class="howto-list">
+                  <li>Every crash takes a bite. At zero, the run is over.</li>
+                  <li>Landing tricks puts it back — the better the trick, the more you get.</li>
+                  <li>Checkpoints top you up a little and catch you when you go down.</li>
+                  <li>Chain tricks without crashing to stack the multiplier.</li>
+                </ul>
+              </div>
+            </div>
+            <p class="howto-note"><kbd>Esc</kbd> pause · <kbd>R</kbd> restart · <kbd>F</kbd> full screen</p>
+            <button type="button" class="btn btn--copper" id="btn-howto-back">Got it!</button>
+          </div>
+        </div>
+
+        <!-- ---------- pause ---------- -->
+        <div class="screen screen--pause" id="screen-pause" hidden>
+          <div class="screen-inner narrow">
+            <h2>Paused</h2>
+            <div class="stack">
+              <button type="button" class="btn btn--copper" id="btn-resume">Keep riding</button>
+              <button type="button" class="btn btn--ghost" id="btn-restart">Restart run</button>
+              <button type="button" class="btn btn--ghost" id="btn-quit">Back to the map</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ---------- results ---------- -->
+        <div class="screen screen--results" id="screen-results" hidden>
+          <div class="screen-inner narrow">
+            <h2 class="res-title" id="res-title">Run complete</h2>
+            <p class="res-sub" id="res-sub"></p>
+            <div class="res-stats" id="res-stats"></div>
+            <div class="res-extra" id="res-extra"></div>
+            <div class="stack">
+              <button type="button" class="btn btn--copper" id="btn-retry">Ride it again</button>
+              <button type="button" class="btn btn--ghost" id="btn-map">Back to the map</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen screen--fallback" id="webgl-fallback" hidden>
+          <div class="screen-inner narrow">
+            <h2>This browser can't do 3D</h2>
+            <p>Trial needs WebGL. Zambia Rush Classic runs on anything at all.</p>
+            <a class="btn btn--copper btn--big" href="game2d.html">Play Zambia Rush Classic</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="trial-blurb">
+        <h2>One number, one mountain</h2>
+        <p>Every run in Trial is grown from a seed, so a trail code like <b>5PR-MAP</b> is the whole hill:
+        the same ridge, the same corners, the same jumps in the same places, for anyone who types it in.
+        Beat a friend's score on their mountain, or send them yours.</p>
+        <p>The career runs five stages down the country — Nyika, the miombo woodland, the Kalahari sand
+        belt, Batoka Gorge and the Mafinga Hills — and the seeds come from <em>your</em> career number, so
+        your Batoka is nobody else's Batoka.</p>
+      </div>
+
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="container footer-grid">
+    <div>
+      <div class="footer-brand">
+        <img src="assets/logo.svg" alt="Zambia Bikes badge" width="64" height="64">
+        <span class="brand-word">Zambia<em>Bikes</em></span>
+      </div>
+      <p class="footer-tag">Ride wild. Ride kind. Ride Zambia.</p>
+      <p>A kids' mountain-bike club and free game, founded in 2026 by two best friends
+      and guarded by their Grown-Up Crew.</p>
+    </div>
+    <nav aria-label="Footer">
+      <h3>Explore</h3>
+      <ul class="footer-links">
+        <li><a href="index.html">Home</a></li>
+        <li><a href="tours.html">Tours &amp; Events</a></li>
+        <li><a href="game.html">Zambia Rush</a></li>
+        <li><a href="trial.html">Trial</a></li>
+        <li><a href="about.html">Our Story</a></li>
+        <li><a href="safety.html">Parents &amp; Safety</a></li>
+        <li><a href="join.html">Join the Club</a></li>
+      </ul>
+    </nav>
+    <div>
+      <h3>The Club Promise</h3>
+      <div class="footer-pledge">
+        <p>🛡️ Every member is vetted by real grown-ups before joining.</p>
+        <p>💬 No chat, no direct messages, no strangers — on the site or in the game.</p>
+        <p>✉️ Questions? <a href="mailto:hello@zambiabikes.org">hello@zambiabikes.org</a></p>
+      </div>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <div class="container">
+      <span>© <span data-year>2026</span> Zambia Bikes — built with muddy hands by Armand &amp; Arthur (both 10) and the Grown-Up Crew.</span>
+      <span>Made in Zambia 🇿🇲</span>
+    </div>
+  </div>
+</footer>
+
+<script src="js/tours-data.js"></script>
+<script src="js/main.js"></script>
+<script src="js/trial-core.js"></script>
+<script type="importmap">{ "imports": { "three": "./js/vendor/three.module.min.js" } }</script>
+<script type="module" src="js/trial.js"></script>
+</body>
+</html>
