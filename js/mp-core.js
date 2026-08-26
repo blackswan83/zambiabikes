@@ -161,14 +161,24 @@
   function removePlayer(room, id, now) {
     var before = room.players.length;
     room.players = room.players.filter(function (p) { return p.id !== id; });
-    room.finishOrder = room.finishOrder.filter(function (f) { return f.id !== id; });
+    /* Their finish is NOT struck from the order. A rider who wins and then shuts
+       the lid still won: strike them out and the crown, which is handed out by
+       position in this list, drops onto the child who came second and tells them
+       they won a race they watched somebody else win. */
     room.touchedAt = now || 0;
     /* the room outlives its founder: whoever has been there longest takes over */
     if (room.hostId === id) {
       room.hostId = room.players.length ? room.players[0].id : null;
     }
-    /* everyone left mid-race means there is no race */
+    /* everyone left mid-race means there is no race — and if the only rider
+       still out on the hill is the one who just left, the race is over for the
+       people who are still here rather than hanging on a shut laptop */
     if (room.state !== "lobby" && room.players.length === 0) room.state = "done";
+    else if (room.state === "racing" &&
+             room.players.every(function (q) { return q.finished; })) {
+      room.state = "done";
+      room.raceEndsAt = 0;
+    }
     return before !== room.players.length;
   }
 
@@ -232,7 +242,12 @@
   }
 
   function recordFinish(room, id, result, now) {
-    if (room.state !== "racing") return null;
+    /* "done" counts too. The minute's grace exists so a room cannot hang on a
+       child who wandered off for a snack — not to throw away the run of the one
+       who was simply slower. Cross the line late and you still get your time and
+       your place; only a room that has gone back to the start line stops
+       listening. */
+    if (room.state !== "racing" && room.state !== "done") return null;
     var p = findPlayer(room, id);
     if (!p || p.finished) return null;
     p.finished = true;
@@ -248,13 +263,18 @@
     if (room.finishOrder.length === 1) room.raceEndsAt = (now || 0) + FINISH_GRACE_MS;
     if (room.players.every(function (q) { return q.finished; })) {
       room.state = "done";
+      room.raceEndsAt = 0;
       return "done";
     }
     return "finished";
   }
 
   function backToLobby(room, id, now) {
-    if (room.hostId !== id) return { error: "only the host can line them up again" };
+    if (!findPlayer(room, id)) return { error: "you are not in this race" };
+    /* Not while somebody is still coming down. The host finishing first and
+       reaching for "race again" would otherwise yank their friend off the
+       mountain mid-descent and bin the run they were in the middle of. */
+    if (room.state !== "done") return { error: "wait for everybody to get down" };
     room.state = "lobby";
     room.startAt = 0;
     room.raceEndsAt = 0;

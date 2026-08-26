@@ -52,6 +52,17 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* full/private */ }
   }
 
+  /* Four different results screens share one panel. Every one of them shows its
+     own row of buttons, so they all go through here: hide the lot, show the one.
+     Adding a fifth row without touching this function is not possible. */
+  var RESULT_ROWS = ["results-row", "results-row-tour", "results-row-vs", "results-row-mp"];
+  function showResultsRow(id) {
+    RESULT_ROWS.forEach(function (rid) {
+      var r = $(rid);
+      if (r) r.hidden = rid !== id;
+    });
+  }
+
   function fmtTime(ms) {
     ms = Math.round(ms / 100) * 100;
     var m = Math.floor(ms / 60000);
@@ -2895,6 +2906,14 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     el.pause.hidden = false;
     el.touch.hidden = true;
     if (el.exitBtn) el.exitBtn.hidden = true;
+    /* In a live race there is no restarting: your friend is still coming down the
+       hill and the clock they are racing is the same one you are. Say so, and take
+       the button away rather than leaving a tap that would post an impossible time. */
+    var rb = $("btn-restart"), ps = $("pause-sub");
+    if (rb) rb.hidden = mpMode;
+    if (ps) ps.textContent = mpMode
+      ? "The race carries on without you — your friend is still riding."
+      : "Even downhill heroes need a mango break.";
   }
 
   function resumeGame() {
@@ -2998,10 +3017,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     }
 
     el.results.classList.remove("is-finale");
-    var rowN0 = $("results-row"), rowT0 = $("results-row-tour"), rowV0 = $("results-row-vs");
-    if (rowN0) rowN0.hidden = false;
-    if (rowT0) rowT0.hidden = true;
-    if (rowV0) rowV0.hidden = true;
+    showResultsRow("results-row");
 
     var medalTxt = {
       gold: ["🥇", "GOLD! You beat Armand down the mountain — club legend!"],
@@ -4029,11 +4045,8 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
         tour.kwacha + "</b>.</p>" +
       finale;
 
-    var rowN = $("results-row"), rowT = $("results-row-tour"), next = $("btn-tour-next");
-    var rowV1 = $("results-row-vs");
-    if (rowN) rowN.hidden = true;
-    if (rowT) rowT.hidden = false;
-    if (rowV1) rowV1.hidden = true;
+    var next = $("btn-tour-next");
+    showResultsRow("results-row-tour");
     if (next) {
       next.hidden = last;
       next.textContent = "Workshop, then stage " + (st.n + 1) + " 🔧";
@@ -4087,10 +4100,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     }).join("");
 
     el.results.classList.remove("is-finale");
-    var rowN = $("results-row"), rowT = $("results-row-tour"), rowV = $("results-row-vs");
-    if (rowN) rowN.hidden = true;
-    if (rowT) rowT.hidden = true;
-    if (rowV) rowV.hidden = false;
+    showResultsRow("results-row-vs");
 
     el.resultsContent.innerHTML =
       '<div class="results-medal">🏁</div>' +
@@ -4460,13 +4470,23 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       ? order[1].result.timeMs - order[0].result.timeMs : 0;
 
     el.results.classList.remove("is-finale");
-    ["results-row", "results-row-tour", "results-row-vs"].forEach(function (id) {
-      var r = $(id); if (r) r.hidden = true;
-    });
-    var rowMp = $("results-row-mp");
-    if (rowMp) rowMp.hidden = false;
+    showResultsRow("results-row-mp");
+    /* Anybody in the room may line them up again — but not while a friend is
+       still coming down. Until then the button is there, plainly not ready yet,
+       so nobody taps it and collects an error. */
+    var canAgain = room.state === "done";
     var againBtn = $("btn-mp-again");
-    if (againBtn) againBtn.hidden = !NET.isHost();
+    if (againBtn) {
+      againBtn.hidden = false;
+      againBtn.disabled = !canAgain;
+      againBtn.className = "btn btn--big " + (canAgain ? "btn--copper" : "btn--ghost");
+      againBtn.textContent = canAgain ? "Race again 🏁"
+        : waiting.length
+          ? "Waiting for " + waiting.map(function (p) { return p.name; }).join(" and ") + "…"
+          : "Waiting for the race to finish…";
+    }
+    var backBtn = $("btn-mp-back");
+    if (backBtn) backBtn.disabled = !canAgain;
 
     el.resultsContent.innerHTML =
       '<div class="results-medal">📡</div>' +
@@ -4559,6 +4579,10 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     onMp("btn-mp-leave", function () { NET.leave(); mpLeaveAll(); renderMp(); });
     onMp("btn-mp-again", function () { NET.again(); });
     onMp("btn-mp-back", function () {
+      /* This used to show the lobby without telling the server, which left the
+         room finished for good: the flag could never drop again and the only way
+         out was to leave and swap a fresh code. */
+      NET.again();
       mpLeaveAll();
       mode = "mp";
       showOnly(el.mp);
