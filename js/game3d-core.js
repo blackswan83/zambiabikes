@@ -47,6 +47,7 @@
   var TRACKS3 = {
     miombo: {
       id: "miombo", name: "Miombo Meander", level: "easy", levelLabel: "Easy Rider",
+      hazards: [{ type: "hippo", from: 260, every: 290, lat: 2.6, spread: 1.6, r: 1.5 }],
       seed: 20260912, length: 1250, slope: 0.105, wobble: 0.85, kickerEvery: 130,
       desc: "Flowing forest singletrack",
       theme: {
@@ -60,6 +61,7 @@
     },
     baobab: {
       id: "baobab", name: "Baobab Ridge", level: "trail", levelLabel: "Trail Star",
+      hazards: [{ type: "elephant", from: 300, every: 340, lat: 3.0, spread: 1.6, r: 1.8 }],
       seed: 20261010, length: 1500, slope: 0.13, wobble: 1.0, kickerEvery: 110,
       desc: "Sunset savanna, big kickers",
       theme: {
@@ -70,6 +72,20 @@
         grass: 0xA8933E, grassDry: 0xC2A94E, dirt: 0x7E4A20, dirtDark: 0x5E3616, rock: 0x8A6A4C,
         trunk: 0x6E4A26, canopy: 0x6E5A2A, canopy2: 0x8A6F33, accent: 0xE8791D,
         water: 0xE8A45C
+      }
+    },
+    kasanka: {
+      id: "kasanka", name: "Kasanka Bat Storm", level: "trail", levelLabel: "Trail Star",
+      seed: 20261121, length: 1400, slope: 0.05, wobble: 0.85, kickerEvery: 140,
+      hazards: [{ type: "antelope", from: 240, every: 330, lat: 2.2, spread: 1.5, r: 1.0 }],
+      desc: "Dusk in the swamp forest — ten million bats overhead",
+      theme: {
+        sky: 0x4A3E68, skyLow: 0xF2A05C, fog: 0x9A8A96, fogNear: 45, fogFar: 300,
+        sun: 0xFFB877, sunPos: [-170, 38, -250], ambient: 0xA89AB0,
+        turbidity: 6, rayleigh: 3.2, mieCoeff: 0.009, mieG: 0.85, cloudCover: 0.25, exposure: 0.56,
+        grass: 0x2E6E44, grassDry: 0x6E8448, dirt: 0x6B4E36, dirtDark: 0x4E3826, rock: 0x686458,
+        trunk: 0x4A3828, canopy: 0x1F5438, canopy2: 0x2E6E44, accent: 0xE8791D,
+        water: 0x2E5E56, bats: true, groundMist: true, cloudTint: 0xD9A8A0, ridgeDim: 0.45
       }
     },
     zambezi: {
@@ -92,6 +108,7 @@
       /* the finale rides the Knife-Edge rim: a transverse chasm opens on +x
          and the mile-wide Victoria Falls curtain forms its far wall */
       gorge: { fromFrac: 0.84, offset: 32, width: 95, depth: 60 },
+      hazards: [{ type: "croc", from: 220, every: 300, lat: 2.0, spread: 1.7, r: 1.05 }],
       desc: "Steep canyon to the thundering Victoria Falls",
       theme: {
         sky: 0xC6ECEF, skyLow: 0xEAF9F4, fog: 0xCDE9E2, fogNear: 45, fogFar: 380,
@@ -103,7 +120,7 @@
       }
     }
   };
-  var TRACK3_ORDER = ["miombo", "baobab", "zambezi", "falls"];
+  var TRACK3_ORDER = ["miombo", "baobab", "kasanka", "zambezi", "falls"];
 
   /* ================= world building ================= */
 
@@ -336,6 +353,7 @@
     var POOLS = {
       miombo: [["miombo", 5, 2.0], ["miombo", 5, 2.0], ["bush", 2, 0], ["rock", 2, 1.1], ["fern", 1, 0], ["grass", 4, 0]],
       baobab: [["baobab", 2, 2.6], ["acacia", 3, 1.6], ["termite", 2, 0.9], ["grass", 5, 0], ["rock", 2, 1.1], ["bush", 1, 0]],
+      kasanka: [["miombo", 4, 2.0], ["palm", 2, 1.4], ["reed", 3, 0], ["fern", 3, 0], ["grass", 2, 0], ["bush", 2, 0]],
       zambezi: [["palm", 3, 1.4], ["miombo", 3, 2.0], ["reed", 3, 0], ["bush", 2, 0], ["grass", 3, 0], ["rock", 1, 1.1]],
       falls: [["miombo", 4, 2.0], ["palm", 2, 1.4], ["rock", 4, 1.4], ["fern", 3, 0], ["grass", 3, 0], ["bush", 1, 0]]
     };
@@ -421,7 +439,7 @@
       }
     }
     /* wildlife, well away from the trail */
-    var FAUNA = { miombo: ["antelope", "antelope", "zebra"], baobab: ["giraffe", "elephant", "zebra", "antelope"], zambezi: ["elephant", "antelope", "zebra"], falls: ["antelope", "elephant"] };
+    var FAUNA = { miombo: ["antelope", "antelope", "zebra"], baobab: ["giraffe", "elephant", "zebra", "antelope"], kasanka: ["antelope", "antelope", "elephant"], zambezi: ["elephant", "antelope", "zebra"], falls: ["antelope", "elephant"] };
     var fz = 150;
     while (fz < zEnd - 150) {
       var side = rng() < 0.5 ? -1 : 1;
@@ -433,6 +451,33 @@
       }
       fz += 260 + rng() * 240;
     }
+
+    /* ---- trail hazards: big animals dozing on the racing line's edges ----
+       Straight-ish segments only, alternating sides, never on the centre
+       line — the AI ghosts stay clean and a good line always exists, but a
+       lazy line meets two tonnes of hippo. Placed last so the rng draws of
+       everything above stay untouched. */
+    (def.hazards || []).forEach(function (hz) {
+      var hzZ = hz.from;
+      var hzSide = 1;
+      while (hzZ < def.length - 120) {
+        var hzI = Math.floor(hzZ / TRAIL_DS);
+        if (hzI > 6 && hzI < n - 8) {
+          var hYawA = Math.atan2(pts[hzI + 3].x - pts[hzI - 3].x, pts[hzI + 3].z - pts[hzI - 3].z);
+          var hBend = Math.abs(hYawA - pts[hzI].yaw);
+          if (hBend < 0.14) {
+            var hzP = pts[hzI];
+            var hzLat = hzSide * (hz.lat + rng() * hz.spread);
+            world.props.push({
+              type: hz.type, x: hzP.x + hzLat, z: hzP.z, y: heightAt(world, hzP.x + hzLat, hzP.z),
+              s: 0.9 + rng() * 0.25, rot: rng() * 6.28, r: hz.r
+            });
+            hzSide = -hzSide;
+          }
+        }
+        hzZ += hz.every + rng() * 110;
+      }
+    });
 
     /* spatial hash of solid props for collisions */
     for (i = 0; i < world.props.length; i++) {

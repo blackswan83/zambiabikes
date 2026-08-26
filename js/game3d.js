@@ -289,6 +289,17 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     });
   }
 
+  /* optional photo-scanned textures from assets/world — every load fails
+     silently back to the procedural look, so static hosting keeps working */
+  var worldTexLoader = new THREE.TextureLoader();
+  function loadWorldTex(url, srgb, done) {
+    worldTexLoader.load(url, function (t) {
+      if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+      t.wrapS = t.wrapT = THREE.RepeatWrapping;
+      done(t);
+    }, undefined, function () { /* asset absent — procedural stays */ });
+  }
+
   function renderFrame(sc) {
     renderer.toneMappingExposure = sc.exposure;
     if (composer) {
@@ -1089,6 +1100,18 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     }));
     terrain.receiveShadow = true;
     scene.add(terrain);
+    /* photo-scanned ground detail (assets/world) swaps in when present */
+    loadWorldTex("assets/world/textures/rock/rock-detail.jpg", false, function (t) {
+      t.repeat.set(((nx - 1) * step) / 11, ((nz - 1) * step) / 11);
+      terrain.material.map = t;
+      terrain.material.needsUpdate = true;
+    });
+    loadWorldTex("assets/world/textures/rock/rock-normal.jpg", false, function (t) {
+      t.repeat.set(((nx - 1) * step) / 11, ((nz - 1) * step) / 11);
+      terrain.material.normalMap = t;
+      terrain.material.normalScale.set(0.75, 0.75);
+      terrain.material.needsUpdate = true;
+    });
 
     /* ---- the Zambezi itself: a flowing water ribbon along the bank ---- */
     var riverTex = null;
@@ -1136,6 +1159,19 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     var parts = {};  /* type -> array of {geo, mat, yOff, sMul} pieces */
     function piece(g2, m2, y2, s2) { return { geo: g2, mat: m2, y: y2 || 0, s: s2 || 1 }; }
     var trunkM = lam(T.trunk), canM = lam(T.canopy), can2M = lam(T.canopy2), rockM = lam(T.rock);
+    /* real scanned surfaces on rocks and bark, when the assets exist */
+    loadWorldTex("assets/world/textures/rock/rock-albedo.jpg", true, function (t) {
+      t.repeat.set(1.6, 1.6);
+      rockM.map = t;
+      rockM.color.set(0xCFCabe);
+      rockM.needsUpdate = true;
+    });
+    loadWorldTex("assets/world/textures/bark/bark-albedo.jpg", true, function (t) {
+      t.repeat.set(1, 2);
+      trunkM.map = t;
+      trunkM.color.lerp(new THREE.Color(0xffffff), 0.5);
+      trunkM.needsUpdate = true;
+    });
     /* leaf-card canopies: alpha-tested crossed cards read as organic foliage */
     var leafM = new THREE.MeshLambertMaterial({ map: leafTex, alphaTest: 0.42, side: THREE.DoubleSide, color: T.canopy });
     var leafM2 = new THREE.MeshLambertMaterial({ map: leafTex, alphaTest: 0.42, side: THREE.DoubleSide, color: T.canopy2 });
@@ -1220,9 +1256,10 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       else if (p.type === "giraffe") g2 = buildGiraffe();
       else if (p.type === "zebra") g2 = buildZebra();
       else if (p.type === "antelope") g2 = buildAntelope();
-      else if (p.type === "croc") { g2 = buildCroc(); g2.scale.setScalar(p.s * 1.25); crocs.push(g2); }
-      else if (p.type === "hippo") g2 = buildHippo();
+      else if (p.type === "croc") { g2 = buildCroc(); crocs.push(g2); }
+      else if (p.type === "hippo") g2 = buildHippo(p.r > 0);
       if (g2) {
+        g2.scale.setScalar((p.s || 1) * (p.type === "croc" ? 1.25 : 1));
         g2.position.set(p.x, p.y, p.z);
         g2.rotation.y = p.rot;
         if (!lightMode) g2.traverse(function (o) { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
@@ -1364,19 +1401,21 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       }
     }
 
-    /* ---- bird flocks wheeling over the valley ---- */
+    /* ---- bird flocks wheeling over the valley (bat swirls on Kasanka) ---- */
     var birds = [];
+    var batty = !!T.bats;
     if (!lightMode) {
-      var birdMat = lam(id === "baobab" ? 0x2E1A08 : 0xF4EFE4);
-      for (var fi = 0; fi < 2; fi++) {
-        var flock = { center: null, r: 24 + fi * 14, h: 0, speed: 0.28 + fi * 0.1, members: [] };
-        var fz = zSpan * (0.28 + fi * 0.42);
+      var birdMat = lam(batty ? 0x241A14 : id === "baobab" ? 0x2E1A08 : 0xF4EFE4);
+      var flockN = batty ? 4 : 2;
+      for (var fi = 0; fi < flockN; fi++) {
+        var flock = { center: null, r: (batty ? 15 + fi * 7 : 24 + fi * 14), h: 0, speed: (batty ? 0.55 : 0.28) + fi * 0.1, members: [] };
+        var fz = zSpan * (batty ? 0.14 + fi * 0.23 : 0.28 + fi * 0.42);
         var fIdx = Math.min(world.trailN - 1, Math.floor(fz / 5));
         var fp = world.trail[fIdx];
-        flock.center = new THREE.Vector3(fp.x + (fi ? -30 : 26), fp.y + 34 + fi * 12, fp.z);
-        for (var bi = 0; bi < 5; bi++) {
+        flock.center = new THREE.Vector3(fp.x + (fi % 2 ? -26 : 24), fp.y + (batty ? 20 + fi * 7 : 34 + fi * 12), fp.z);
+        for (var bi = 0; bi < (batty ? 7 : 5); bi++) {
           var bird = new THREE.Group();
-          var wingG = new THREE.PlaneGeometry(0.95, 0.3);
+          var wingG = new THREE.PlaneGeometry(batty ? 0.55 : 0.95, batty ? 0.26 : 0.3);
           var wl = new THREE.Mesh(wingG, birdMat);
           wl.position.x = -0.45;
           var wr = new THREE.Mesh(wingG, birdMat);
@@ -1387,6 +1426,56 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
           flock.members.push(bird);
         }
         birds.push(flock);
+      }
+    }
+
+    /* ---- Kasanka at dusk: rivers of ten million straw-coloured fruit
+       bats crossing the sky, and mist lying on the swamp forest ---- */
+    var batStreams = [];
+    if (T.bats) {
+      var batTex = canvasTexture(64, 32, function (g) {
+        g.clearRect(0, 0, 64, 32);
+        g.fillStyle = "#1C140E";
+        g.beginPath();
+        g.moveTo(32, 20);
+        g.quadraticCurveTo(18, 4, 2, 14);
+        g.quadraticCurveTo(16, 16, 28, 24);
+        g.lineTo(36, 24);
+        g.quadraticCurveTo(48, 16, 62, 14);
+        g.quadraticCurveTo(46, 4, 32, 20);
+        g.fill();
+      });
+      var streamN = lightMode ? 1 : 3;
+      for (var si = 0; si < streamN; si++) {
+        var bn = lightMode ? 320 : 720;
+        var bp = new Float32Array(bn * 3);
+        for (var bi2 = 0; bi2 < bn; bi2++) {
+          var bz2 = Math.random() * (zSpan + 400) - 150;
+          var bx2 = Math.sin(bz2 * 0.004 + si * 2.1) * 70 + (Math.random() - 0.5) * (70 + si * 34);
+          var by2 = -bz2 * world.def.slope + 46 + si * 18 + Math.random() * 30;
+          bp[bi2 * 3] = bx2; bp[bi2 * 3 + 1] = by2; bp[bi2 * 3 + 2] = bz2;
+        }
+        var bGeo = new THREE.BufferGeometry();
+        bGeo.setAttribute("position", new THREE.BufferAttribute(bp, 3));
+        var bPts = new THREE.Points(bGeo, new THREE.PointsMaterial({
+          map: batTex, size: 3.4 + si * 0.9, transparent: true, depthWrite: false,
+          color: 0xFFFFFF, alphaTest: 0.25
+        }));
+        scene.add(bPts);
+        batStreams.push(bPts);
+      }
+    }
+    if (T.groundMist) {
+      for (var gm = 0; gm < 10; gm++) {
+        var gmi = Math.min(world.trailN - 1, Math.floor(world.trailN * (0.06 + gm * 0.1)));
+        var gmp = world.trail[gmi];
+        var gmSp = new THREE.Sprite(new THREE.SpriteMaterial({
+          map: mistTex, transparent: true, opacity: 0.3, depthWrite: false
+        }));
+        gmSp.scale.set(130 + (gm % 3) * 30, 18 + (gm % 2) * 7, 1);
+        gmSp.position.set(gmp.x + ((gm % 2) ? -22 : 18), gmp.y + 5, gmp.z);
+        scene.add(gmSp);
+        clouds.push(gmSp);
       }
     }
 
@@ -1578,7 +1667,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       scene: scene, coinMesh: coinMesh, clouds: clouds, wf: wf,
       dome: dome, sky: skyObj, ridges: [ridgeFar, ridgeNear], sunSp: sunSp, sun: sun, sunDir: sunDir,
       birds: birds, exposure: exposure, swayMats: sceneLeafMats.slice(),
-      crocs: crocs, riverTex: riverTex
+      crocs: crocs, riverTex: riverTex, batStreams: batStreams
     };
     sceneCache[key] = cached;
     return cached;
@@ -1747,26 +1836,34 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     return g;
   }
 
-  function buildHippo() {
+  function buildHippo(land) {
     var grey = lam(0x6E5A64), greyD = lam(0x59464F);
     var g = new THREE.Group();
     var back = new THREE.Mesh(new THREE.SphereGeometry(1.3, 10, 8), grey);
-    back.scale.set(0.85, 0.5, 1.15);
-    back.position.set(0, -0.25, -0.4);
+    back.scale.set(0.85, land ? 0.62 : 0.5, 1.15);
+    back.position.set(0, land ? 0.62 : -0.25, -0.4);
     g.add(back);
+    if (land) {
+      [[-0.45, 0.35], [0.45, 0.35], [-0.45, -1.1], [0.45, -1.1]].forEach(function (lp) {
+        var leg = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.19, 0.6, 8), grey);
+        leg.position.set(lp[0], 0.3, lp[1]);
+        g.add(leg);
+      });
+    }
+    var hLift = land ? 0.55 : 0;
     var head = new THREE.Mesh(new THREE.SphereGeometry(0.62, 10, 8), grey);
     head.scale.set(0.9, 0.62, 1.25);
-    head.position.set(0, 0.02, 1.05);
+    head.position.set(0, 0.02 + hLift, 1.05);
     g.add(head);
     [-0.24, 0.24].forEach(function (x) {
       var ear = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 5), greyD);
-      ear.position.set(x, 0.42, 0.78);
+      ear.position.set(x, 0.42 + hLift, 0.78);
       g.add(ear);
       var eye = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 5), greyD);
-      eye.position.set(x, 0.3, 1.06);
+      eye.position.set(x, 0.3 + hLift, 1.06);
       g.add(eye);
       var nostril = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 5), greyD);
-      nostril.position.set(x * 0.55, 0.28, 1.65);
+      nostril.position.set(x * 0.55, 0.28 + hLift, 1.65);
       g.add(nostril);
     });
     return g;
@@ -2062,6 +2159,9 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   var CRASH_MSG = {
     landing: "OUCH! 💥 Bend those knees on big drops!",
     croc: "CROC! 🐊 Give those teeth some space!",
+    hippo: "HIPPO! 🦛 Two tonnes of do-not-touch!",
+    elephant: "ELEPHANT! 🐘 Give the big fella room!",
+    antelope: "PUKU! 🦌 Nearly a puku pancake!",
     miombo: "Tree! 🌳 Keep it on the trail!",
     baobab: "That baobab is 1000 years old — and solid! 💥",
     acacia: "Tree! 🌳 Keep it on the trail!",
@@ -2253,6 +2353,12 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   function animateScene(sc, t, dt, riderX, riderY, riderZ) {
     for (var i = 0; i < sc.clouds.length; i++) {
       sc.clouds[i].position.x += Math.sin(i * 1.7) * 0.7 * dt;
+    }
+    /* bat rivers drift down the valley */
+    for (i = 0; i < sc.batStreams.length; i++) {
+      var bs = sc.batStreams[i];
+      bs.position.z = ((t * (9 + i * 3)) % 420) - 210;
+      bs.position.x = Math.sin(t * 0.08 + i * 1.7) * 9;
     }
     /* birds wheel in slow circles, wings flapping */
     for (i = 0; i < sc.birds.length; i++) {

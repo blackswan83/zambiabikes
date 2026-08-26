@@ -68,6 +68,17 @@ import { OrbitControls } from "./vendor/addons/controls/OrbitControls.js";
     pmrem.dispose();
   })();
 
+  /* real morning sky (assets/world) replaces the procedural room when present */
+  new THREE.TextureLoader().load("assets/world/hdri/sky-morning.jpg", function (t) {
+    t.mapping = THREE.EquirectangularReflectionMapping;
+    t.colorSpace = THREE.SRGBColorSpace;
+    var pm2 = new THREE.PMREMGenerator(renderer);
+    scene.environment = pm2.fromEquirectangular(t).texture;
+    scene.background = t;
+    scene.backgroundBlurriness = 0.18;
+    pm2.dispose();
+  }, undefined, function () { /* static procedural room stays */ });
+
   scene.add(new THREE.HemisphereLight(0xFFF4DC, 0x9A8060, 0.75));
   var key = new THREE.DirectionalLight(0xFFF6E0, 2.2);
   key.position.set(2.6, 3.4, 2.2);

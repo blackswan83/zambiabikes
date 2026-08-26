@@ -85,8 +85,9 @@ and verdicts, all of which change the ride. Dream parts are **earned by
 riding** (finish tracks, beat ghosts, collect coins — tracked in
 `zr3_career`), never bought.
 
-Four 3D mountains: **Miombo Meander** (1.25 km), **Baobab Ridge** (1.5 km,
-sunset), **Lower Zambezi** (1.6 km riverside — a flowing river with sandy
+Five 3D mountains: **Miombo Meander** (1.25 km), **Baobab Ridge** (1.5 km,
+sunset), **Kasanka Bat Storm** (1.4 km of dusk swamp forest under rivers of
+ten million straw-coloured fruit bats, with mist on the ground), **Lower Zambezi** (1.6 km riverside — a flowing river with sandy
 beaches, reed beds, hippo pods, and crocodiles basking right on the trail
 edge; clip one and you crash, ride into the river and you splash), and
 **Mosi Falls Drop** (1.75 km canyon). Armand and Arthur's ghosts
