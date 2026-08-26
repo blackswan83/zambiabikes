@@ -135,6 +135,9 @@
           <div class="trick-toast trick-toast--p2" id="trick-toast-2"></div>
         </div>
 
+        <ol class="mp-board" id="mp-board" hidden></ol>
+        <div class="mp-tags" id="mp-tags" hidden></div>
+
         <div class="countdown" id="countdown" hidden>3</div>
         <div class="countdown countdown--p2" id="countdown-2" hidden>3</div>
 
@@ -232,6 +235,9 @@
               <button type="button" class="btn btn--big tour-cta" id="btn-tour-open">
                 <span>🇿🇲 The Great Zambia Tour</span><i>ten legs · 16.5 km · one clock</i>
               </button>
+              <button type="button" class="btn btn--big mp-cta" id="btn-mp-open" hidden>
+                <span>📡 Race a friend, live</span><i>two devices · one hill</i>
+              </button>
             </div>
           </div>
         </div>
@@ -261,6 +267,51 @@
         </div>
 
         <!-- ============ THE GREAT ZAMBIA TOUR ============ -->
+
+        <div class="overlay overlay--tour overlay--mp" id="screen-mp" hidden>
+          <div class="tour-sheet">
+            <div class="tour-head">
+              <h2>Race a <em>friend</em>, live</h2>
+              <p class="tour-sub" id="mp-sub">Two devices, one hill, at the same time.</p>
+            </div>
+
+            <div class="mp-body">
+              <section class="mp-col" id="mp-entry">
+                <h3>Start a race</h3>
+                <p class="mp-hint">You get a four-letter code. Read it to your friend — a
+                grown-up can send it for you.</p>
+                <button type="button" class="btn btn--copper btn--small" id="btn-mp-create">Start a race 🏁</button>
+                <h3>Or join one</h3>
+                <p class="mp-hint">Type the code your friend read out.</p>
+                <div class="mp-join">
+                  <input id="mp-code" maxlength="4" autocomplete="off" spellcheck="false"
+                         inputmode="latin" placeholder="CODE" aria-label="Race code">
+                  <button type="button" class="btn btn--forest btn--small" id="btn-mp-join">Join</button>
+                </div>
+                <p class="mp-err" id="mp-err" role="status"></p>
+              </section>
+
+              <section class="mp-col" id="mp-lobby" hidden>
+                <h3>The start line <span class="mp-code-tag" id="mp-code-tag"></span></h3>
+                <ul class="mp-riders" id="mp-riders"></ul>
+                <p class="mp-hint" id="mp-hosthint"></p>
+                <div class="menu-row mp-actions">
+                  <button type="button" class="btn btn--forest btn--small" id="btn-mp-ready">I'm ready 👍</button>
+                  <button type="button" class="btn btn--copper btn--small" id="btn-mp-start" hidden>Drop the flag 🏁</button>
+                  <button type="button" class="btn btn--ghost btn--small" id="btn-mp-leave">Leave</button>
+                </div>
+              </section>
+            </div>
+
+            <p class="mp-safe">🛡️ A race is private to whoever has the code. There is no chat,
+            no messages and no way to be put in a race with a stranger. Live races don't set
+            personal bests or reach the club board — those come from riding on your own.</p>
+
+            <div class="menu-row">
+              <button type="button" class="btn btn--ghost btn--small" id="btn-mp-exit">Back to menu</button>
+            </div>
+          </div>
+        </div>
 
         <div class="overlay overlay--tour" id="screen-tour" hidden>
           <div class="tour-sheet">
@@ -371,6 +422,11 @@
             <button type="button" class="btn btn--copper" id="btn-retry">Ride it again</button>
             <button type="button" class="btn btn--ghost" id="btn-copy-ghost">Copy my Ghost Code</button>
             <button type="button" class="btn btn--ghost" id="btn-menu">Back to menu</button>
+          </div>
+          <div class="menu-row" id="results-row-mp" style="margin-top:0.6rem" hidden>
+            <button type="button" class="btn btn--copper btn--big" id="btn-mp-again">Race again 🏁</button>
+            <button type="button" class="btn btn--ghost btn--small" id="btn-mp-back">Back to the start line</button>
+            <button type="button" class="btn btn--ghost btn--small" id="btn-mp-quit">Back to menu</button>
           </div>
           <div class="menu-row" id="results-row-vs" style="margin-top:0.6rem" hidden>
             <button type="button" class="btn btn--copper btn--big" id="btn-vs-again">Best of three? 🏁</button>
@@ -527,6 +583,8 @@
 <script src="js/main.js"></script>
 <script src="js/bikes.js"></script>
 <script src="js/tour.js"></script>
+<script src="js/mp-core.js"></script>
+<script src="js/net.js"></script>
 <script src="js/game3d-core.js"></script>
 <script type="importmap">{ "imports": { "three": "./js/vendor/three.module.min.js" } }</script>
 <script type="module" src="js/game3d.js"></script>

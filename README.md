@@ -120,6 +120,38 @@ bloom bleeding across the seam. Field of view is solved from a target
 *horizontal* angle rather than set vertically, so a wide, short strip does not
 fish-eye.
 
+**Race a friend, live** (`js/mp-core.js`, the WebSocket half of `server.js`,
+`js/net.js`) — two children on two devices, on the same hill, at the same
+moment. One of them presses **Start a race** and gets a four-letter code; the
+other types it in. That is the whole of it: there is no lobby, no matchmaking,
+no directory, no way to search for a race and no way to be put in one with a
+stranger. Codes are generated from an alphabet with no `O`/`0`, `I`/`1`, `S`/`5`
+or `B`/`8` in it, because a code has to survive being read out loud by one
+ten-year-old to another across a kitchen table.
+
+Every rider simulates their own bike exactly as they do in single player and
+broadcasts where they are fifteen times a second; the server relays those
+samples and keeps the finishing order. No input crosses the wire and no bike is
+simulated on the server, so a slow connection costs you a smooth view of your
+friend and never control of your own bike — and a rider who goes quiet fades
+rather than freezing. The host drops the flag, the server names a moment, and
+every device counts down to that same instant on its own clock (measured the
+usual way: send a stamp, halve the round trip). While you ride, your friends
+appear as full riders in their own jersey colours with their names floating over
+them, and a corner panel shows who is where and by how many metres.
+
+The trade for that honesty is that a rider could lie about their position, which
+is exactly why **a live race sets no personal bests, wins no medals, unlocks
+nothing and never reaches the club board**. Records still come only from a solo
+run whose Ghost Code the server re-simulates through `js/game3d-core.js`.
+
+Rooms live in memory and nowhere else — nothing about a race is written to the
+database, to disk or to a log. A room exists while somebody is in it and is gone
+when the last person leaves, which is the right lifetime for four kids racing
+after school and means a race leaves no record of who played with whom. Live
+racing only appears at all if a server answers `/api/mp/status`; on GitHub Pages
+the button never shows and the game is exactly what it was.
+
 **Weather.** A chip row beside the time-of-day chips: Clear, 🌧️ Rain, ⛈️ Storm.
 Rain is a single instanced sheet whose vertex shader wraps every streak inside a
 box anchored to the camera, so the CPU never touches a drop and both players ride
@@ -194,8 +226,17 @@ which shares the same design and its own `ZRG1…` ghost codes.
   characters, and live only on the player's device.
 - Ghost Codes are validated and sanitized on import and contain nothing but
   rider positions, a time and a first name.
-- **Two-player is local only** — two children on one sofa sharing one keyboard.
-  There is no networked play, no lobby, no matchmaking and nobody to meet.
+- **A live race is private to whoever has the code.** No lobby, no matchmaking,
+  no directory, no discovery — the only way into a room is a four-letter code
+  somebody read out to you. Nobody can join once a race has started.
+- **The multiplayer protocol has no message that carries free text.** There is
+  no chat because there is nowhere to put one: the only thing a player ever
+  sends about themselves is a first name, sanitized to a small character set and
+  capped at twelve characters, and a jersey colour from a fixed list of six. A
+  position sample is six numbers and two flags, validated field by field on the
+  server, and anything else in it is dropped.
+- **Rooms are memory only.** Nothing about a race is written to the database, to
+  disk or to a log, and a room ceases to exist the moment the last rider leaves.
 
 ## Wiring it up for real
 
@@ -219,6 +260,11 @@ npm start
 # → http://localhost:3000  (no DATABASE_URL → in-memory mode, perfect for tinkering)
 ```
 
+Live racing rides on the same port, at `ws://<host>:<port>/mp`. It needs no
+database and no configuration — rooms are in memory, so two kids on the same
+home wifi can race each other against a bare `npm start`.
+
+
 **Deploying on Railway:**
 
 1. Create a new Railway service from this repo — it detects `package.json`
@@ -235,7 +281,7 @@ npm start
 | --- | --- |
 | `DATABASE_URL` | Postgres connection string (Railway injects it). Unset → in-memory storage, lost on restart. |
 | `ADMIN_TOKEN` | Bearer token for `/api/admin/requests` and ghost deletion. Unset → admin routes answer 503. |
-| `PORT` | Port to listen on (Railway sets it; defaults to 3000). |
+| `PORT` | Port to listen on (Railway sets it; defaults to 3000). Live racing shares it on `/mp`. |
 
 **Reading the membership requests** (Grown-Up Crew only):
 

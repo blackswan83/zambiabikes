@@ -1684,3 +1684,169 @@
 .ch-row--2p { display: flex; gap: 1.1rem; }
 .ch-row--2p b { color: var(--sun); margin-right: 0.3rem; }
 .ch-row--2p[hidden] { display: none; }
+
+/* ====================================================================
+   LIVE RACING
+   A room you can only reach if somebody read you a four-letter code.
+   ==================================================================== */
+
+.mp-cta {
+  flex-direction: column;
+  gap: 0;
+  padding-block: 0.5rem;
+  background: linear-gradient(180deg, #2E7FA8, #1B5470);
+  color: #FFF6E0;
+  box-shadow: 0 4px 0 #10384C, inset 0 0 0 2.5px rgba(86, 224, 200, 0.7);
+}
+.mp-cta:hover { background: linear-gradient(180deg, #3892BE, #1F6183); }
+.mp-cta i { font-style: normal; font-weight: 600; font-size: 0.66em; letter-spacing: 0.08em; opacity: 0.85; }
+
+.mp-body {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: calc(var(--ts) * 0.7);
+  align-items: start;
+}
+@media (min-width: 700px) { .mp-body { grid-template-columns: 1fr; } }
+
+.mp-col { display: grid; gap: calc(var(--ts) * 0.3); align-content: start; }
+/* a class selector outranks the UA's [hidden] rule, so say it again */
+.mp-col[hidden] { display: none; }
+.mp-col h3 {
+  margin: calc(var(--ts) * 0.3) 0 0;
+  font-family: var(--font-display);
+  font-size: calc(var(--ts) * 0.95);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(86, 224, 200, 0.9);
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+}
+.mp-hint { margin: 0; font-size: calc(var(--ts) * 0.88); line-height: 1.4; color: rgba(255, 246, 224, 0.72); }
+
+/* the code, big enough to read out loud across a room */
+.mp-code-tag {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.5em;
+  letter-spacing: 0.28em;
+  color: var(--sun);
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.45);
+}
+
+.mp-join { display: flex; gap: 0.4rem; align-items: center; }
+.mp-join input {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: calc(var(--ts) * 1.5);
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  width: 6.5em;
+  padding: 0.2rem 0.5rem;
+  border-radius: 8px;
+  border: 2px solid rgba(247, 183, 51, 0.6);
+  background: rgba(0, 0, 0, 0.4);
+  color: var(--sun);
+  text-align: center;
+}
+.mp-join input:focus { outline: 2px solid var(--sun); outline-offset: 1px; }
+
+.mp-err {
+  margin: 0;
+  min-height: 1.2em;
+  font-size: calc(var(--ts) * 0.9);
+  color: #FFC9BE;
+}
+
+.mp-riders { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.mp-riders li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: calc(var(--ts) * 0.16) calc(var(--ts) * 0.5);
+  border-radius: 6px;
+  border-left: 5px solid var(--p-tint, var(--sun));
+  background: rgba(255, 246, 224, 0.06);
+  font-size: calc(var(--ts) * 0.95);
+  line-height: 1.5;
+  color: #FFF6E0;
+}
+.mp-riders .mp-name { font-family: var(--font-display); font-weight: 700; flex: 1 1 auto; }
+.mp-riders .mp-tag {
+  font-family: var(--font-display);
+  font-size: 0.8em;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0 0.4rem;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.35);
+  color: rgba(255, 246, 224, 0.7);
+}
+.mp-riders .mp-tag--ready { background: rgba(31, 122, 72, 0.55); color: #C9F5DA; }
+.mp-riders .mp-tag--host { background: rgba(247, 183, 51, 0.35); color: #FFE9BC; }
+.mp-riders .mp-tag--you { background: rgba(46, 127, 168, 0.5); color: #CDECF8; }
+
+.mp-actions { justify-content: flex-start; }
+
+.mp-safe {
+  margin: calc(var(--ts) * 0.2) 0 0;
+  padding: calc(var(--ts) * 0.34) calc(var(--ts) * 0.5);
+  border-radius: 7px;
+  background: rgba(31, 122, 72, 0.2);
+  box-shadow: inset 0 0 0 1px rgba(70, 199, 126, 0.4);
+  font-size: calc(var(--ts) * 0.86);
+  line-height: 1.4;
+  color: #DDF3E4;
+}
+
+/* who is where, while you are riding */
+.mp-board {
+  position: absolute;
+  top: 3.4rem;
+  right: 0.8rem;
+  z-index: 4;
+  list-style: none;
+  margin: 0;
+  padding: 0.3rem 0.45rem;
+  border-radius: 8px;
+  background: rgba(9, 22, 14, 0.55);
+  border: 2px solid rgba(255, 246, 224, 0.28);
+  pointer-events: none;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(0.6rem, 1.35vw, 0.78rem);
+  line-height: 1.6;
+  color: #FFF6E0;
+  min-width: 8.5rem;
+}
+.mp-board[hidden] { display: none; }
+.mp-board li { display: flex; align-items: center; gap: 0.4rem; }
+.mp-board .mpb-dot {
+  width: 0.6rem; height: 0.6rem; border-radius: 50%;
+  background: var(--p-tint, var(--sun));
+  flex: 0 0 auto;
+}
+.mp-board .mpb-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mp-board .mpb-gap { font-variant-numeric: tabular-nums; color: var(--sun-soft); }
+.mp-board li.is-you .mpb-name { color: var(--sun); }
+.mp-board li.is-gone { opacity: 0.45; }
+
+/* a live rider's name, floating over their head */
+.mp-tags { position: absolute; inset: 0; pointer-events: none; z-index: 3; overflow: hidden; }
+.mp-tags[hidden] { display: none; }
+.mp-flag {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  padding: 0.05rem 0.4rem;
+  border-radius: 5px;
+  background: rgba(9, 22, 14, 0.6);
+  border: 1.5px solid var(--p-tint, var(--sun));
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(0.55rem, 1.2vw, 0.72rem);
+  line-height: 1.5;
+  color: #FFF6E0;
+  white-space: nowrap;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}

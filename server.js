@@ -329,6 +329,11 @@ app.delete("/api/ghosts/:track/:name", requireAdmin, async function (req, res, n
   } catch (err) { next(err); }
 });
 
+/* how a client discovers whether live racing is even switched on */
+app.get("/api/mp/status", function (req, res) {
+  res.json({ ok: true, live: true, rooms: rooms.size, maxPlayers: MP.MAX_PLAYERS });
+});
+
 /* ---------- static site ---------- */
 
 app.use(express.static(__dirname, { extensions: ["html"] }));
@@ -348,15 +353,212 @@ app.use(function (err, req, res, next) { /* eslint-disable-line no-unused-vars *
   res.status(500).json({ ok: false, error: "server error" });
 });
 
+/* ================= live multiplayer =================
+
+   Rooms live in memory and nowhere else: nothing here is written to the
+   database, on purpose. A room exists while somebody is in it and is gone
+   when they leave, which is exactly the right lifetime for four kids racing
+   after school, and it means a race leaves no trace of who played with whom.
+
+   The rules all live in js/mp-core.js, which has no sockets in it. This file
+   only moves messages: parse, hand to the core, tell the room what changed.
+
+   There is no message type in this protocol that carries free text. The most
+   a player can say to a room is their own first name, once. */
+
+const MP = require("./js/mp-core.js");
+
+const rooms = new Map();          /* code -> room */
+const sockets = new Map();        /* id -> { ws, code, rate } */
+let nextClientId = 1;
+
+function roomOf(id) {
+  const s = sockets.get(id);
+  return s && s.code ? rooms.get(s.code) : null;
+}
+
+function send(ws, type, data) {
+  if (!ws || ws.readyState !== 1) return;
+  try {
+    ws.send(JSON.stringify(Object.assign({ t: type }, data)));
+  } catch (e) { /* a socket that died mid-write is not our problem */ }
+}
+
+function sendTo(id, type, data) {
+  const s = sockets.get(id);
+  if (s) send(s.ws, type, data);
+}
+
+function broadcast(room, type, data, exceptId) {
+  room.players.forEach(function (p) {
+    if (p.id !== exceptId) sendTo(p.id, type, data);
+  });
+}
+
+function pushRoom(room) {
+  broadcast(room, "room", { room: MP.roomView(room) });
+}
+
+function leaveRoom(id, now) {
+  const s = sockets.get(id);
+  if (!s || !s.code) return;
+  const room = rooms.get(s.code);
+  s.code = null;
+  if (!room) return;
+  MP.removePlayer(room, id, now);
+  if (!room.players.length) rooms.delete(room.code);
+  else pushRoom(room);
+}
+
+/* one message handler, one switch, nothing clever */
+function handle(id, msg, now) {
+  const s = sockets.get(id);
+  if (!s) return;
+  const type = String(msg && msg.t || "");
+
+  if (type === "ping") {
+    /* the client uses this to work out the offset between its clock and
+       ours, so a countdown ends at the same instant on every screen */
+    sendTo(id, "pong", { c: Number(msg.c) || 0, now: now });
+    return;
+  }
+
+  if (type === "create") {
+    leaveRoom(id, now);
+    if (rooms.size >= MP.MAX_ROOMS) return sendTo(id, "err", { why: "the clubhouse is full — try again in a minute" });
+    const code = MP.makeCode(function (c) { return rooms.has(c); });
+    if (!code) return sendTo(id, "err", { why: "the clubhouse is full — try again in a minute" });
+    const room = MP.newRoom(code, { track: msg.track, tod: msg.tod, wx: msg.wx, now: now });
+    const add = MP.addPlayer(room, id, msg.name, msg.jersey, now);
+    if (add.error) return sendTo(id, "err", { why: add.error });
+    rooms.set(code, room);
+    s.code = code;
+    sendTo(id, "joined", { you: id, room: MP.roomView(room) });
+    return;
+  }
+
+  if (type === "join") {
+    const code = MP.cleanCode(msg.code);
+    if (!code) return sendTo(id, "err", { why: "that is not a race code" });
+    const room = rooms.get(code);
+    if (!room) return sendTo(id, "err", { why: "no race with that code — check it and try again" });
+    leaveRoom(id, now);
+    const add = MP.addPlayer(room, id, msg.name, msg.jersey, now);
+    if (add.error) return sendTo(id, "err", { why: add.error });
+    s.code = code;
+    sendTo(id, "joined", { you: id, room: MP.roomView(room) });
+    pushRoom(room);
+    return;
+  }
+
+  const room = roomOf(id);
+  if (!room) return;
+
+  if (type === "leave") { leaveRoom(id, now); return; }
+
+  if (type === "ready") {
+    MP.setReady(room, id, msg.ready, now);
+    pushRoom(room);
+    return;
+  }
+
+  if (type === "setup") {
+    const r = MP.setTrack(room, id, msg, now);
+    if (r.error) return sendTo(id, "err", { why: r.error });
+    pushRoom(room);
+    return;
+  }
+
+  if (type === "start") {
+    const r = MP.startRoom(room, id, now);
+    if (r.error) return sendTo(id, "err", { why: r.error });
+    pushRoom(room);
+    return;
+  }
+
+  if (type === "pos") {
+    if (room.state !== "racing" && room.state !== "countdown") return;
+    const p = MP.cleanPos(msg.p);
+    if (!p) return;
+    p.id = id;
+    broadcast(room, "pos", { p: p }, id);
+    return;
+  }
+
+  if (type === "finish") {
+    const what = MP.recordFinish(room, id, msg.r, now);
+    if (what) pushRoom(room);
+    return;
+  }
+
+  if (type === "again") {
+    const r = MP.backToLobby(room, id, now);
+    if (r.error) return sendTo(id, "err", { why: r.error });
+    pushRoom(room);
+    return;
+  }
+}
+
+function attachMultiplayer(server) {
+  const { WebSocketServer } = require("ws");
+  const wss = new WebSocketServer({ server: server, path: "/mp", maxPayload: 4096 });
+
+  wss.on("connection", function (ws) {
+    const id = "p" + (nextClientId++);
+    sockets.set(id, { ws: ws, code: null, rate: { n: 0, at: 0 } });
+    send(ws, "hello", { you: id, now: Date.now(), posHz: MP.POS_HZ, jerseys: MP.JERSEYS });
+
+    ws.on("message", function (raw) {
+      const now = Date.now();
+      const s = sockets.get(id);
+      if (!s) return;
+      /* a fixed budget of messages a second: a rider sends about fifteen */
+      const sec = Math.floor(now / 1000);
+      if (s.rate.at !== sec) { s.rate.at = sec; s.rate.n = 0; }
+      if (++s.rate.n > MP.MSG_PER_SEC) return;
+      if (raw && raw.length > 4096) return;
+      let msg = null;
+      try { msg = JSON.parse(String(raw)); } catch (e) { return; }
+      if (!msg || typeof msg !== "object") return;
+      try { handle(id, msg, now); } catch (e) {
+        console.error("mp error:", e && e.message);
+      }
+    });
+
+    ws.on("close", function () {
+      leaveRoom(id, Date.now());
+      sockets.delete(id);
+    });
+    ws.on("error", function () { /* close follows */ });
+  });
+
+  /* the only clock in the system: it drops the flag and sweeps up */
+  const timer = setInterval(function () {
+    const now = Date.now();
+    rooms.forEach(function (room, code) {
+      const moved = MP.tick(room, now);
+      if (moved) pushRoom(room);
+      if (MP.isIdle(room, now) || !room.players.length) rooms.delete(code);
+    });
+  }, 250);
+  timer.unref && timer.unref();
+
+  return wss;
+}
+
 /* ---------- boot ---------- */
 
 db.init()
   .then(function () {
-    app.listen(PORT, function () {
+    const server = app.listen(PORT, function () {
       console.log("Zambia Bikes server riding on port " + PORT + " (db: " + db.kind + ")");
+      console.log("Live racing on ws://<host>:" + PORT + "/mp (rooms in memory only)");
     });
+    attachMultiplayer(server);
   })
   .catch(function (err) {
     console.error("Failed to initialize database:", err && err.message);
     process.exit(1);
   });
+
+module.exports = { app: app, attachMultiplayer: attachMultiplayer, rooms: rooms };

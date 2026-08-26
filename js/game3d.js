@@ -326,6 +326,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     ghostList: $("ghost-list"), ghostInput: $("ghost-input"), ghostMsg: $("ghost-import-msg"),
     fsBtn: $("btn-fs"), hint: $("controls-hint"), hintKeys: $("hint-keys"), hintTouch: $("hint-touch"),
     hud2: $("hud2"), countdown2: $("countdown-2"), hintKeys2: $("hint-keys-2p"),
+    mp: $("screen-mp"), mpBoard: $("mp-board"),
     tour: $("screen-tour"), brief: $("screen-brief"), shop: $("screen-shop"),
     exitBtn: $("btn-exit"), turbo: $("turbo"), turboState: $("turbo-state"),
     turboFill: $("turbo-fill"), turboGain: $("turbo-gain"), turboHint: $("turbo-hint")
@@ -2800,7 +2801,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       bikeStats = worn;
     }
 
-    if (ghostsOn && players() === 1) {
+    if (ghostsOn && players() === 1 && !mpMode) {
       ghosts.push(b.wc.armand, b.wc.arthur);
       var mine = lsGet("zr3_bestghost_" + selTrack, null);
       if (validGhostShape(mine)) {
@@ -2841,8 +2842,9 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       st: riders[0].st, recorder: riders[0].recorder,
       step: 0, ghosts: ghosts, countT: 2.7, endT: 0, lastBeep: 3,
       practice: practice, finishers: 0,
-      /* a run with the weather against you cannot set a record */
-      handicapped: grip < 0.999,
+      /* a run with the weather against you cannot set a record, and neither
+         can one where somebody else's honesty is part of the result */
+      handicapped: grip < 0.999 || mpMode,
       /* the world's own clock, so it keeps turning when rider one is home */
       clock: 0,
       bikeName: riders[0].bikeName,
@@ -2859,6 +2861,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     if (el.tour) el.tour.hidden = true;
     if (el.brief) el.brief.hidden = true;
     if (el.shop) el.shop.hidden = true;
+    if (el.mp) el.mp.hidden = true;
     el.hud.hidden = false;
     el.countdown.hidden = false;
     if (el.countdown2) el.countdown2.hidden = players() !== 2;
@@ -2906,6 +2909,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     /* abandoning a tour leg drops you back into the roadbook to try again —
        the mechanical is rolled from the stage, so you cannot re-roll your luck */
     var wasTour = tourMode;
+    if (mpMode) { mpLeaveAll(); if (NET && NET.room) NET.leave(); }
     tourMode = false;
     pendingFault = null;
     mode = "menu";
@@ -2928,6 +2932,10 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     var wc = run.b.wc;
     var timeMs = Math.round(st.finishT * 1000);
     var name = CORE.sanitizeName(profile.name);
+
+    /* a live race is a race between the riders in the room: the same deal as
+       two on one sofa — no medals, no bests, no ghost, nothing to the board */
+    if (mpMode && NET && NET.room) { mpFinishRace(); return; }
 
     /* two on the sofa is a race between THEM: no medals, no personal bests,
        no ghost recording and nothing sent to the club board */
@@ -3730,7 +3738,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   function tourStage() { return tour ? TOUR.stageAt(tour.stage) : null; }
 
   function showOnly(which) {
-    [el.menu, el.tour, el.brief, el.shop, el.results, el.howto, el.pause].forEach(function (o) {
+    [el.menu, el.tour, el.brief, el.shop, el.results, el.howto, el.pause, el.mp].forEach(function (o) {
       if (o) o.hidden = o !== which;
     });
   }
@@ -4046,6 +4054,9 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
        the turbo meter and the exit button showing through with it is clutter */
     el.hud.hidden = true;          /* the turbo meter lives inside the HUD */
     if (el.hud2) el.hud2.hidden = true;
+    if (el.mpBoard) el.mpBoard.hidden = true;
+    var mpT = $("mp-tags");
+    if (mpT) mpT.hidden = true;
     el.countdown.hidden = true;
     if (el.countdown2) el.countdown2.hidden = true;
     el.touch.hidden = true;
@@ -4167,6 +4178,388 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     onTour("btn-tour-retry", retryTourStage);
     onTour("btn-tour-road", openTour);
     onTour("btn-tour-menu", function () { leaveTour(); quitToMenu(); });
+  }
+
+  /* ====================================================================
+     LIVE RACING
+     Everybody simulates their own bike, exactly as in single player, and
+     tells the room where they are about fifteen times a second. Nobody's
+     input crosses the wire, so a slow connection costs you a smooth view of
+     your friend and never control of your own bike.
+
+     What that buys in honesty it spends in trust, so a live race is treated
+     like the two-up race on one sofa: no personal bests, no medals, no
+     unlocks, nothing to the club board. Records still come only from a solo
+     run whose ghost the server re-simulates.
+     ==================================================================== */
+
+  var NET = window.ZR_NET || null;
+  var MPC = window.ZR_MP || null;
+  var mpMode = false;            /* is this run a live race? */
+  var mpRigs = {};               /* peer id -> a rig on the hill */
+  var mpFlags = {};              /* peer id -> the name floating over them */
+  var mpArmed = false;           /* waiting on the server's countdown */
+
+  function mpOn() { return !!(NET && NET.room); }
+
+  function mpSetup() {
+    return { track: selTrack, tod: todSel, wx: wxSel };
+  }
+
+  /* ---------- the lobby ---------- */
+
+  function openMp() {
+    if (!NET) return;
+    mode = "mp";
+    if (NET.state !== "open") NET.connect();
+    renderMp();
+    showOnly(el.mp);
+  }
+
+  function mpErr(txt) {
+    var e = $("mp-err");
+    if (e) e.textContent = txt || "";
+  }
+
+  function hostName(room) {
+    var h = room.players.filter(function (p) { return p.id === room.hostId; })[0];
+    return h ? h.name : "the host";
+  }
+
+  function renderMp() {
+    if (!NET) return;
+    var entry = $("mp-entry"), lobby = $("mp-lobby");
+    var room = NET.room;
+    if (entry) entry.hidden = !!room;
+    if (lobby) lobby.hidden = !room;
+
+    var sub = $("mp-sub");
+    if (sub) {
+      sub.textContent = NET.state === "open"
+        ? (room ? "Everyone here rides the same hill at the same moment."
+                : "Two devices, one hill, at the same time.")
+        : NET.state === "connecting" ? "Finding the club server…"
+        : "The club server is not answering — live racing needs it running.";
+    }
+    if (!room) return;
+
+    var tag = $("mp-code-tag");
+    if (tag) tag.textContent = room.code;
+
+    var list = $("mp-riders");
+    if (list) {
+      list.innerHTML = room.players.map(function (p) {
+        var bits = "";
+        if (p.id === NET.you) bits += '<span class="mp-tag mp-tag--you">you</span>';
+        if (p.id === room.hostId) bits += '<span class="mp-tag mp-tag--host">host</span>';
+        bits += p.ready
+          ? '<span class="mp-tag mp-tag--ready">ready</span>'
+          : '<span class="mp-tag">waiting</span>';
+        return '<li style="--p-tint:' + p.jersey + '"><span class="mp-name">' +
+          p.name + "</span>" + bits + "</li>";
+      }).join("");
+    }
+
+    var hint = $("mp-hosthint");
+    if (hint) {
+      var t = CORE.TRACKS3[room.track];
+      hint.innerHTML = "Everyone rides <b>" + (t ? t.name : room.track) + "</b>" +
+        (room.wx !== "clear" ? " in the " + room.wx : "") +
+        (room.tod !== "auto" ? " at " + room.tod : "") + ". " +
+        (room.players.length < 2
+          ? "<b>Read the code to your friend — the race starts when they are here.</b>"
+          : NET.isHost()
+            ? "When everybody is ready, drop the flag."
+            : "Waiting for " + hostName(room) + " to drop the flag.");
+    }
+
+    var me = NET.me();
+    var rdy = $("btn-mp-ready");
+    if (rdy) {
+      rdy.textContent = me && me.ready ? "Not ready yet" : "I\u2019m ready 👍";
+      rdy.className = "btn btn--small " + (me && me.ready ? "btn--ghost" : "btn--forest");
+    }
+    var startBtn = $("btn-mp-start");
+    if (startBtn) {
+      startBtn.hidden = !NET.isHost();
+      var can = room.players.length >= 2 && room.players.every(function (p) { return p.ready; });
+      startBtn.disabled = !can;
+      startBtn.className = "btn btn--small " + (can ? "btn--copper" : "btn--ghost");
+    }
+  }
+
+  /* ---------- riders on the hill ---------- */
+
+  function mpClearRigs() {
+    Object.keys(mpRigs).forEach(function (id) {
+      var r = mpRigs[id];
+      if (r.group.parent) r.group.parent.remove(r.group);
+    });
+    mpRigs = {};
+    var tags = $("mp-tags");
+    if (tags) { tags.innerHTML = ""; tags.hidden = true; }
+    mpFlags = {};
+  }
+
+  function mpAttachRigs(scene) {
+    mpClearRigs();
+    NET.others().forEach(function (p) {
+      var rig = buildRiderMesh(new THREE.Color(p.jersey).getHex());
+      enableRigShadows(rig);
+      scene.add(rig.group);
+      mpRigs[p.id] = rig;
+    });
+    var tags = $("mp-tags");
+    if (tags) {
+      tags.hidden = false;
+      tags.innerHTML = NET.others().map(function (p) {
+        return '<span class="mp-flag" id="mpf-' + p.id + '" style="--p-tint:' + p.jersey + '">' +
+          p.name + "</span>";
+      }).join("");
+      NET.others().forEach(function (p) { mpFlags[p.id] = $("mpf-" + p.id); });
+    }
+  }
+
+  var mpVec = new THREE.Vector3();
+  function mpAnimate(dt) {
+    if (!mpMode || !NET) return;
+    var nowMs = performance.now();
+    var stage = stageEl ? stageEl.getBoundingClientRect() : null;
+    NET.others().forEach(function (p) {
+      var rig = mpRigs[p.id];
+      if (!rig) return;
+      var at = NET.peerAt(p.id, nowMs);
+      var flag = mpFlags[p.id];
+      if (!at) {
+        rig.group.visible = false;
+        if (flag) flag.style.display = "none";
+        return;
+      }
+      rig.group.visible = true;
+      placeRig(rig, at.x, at.y, at.z, at.yaw, 0);
+      if (at.dwn) rig.group.rotation.z += 6 * dt;
+      rig.wheelF.rotation.x -= at.sp * dt / 0.34;
+      rig.wheelB.rotation.x -= at.sp * dt / 0.34;
+      rig.blob.visible = lightMode && !at.air;
+      /* a rider who has gone quiet fades rather than vanishing */
+      rig.group.traverse(function (o) {
+        if (o.isMesh && o.material && o.material.transparent) o.material.opacity = at.stale ? 0.3 : 1;
+      });
+      /* their name, over their head, in screen space */
+      if (flag && stage) {
+        mpVec.set(at.x, at.y + 2.4, at.z).project(views[0].camera);
+        var onScreen = mpVec.z < 1 && Math.abs(mpVec.x) < 1.3 && Math.abs(mpVec.y) < 1.3;
+        if (onScreen) {
+          flag.style.display = "block";
+          flag.style.left = ((mpVec.x * 0.5 + 0.5) * stage.width).toFixed(0) + "px";
+          flag.style.top = ((-mpVec.y * 0.5 + 0.5) * stage.height).toFixed(0) + "px";
+        } else {
+          flag.style.display = "none";
+        }
+      }
+    });
+  }
+
+  /* who is where, down the hill */
+  function mpBoard(world) {
+    var board = el.mpBoard;
+    if (!board || !mpMode || !NET.room) return;
+    var me = NET.me();
+    var rows = [];
+    rows.push({ id: NET.you, name: (me && me.name) || "You", jersey: (me && me.jersey) || "#1F7A48",
+      z: run.st.z, done: run.st.finished, you: true, gone: false });
+    NET.others().forEach(function (p) {
+      var at = NET.peerAt(p.id, performance.now());
+      rows.push({ id: p.id, name: p.name, jersey: p.jersey,
+        z: at ? at.z : -1e9, done: p.finished, you: false, gone: !at || at.stale });
+    });
+    rows.sort(function (a, b2) { return (b2.done ? 1e9 : b2.z) - (a.done ? 1e9 : a.z); });
+    var lead = rows[0];
+    board.innerHTML = rows.map(function (r) {
+      var gap = r === lead ? "" : Math.round(lead.z - r.z) + " m";
+      return '<li class="' + (r.you ? "is-you " : "") + (r.gone ? "is-gone" : "") +
+        '" style="--p-tint:' + r.jersey + '"><span class="mpb-dot"></span>' +
+        '<span class="mpb-name">' + r.name + "</span>" +
+        '<span class="mpb-gap">' + (r.done ? "🏁" : gap) + "</span></li>";
+    }).join("");
+  }
+
+  /* ---------- starting together ---------- */
+
+  /* The host drops the flag; the server names a moment; every device counts
+     down to that same moment on its own clock. */
+  function mpArm() {
+    if (!NET.room || mpArmed) return;
+    mpArmed = true;
+    mpMode = true;
+    setPlayers(1, false);            /* a live race is one rider per screen */
+    if (NET.room.track !== selTrack) selectTrack(NET.room.track);
+    if (NET.room.tod !== todSel) { todSel = NET.room.tod; lsSet("zr3_tod", todSel); refreshTodChips(); }
+    if (NET.room.wx !== wxSel) { wxSel = NET.room.wx; lsSet("zr3_wx", wxSel); refreshTodChips(); }
+    startRace();
+    /* replace the local 3-2-1 with one keyed to the server's moment */
+    run.countT = Math.max(0.2, NET.clock.until(NET.room.startAt) / 1000);
+    run.lastBeep = Math.ceil(run.countT) + 1;
+    mpAttachRigs(run.b.sc.scene);
+    if (el.mpBoard) el.mpBoard.hidden = false;
+  }
+
+  function mpFinishRace() {
+    var st = run.st;
+    NET.finish({
+      timeMs: Math.round(st.finishT * 1000),
+      coins: st.coinCount,
+      crashes: st.crashes
+    });
+    renderMpResults();
+  }
+
+  function renderMpResults() {
+    var room = NET.room;
+    if (!room) return;
+    var order = room.finishOrder.slice();
+    var mine = null;
+    order.forEach(function (f) { if (f.id === NET.you) mine = f; });
+    var waiting = room.players.filter(function (p) { return !p.finished; });
+
+    var cards = order.map(function (f, i) {
+      var crown = i === 0 ? "🏆" : i === 1 ? "🥈" : "🚵";
+      return '<div class="vs-card' + (i === 0 ? " is-winner" : "") + '" style="--p-tint:' + f.jersey + '">' +
+        '<span class="vs-crown">' + crown + "</span>" +
+        '<span class="vs-name">' + f.name + (f.id === NET.you ? " (you)" : "") + "</span>" +
+        '<span class="vs-time">' + fmtTime(f.result.timeMs) + "</span>" +
+        '<span class="vs-line">🪙 ' + f.result.coins + " · " +
+          (f.result.crashes ? f.result.crashes + " crash" + (f.result.crashes === 1 ? "" : "es") : "clean run") +
+        "</span></div>";
+    }).join("");
+
+    var gap = order.length >= 2 && order[1].result
+      ? order[1].result.timeMs - order[0].result.timeMs : 0;
+
+    el.results.classList.remove("is-finale");
+    ["results-row", "results-row-tour", "results-row-vs"].forEach(function (id) {
+      var r = $(id); if (r) r.hidden = true;
+    });
+    var rowMp = $("results-row-mp");
+    if (rowMp) rowMp.hidden = false;
+    var againBtn = $("btn-mp-again");
+    if (againBtn) againBtn.hidden = !NET.isHost();
+
+    el.resultsContent.innerHTML =
+      '<div class="results-medal">📡</div>' +
+      "<h2>" + (mine && mine.place === 1 ? "You win!" :
+        order.length ? order[0].name + " wins" : "Race over") + "</h2>" +
+      '<p class="gr-tag">' + (CORE.TRACKS3[room.track] ? CORE.TRACKS3[room.track].name : room.track) +
+        " · code " + room.code + "</p>" +
+      '<div class="vs-grid">' + cards + "</div>" +
+      (gap ? '<p class="vs-gap">' + fmtTime(gap) + " between first and second" +
+        (gap < 1500 ? " — a photo finish! 📸" : "") + "</p>" : "") +
+      (waiting.length
+        ? '<p class="vs-gap">Still out there: ' + waiting.map(function (p) { return p.name; }).join(", ") + "</p>"
+        : "") +
+      '<p class="results-note">Live races stay between the riders in the room: no personal ⏱ bests, ' +
+      "no Ghost Codes and nothing goes to the club board. Ride on your own for those.</p>";
+
+    mode = "results";
+    el.results.hidden = false;
+    hideRideChrome();
+    stopRumble();
+    stopRain();
+  }
+
+  function mpLeaveAll() {
+    mpMode = false;
+    mpArmed = false;
+    mpClearRigs();
+    if (el.mpBoard) el.mpBoard.hidden = true;
+  }
+
+  /* ---------- wiring ---------- */
+
+  if (NET) {
+    NET.onEvent = function (type, data) {
+      if (type === "error") { mpErr(data.why); renderMp(); return; }
+      if (type === "state") { renderMp(); return; }
+      if (type === "room") {
+        mpErr("");
+        renderMp();
+        if (data.joined && mode !== "mp") openMp();
+        /* the host dropped the flag: everybody rolls out together */
+        if (NET.room && NET.room.state === "countdown" && !mpArmed) mpArm();
+        /* somebody joined or left mid-race — keep the rigs honest */
+        if (mpMode && run && NET.room && NET.room.state !== "lobby") {
+          var live = {};
+          NET.others().forEach(function (p) { live[p.id] = 1; });
+          var stale = Object.keys(mpRigs).some(function (id) { return !live[id]; }) ||
+            NET.others().some(function (p) { return !mpRigs[p.id]; });
+          if (stale) mpAttachRigs(run.b.sc.scene);
+        }
+        if (mpMode && mode === "results") renderMpResults();
+        if (NET.room && NET.room.state === "lobby" && mpArmed) {
+          /* the host lined everyone up again */
+          mpLeaveAll();
+          mode = "mp";
+          showOnly(el.mp);
+          renderMp();
+        }
+        return;
+      }
+    };
+
+    var onMp = function (id, fn) { var b = $(id); if (b) b.addEventListener("click", fn); };
+    onMp("btn-mp-open", openMp);
+    onMp("btn-mp-exit", function () {
+      if (NET.room) NET.leave();
+      mpLeaveAll();
+      mode = "menu";
+      showOnly(el.menu);
+      refreshMenu();
+    });
+    onMp("btn-mp-create", function () {
+      mpErr("");
+      NET.create(CORE.sanitizeName(profile.name), profile.jersey, mpSetup());
+    });
+    onMp("btn-mp-join", function () {
+      var box = $("mp-code");
+      var code = box ? box.value : "";
+      if (!MPC.cleanCode(code)) { mpErr("That code should be four letters — check it and try again."); return; }
+      mpErr("");
+      NET.join(code, CORE.sanitizeName(profile.name), profile.jersey);
+    });
+    onMp("btn-mp-ready", function () {
+      var me = NET.me();
+      NET.ready(!(me && me.ready));
+    });
+    onMp("btn-mp-start", function () { NET.start(); });
+    onMp("btn-mp-leave", function () { NET.leave(); mpLeaveAll(); renderMp(); });
+    onMp("btn-mp-again", function () { NET.again(); });
+    onMp("btn-mp-back", function () {
+      mpLeaveAll();
+      mode = "mp";
+      showOnly(el.mp);
+      renderMp();
+    });
+    onMp("btn-mp-quit", function () {
+      if (NET.room) NET.leave();
+      mpLeaveAll();
+      quitToMenu();
+    });
+
+    var codeBox = $("mp-code");
+    if (codeBox) {
+      codeBox.addEventListener("input", function () {
+        codeBox.value = codeBox.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4);
+      });
+      codeBox.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") { e.preventDefault(); var b = $("btn-mp-join"); if (b) b.click(); }
+      });
+    }
+
+    /* only offer live racing if a server is actually behind this page */
+    NET.probe(function (live) {
+      var btn = $("btn-mp-open");
+      if (btn) btn.hidden = !live;
+    });
   }
 
   /* ---------- one rider or two ---------- */
@@ -4676,7 +5069,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     var dt = Math.min(0.1, (ts - lastTs) / 1000 || 0.016);
     lastTs = ts;
 
-    if (mode === "menu" || mode === "tour") {
+    if (mode === "menu" || mode === "tour" || mode === "mp") {
       menuT += dt;
       var b = currentBundle();
       var dur = b.wc.armand.timeMs / 1000;
@@ -4731,6 +5124,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
         animatePlayer(r, dt);
         updateCamera(r.view, r.st, dt, world);
       });
+      if (mpMode && NET) { NET.pushPos(run.st); mpAnimate(dt); }
       animateGhosts(0, dt);
       updateCoins(sc, world, run.taken, run.clock);
       animateScene(sc, run.clock, dt, run.st.x, run.st.y, run.st.z, riderSpots());
@@ -4762,7 +5156,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
           ev.length = 0;
           CORE.stepRider3(rr.st, inp, world, ev, run.taken);
           handleEvents(ev, rr.st, rr.view, rr.idx);
-          if (players() === 1 && rr.step % 6 === 0) {
+          if (players() === 1 && !mpMode && rr.step % 6 === 0) {
             rr.recorder.push([Math.round(rr.st.x * 10), Math.round(rr.st.y * 10), Math.round(rr.st.z * 10), Math.round(rr.st.yaw * 100)]);
           }
           rr.step++;
@@ -4806,6 +5200,11 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
         animatePlayer(r, dt);
         updateCamera(r.view, (r.st.finished && live) ? live.st : r.st, dt, world);
       });
+      if (mpMode && NET) {
+        if (!run.st.finished) NET.pushPos(run.st);
+        mpAnimate(dt);
+        mpBoard(world);
+      }
       var lead = live || run.riders[0];
       animateGhosts(run.clock, dt);
       updateCoins(sc, world, run.taken, run.clock);
