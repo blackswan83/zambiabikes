@@ -72,19 +72,22 @@ and valve stems, hooked rim profiles, toothed chainrings and cassettes, a
 rear derailleur with jockey wheels, drilled rotors (alpha-tested canvas
 texture), brake hoses routed lever-to-caliper, fork dust seals and arches,
 coil or air shocks with rocker links, welds, head badges, downtube decals,
-stem faceplate bolts and pinned pedals. 47 parts across eleven categories —
+stem faceplate bolts and pinned pedals. 58 parts across twelve categories —
 frames, forks, wheels, tires, drivetrains, chainring sizes, handlebars,
-pedals, brakes, seatposts, extras — each with honest stat trade-offs that
-feed the riding physics via `computeStats`. The **paint booth** sprays every
-zone independently (frame, fork lowers, rims, saddle, grips, plus black /
-tan / gum tire walls) and the **Tune bench** sets suspension sag %, rebound
+pedals, brakes, seatposts, extras and decal patterns (racing stripes,
+flames, chitenge chevrons, leopard spots) — each with honest stat trade-offs
+that feed the riding physics via `computeStats`. The **paint booth** sprays
+every zone independently (frame, fork lowers, rims, saddle, grips, decal
+colour, spokes and chain, plus black / tan / gum tire walls) and the
+**Tune bench** sets suspension sag %, rebound
 clicks and tire pressure psi — real setup mechanics with recommended bands
 and verdicts, all of which change the ride. Dream parts are **earned by
 riding** (finish tracks, beat ghosts, collect coins — tracked in
 `zr3_career`), never bought.
 
-Four 3D mountains: **Miombo Meander** (1.25 km), **Baobab Ridge** (1.5 km,
-sunset), **Lower Zambezi** (1.6 km riverside — a flowing river with sandy
+Five 3D mountains: **Miombo Meander** (1.25 km), **Baobab Ridge** (1.5 km,
+sunset), **Kasanka Bat Storm** (1.4 km of dusk swamp forest under rivers of
+ten million straw-coloured fruit bats, with mist on the ground), **Lower Zambezi** (1.6 km riverside — a flowing river with sandy
 beaches, reed beds, hippo pods, and crocodiles basking right on the trail
 edge; clip one and you crash, ride into the river and you splash), and
 **Mosi Falls Drop** (1.75 km canyon). Armand and Arthur's ghosts
@@ -156,6 +159,16 @@ curl -H "Authorization: Bearer $ADMIN_TOKEN" https://your-app.up.railway.app/api
 The static site still works completely standalone (GitHub Pages) — with no
 server behind it, the join form simply falls back to the original
 prepared-email flow.
+
+## Making the mountains more realistic
+
+Every texture, sky and tree in the game is generated in code, which is why
+the game ships with no image files at all. The way past that ceiling is real
+photo-scanned assets: drop CC0 textures, HDRI skies and `.glb` models into
+[`assets/world/`](assets/world/README.md), which documents the exact file
+names and size limits. Anything present gets used; anything missing falls
+back to the procedural version, so the folder can be filled one material at
+a time.
 
 ---
 

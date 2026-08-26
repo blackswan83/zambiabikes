@@ -289,6 +289,17 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     });
   }
 
+  /* optional photo-scanned textures from assets/world — every load fails
+     silently back to the procedural look, so static hosting keeps working */
+  var worldTexLoader = new THREE.TextureLoader();
+  function loadWorldTex(url, srgb, done) {
+    worldTexLoader.load(url, function (t) {
+      if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+      t.wrapS = t.wrapT = THREE.RepeatWrapping;
+      done(t);
+    }, undefined, function () { /* asset absent — procedural stays */ });
+  }
+
   function renderFrame(sc) {
     renderer.toneMappingExposure = sc.exposure;
     if (composer) {
@@ -871,8 +882,8 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     return worldCache[id];
   }
 
-  function disposeScene(id) {
-    var sc = sceneCache[id];
+  function disposeScene(key) {
+    var sc = sceneCache[key];
     if (!sc) return;
     sc.scene.traverse(function (o) {
       if (o.geometry) o.geometry.dispose();
@@ -883,17 +894,70 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
         });
       }
     });
-    delete sceneCache[id];
+    delete sceneCache[key];
+  }
+
+  /* ---------- time of day: cosmetic relight of any track's theme ----------
+     "auto" keeps each mountain's hand-tuned mood. The explicit moods override
+     sun position/colour, sky scattering, fog and exposure — never physics, so
+     times and ghosts stay comparable across lighting. Sun always sits behind
+     the rider (-z): riding into a low sun whites out the whole frame. */
+
+  var TOD_ORDER = ["auto", "dawn", "day", "sunset", "dusk"];
+  var TOD_META = {
+    auto: { label: "Track mood", emoji: "✨" },
+    dawn: { label: "Dawn", emoji: "🌅" },
+    day: { label: "Midday", emoji: "☀️" },
+    sunset: { label: "Sunset", emoji: "🌇" },
+    dusk: { label: "Dusk", emoji: "🌆" }
+  };
+  var todSel = lsGet("zr3_tod", "auto");
+  if (TOD_ORDER.indexOf(todSel) < 0) todSel = "auto";
+
+  function todTheme(T) {
+    if (todSel === "auto") return T;
+    var d = Object.assign({}, T);
+    if (todSel === "dawn") {
+      d.sunPos = [-190, 48, -240];
+      d.sun = 0xFFE2C0; d.ambient = 0xB8B2C4;
+      d.turbidity = 4.5; d.rayleigh = 1.9; d.mieCoeff = 0.005; d.mieG = 0.8;
+      d.exposure = (T.exposure || 0.6) * 0.98;
+      d.fog = 0xE8DCE4; d.sky = 0xA8B8E0; d.skyLow = 0xF5C9A8;
+      d.cloudTint = 0xF2D8CC; d.ridgeDim = 0.25;
+    } else if (todSel === "day") {
+      d.sunPos = [40, 330, -180];
+      d.sun = 0xFFFDF4; d.ambient = 0xC2CCB8;
+      d.turbidity = 2.6; d.rayleigh = 1.1; d.mieCoeff = 0.0025; d.mieG = 0.76;
+      d.exposure = (T.exposure || 0.6) * 1.08;
+      d.fog = 0xE2EEE8; d.sky = 0x8EC8EE; d.skyLow = 0xEAF4F0;
+      d.cloudTint = 0xFFFFFF; d.ridgeDim = 0.05;
+    } else if (todSel === "sunset") {
+      d.sunPos = [-200, 52, -250];
+      d.sun = 0xFFC384; d.ambient = 0xC0A088;
+      d.turbidity = 7.5; d.rayleigh = 2.9; d.mieCoeff = 0.008; d.mieG = 0.84;
+      d.exposure = (T.exposure || 0.6) * 0.9;
+      d.fog = 0xE8C8A0; d.sky = 0xE8A868; d.skyLow = 0xFFDCA8;
+      d.cloudTint = 0xF5C098; d.ridgeDim = 0.4;
+    } else if (todSel === "dusk") {
+      d.sunPos = [-170, 30, -230];
+      d.sun = 0xE0A87A; d.ambient = 0x9AA4C0;
+      d.turbidity = 4.5; d.rayleigh = 3.6; d.mieCoeff = 0.005; d.mieG = 0.8;
+      d.exposure = (T.exposure || 0.6) * 0.78;
+      d.fog = 0x9AA4BC; d.sky = 0x3A4A74; d.skyLow = 0xB88C88;
+      d.cloudTint = 0x707A90; d.ridgeDim = 0.55;
+    }
+    return d;
   }
 
   function buildScene(id) {
-    if (sceneCache[id]) return sceneCache[id];
+    var key = id + "|" + todSel;
+    if (sceneCache[key]) return sceneCache[key];
     /* keep at most one other scene alive */
-    Object.keys(sceneCache).forEach(function (k) { if (k !== id) disposeScene(k); });
+    Object.keys(sceneCache).forEach(function (k) { if (k !== key) disposeScene(k); });
 
     var wc = getWorld(id);
     var world = wc.world;
-    var T = world.def.theme;
+    var T = todTheme(world.def.theme);
     var sceneLeafMats = [];
     function addSway(mat, amp, freq) {
       mat.onBeforeCompile = function (shader) {
@@ -938,8 +1002,10 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       scene.add(skyObj);
     }
     var fogC = new THREE.Color(T.fog);
-    var ridgeFar = buildRidge(640, 90, 120, fogC.clone().lerp(new THREE.Color(0x223322), 0.10), world.def.seed % 10);
-    var ridgeNear = buildRidge(520, 90, 80, fogC.clone().lerp(new THREE.Color(0x1A2A1A), 0.22), (world.def.seed % 10) + 3);
+    /* low-light moods silhouette the horizon hills instead of glowing */
+    var ridgeBase = fogC.clone().lerp(new THREE.Color(0x0E1418), T.ridgeDim || 0);
+    var ridgeFar = buildRidge(640, 90, 120, ridgeBase.clone().lerp(new THREE.Color(0x223322), 0.10), world.def.seed % 10);
+    var ridgeNear = buildRidge(520, 90, 80, ridgeBase.clone().lerp(new THREE.Color(0x1A2A1A), 0.22), (world.def.seed % 10) + 3);
     scene.add(ridgeFar, ridgeNear);
 
     /* physical-sky exposure is low, so lights compensate to keep the ground lit */
@@ -1000,6 +1066,9 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
           if (h < wl - 0.35) sandK = -1;                          /* riverbed */
           else if (h < wl + 1.8) sandK = 1 - (h - wl) / 1.8;      /* beach */
         }
+        /* inside the falls gorge everything is wet dark basalt */
+        var basaltK = 0;
+        if (world.rowGorgeX && wx > world.rowGorgeX[iz] + 1) basaltK = Math.min(1, sl * 1.5 + 0.3);
         if (d < 2.6) {
           tmp.copy(cDirt).lerp(cDirtD, 0.35 + nse * 0.2);
           /* twin tire ruts worn into the trail */
@@ -1013,6 +1082,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
         }
         if (sandK > 0) tmp.lerp(new THREE.Color(T.sand || 0xD8C08A), Math.min(1, sandK));
         else if (sandK < 0) tmp.copy(cDirtD).multiplyScalar(0.55);
+        if (basaltK > 0) tmp.lerp(new THREE.Color(0x39413C), basaltK);
         colors[vi * 3] = tmp.r; colors[vi * 3 + 1] = tmp.g; colors[vi * 3 + 2] = tmp.b;
       }
     }
@@ -1030,6 +1100,18 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     }));
     terrain.receiveShadow = true;
     scene.add(terrain);
+    /* photo-scanned ground detail (assets/world) swaps in when present */
+    loadWorldTex("assets/world/textures/rock/rock-detail.jpg", false, function (t) {
+      t.repeat.set(((nx - 1) * step) / 11, ((nz - 1) * step) / 11);
+      terrain.material.map = t;
+      terrain.material.needsUpdate = true;
+    });
+    loadWorldTex("assets/world/textures/rock/rock-normal.jpg", false, function (t) {
+      t.repeat.set(((nx - 1) * step) / 11, ((nz - 1) * step) / 11);
+      terrain.material.normalMap = t;
+      terrain.material.normalScale.set(0.75, 0.75);
+      terrain.material.needsUpdate = true;
+    });
 
     /* ---- the Zambezi itself: a flowing water ribbon along the bank ---- */
     var riverTex = null;
@@ -1077,6 +1159,19 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     var parts = {};  /* type -> array of {geo, mat, yOff, sMul} pieces */
     function piece(g2, m2, y2, s2) { return { geo: g2, mat: m2, y: y2 || 0, s: s2 || 1 }; }
     var trunkM = lam(T.trunk), canM = lam(T.canopy), can2M = lam(T.canopy2), rockM = lam(T.rock);
+    /* real scanned surfaces on rocks and bark, when the assets exist */
+    loadWorldTex("assets/world/textures/rock/rock-albedo.jpg", true, function (t) {
+      t.repeat.set(1.6, 1.6);
+      rockM.map = t;
+      rockM.color.set(0xCFCabe);
+      rockM.needsUpdate = true;
+    });
+    loadWorldTex("assets/world/textures/bark/bark-albedo.jpg", true, function (t) {
+      t.repeat.set(1, 2);
+      trunkM.map = t;
+      trunkM.color.lerp(new THREE.Color(0xffffff), 0.5);
+      trunkM.needsUpdate = true;
+    });
     /* leaf-card canopies: alpha-tested crossed cards read as organic foliage */
     var leafM = new THREE.MeshLambertMaterial({ map: leafTex, alphaTest: 0.42, side: THREE.DoubleSide, color: T.canopy });
     var leafM2 = new THREE.MeshLambertMaterial({ map: leafTex, alphaTest: 0.42, side: THREE.DoubleSide, color: T.canopy2 });
@@ -1161,9 +1256,10 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       else if (p.type === "giraffe") g2 = buildGiraffe();
       else if (p.type === "zebra") g2 = buildZebra();
       else if (p.type === "antelope") g2 = buildAntelope();
-      else if (p.type === "croc") { g2 = buildCroc(); g2.scale.setScalar(p.s * 1.25); crocs.push(g2); }
-      else if (p.type === "hippo") g2 = buildHippo();
+      else if (p.type === "croc") { g2 = buildCroc(); crocs.push(g2); }
+      else if (p.type === "hippo") g2 = buildHippo(p.r > 0);
       if (g2) {
+        g2.scale.setScalar((p.s || 1) * (p.type === "croc" ? 1.25 : 1));
         g2.position.set(p.x, p.y, p.z);
         g2.rotation.y = p.rot;
         if (!lightMode) g2.traverse(function (o) { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
@@ -1305,19 +1401,21 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       }
     }
 
-    /* ---- bird flocks wheeling over the valley ---- */
+    /* ---- bird flocks wheeling over the valley (bat swirls on Kasanka) ---- */
     var birds = [];
+    var batty = !!T.bats;
     if (!lightMode) {
-      var birdMat = lam(id === "baobab" ? 0x2E1A08 : 0xF4EFE4);
-      for (var fi = 0; fi < 2; fi++) {
-        var flock = { center: null, r: 24 + fi * 14, h: 0, speed: 0.28 + fi * 0.1, members: [] };
-        var fz = zSpan * (0.28 + fi * 0.42);
+      var birdMat = lam(batty ? 0x241A14 : id === "baobab" ? 0x2E1A08 : 0xF4EFE4);
+      var flockN = batty ? 4 : 2;
+      for (var fi = 0; fi < flockN; fi++) {
+        var flock = { center: null, r: (batty ? 15 + fi * 7 : 24 + fi * 14), h: 0, speed: (batty ? 0.55 : 0.28) + fi * 0.1, members: [] };
+        var fz = zSpan * (batty ? 0.14 + fi * 0.23 : 0.28 + fi * 0.42);
         var fIdx = Math.min(world.trailN - 1, Math.floor(fz / 5));
         var fp = world.trail[fIdx];
-        flock.center = new THREE.Vector3(fp.x + (fi ? -30 : 26), fp.y + 34 + fi * 12, fp.z);
-        for (var bi = 0; bi < 5; bi++) {
+        flock.center = new THREE.Vector3(fp.x + (fi % 2 ? -26 : 24), fp.y + (batty ? 20 + fi * 7 : 34 + fi * 12), fp.z);
+        for (var bi = 0; bi < (batty ? 7 : 5); bi++) {
           var bird = new THREE.Group();
-          var wingG = new THREE.PlaneGeometry(0.95, 0.3);
+          var wingG = new THREE.PlaneGeometry(batty ? 0.55 : 0.95, batty ? 0.26 : 0.3);
           var wl = new THREE.Mesh(wingG, birdMat);
           wl.position.x = -0.45;
           var wr = new THREE.Mesh(wingG, birdMat);
@@ -1331,129 +1429,237 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       }
     }
 
-    /* ---- Mosi Falls set piece: layered animated water, spray, shafts ---- */
-    var wf = null;
-    if (id === "falls") {
-      wf = new THREE.Group();
-      var mid = world.trail[Math.floor(world.trailN * 0.45)];
-      var wfx = mid.x + 70, wfz = mid.z;
-      var wallH = 64;
-
-      /* wet cliff behind the water — wide and hazy so it reads as rock, not a slab */
-      var cliff = new THREE.Mesh(new THREE.BoxGeometry(44, wallH + 14, 6),
-        new THREE.MeshStandardMaterial({ color: 0x5A6156, roughness: 0.95 }));
-      cliff.position.set(0, wallH / 2 - 10, -3.4);
-      wf.add(cliff);
-      /* river lip where the water goes over the edge */
-      var lip = new THREE.Mesh(new THREE.PlaneGeometry(23, 7),
-        new THREE.MeshBasicMaterial({ color: 0xDFF3EE, transparent: true, opacity: 0.9, depthWrite: false }));
-      lip.rotation.x = -Math.PI / 2 + 0.12;
-      lip.position.set(0, wallH - 6.2, -2.6);
-      wf.add(lip);
-
-      /* two scrolling water layers: solid + additive shimmer */
-      var waterTexA = streakTex.clone(); waterTexA.needsUpdate = true;
-      waterTexA.repeat.set(2, 2.4);
-      var waterA = new THREE.Mesh(new THREE.PlaneGeometry(22, wallH),
-        new THREE.MeshBasicMaterial({ map: waterTexA, transparent: true, opacity: 0.95, color: 0xEAF9F6, depthWrite: false }));
-      waterA.position.set(0, wallH / 2 - 6, 0.2);
-      wf.add(waterA);
-      var waterTexB = streakTex.clone(); waterTexB.needsUpdate = true;
-      waterTexB.repeat.set(3, 1.6);
-      var waterB = new THREE.Mesh(new THREE.PlaneGeometry(22, wallH),
-        new THREE.MeshBasicMaterial({ map: waterTexB, transparent: true, opacity: 0.55, color: 0xFFFFFF, blending: THREE.AdditiveBlending, depthWrite: false }));
-      waterB.position.set(0, wallH / 2 - 6, 0.45);
-      wf.add(waterB);
-      wf.waterTexA = waterTexA; wf.waterTexB = waterTexB;
-
-      /* plunge pool: real reflective water in full detail, flat disc in light */
-      if (!lightMode) {
-        var poolWater = new Water(new THREE.CircleGeometry(14, 26), {
-          textureWidth: 256, textureHeight: 256,
-          waterNormals: waterNormalTex,
-          sunDirection: sunDir.clone(),
-          sunColor: 0xffffff,
-          waterColor: 0x18453C,
-          distortionScale: 1.5,
-          fog: true
-        });
-        poolWater.rotation.x = -Math.PI / 2;
-        poolWater.position.set(0, -5.6, 4);
-        wf.add(poolWater);
-        wf.water = poolWater;
-      } else {
-        var pool = new THREE.Mesh(new THREE.CircleGeometry(13, 22),
-          new THREE.MeshBasicMaterial({ color: 0xDFF3EE, transparent: true, opacity: 0.85, depthWrite: false }));
-        pool.rotation.x = -Math.PI / 2;
-        pool.position.set(0, -5.6, 4);
-        wf.add(pool);
+    /* ---- Kasanka at dusk: rivers of ten million straw-coloured fruit
+       bats crossing the sky, and mist lying on the swamp forest ---- */
+    var batStreams = [];
+    if (T.bats) {
+      var batTex = canvasTexture(64, 32, function (g) {
+        g.clearRect(0, 0, 64, 32);
+        g.fillStyle = "#1C140E";
+        g.beginPath();
+        g.moveTo(32, 20);
+        g.quadraticCurveTo(18, 4, 2, 14);
+        g.quadraticCurveTo(16, 16, 28, 24);
+        g.lineTo(36, 24);
+        g.quadraticCurveTo(48, 16, 62, 14);
+        g.quadraticCurveTo(46, 4, 32, 20);
+        g.fill();
+      });
+      var streamN = lightMode ? 1 : 3;
+      for (var si = 0; si < streamN; si++) {
+        var bn = lightMode ? 320 : 720;
+        var bp = new Float32Array(bn * 3);
+        for (var bi2 = 0; bi2 < bn; bi2++) {
+          var bz2 = Math.random() * (zSpan + 400) - 150;
+          var bx2 = Math.sin(bz2 * 0.004 + si * 2.1) * 70 + (Math.random() - 0.5) * (70 + si * 34);
+          var by2 = -bz2 * world.def.slope + 46 + si * 18 + Math.random() * 30;
+          bp[bi2 * 3] = bx2; bp[bi2 * 3 + 1] = by2; bp[bi2 * 3 + 2] = bz2;
+        }
+        var bGeo = new THREE.BufferGeometry();
+        bGeo.setAttribute("position", new THREE.BufferAttribute(bp, 3));
+        var bPts = new THREE.Points(bGeo, new THREE.PointsMaterial({
+          map: batTex, size: 3.4 + si * 0.9, transparent: true, depthWrite: false,
+          color: 0xFFFFFF, alphaTest: 0.25
+        }));
+        scene.add(bPts);
+        batStreams.push(bPts);
       }
+    }
+    if (T.groundMist) {
+      for (var gm = 0; gm < 10; gm++) {
+        var gmi = Math.min(world.trailN - 1, Math.floor(world.trailN * (0.06 + gm * 0.1)));
+        var gmp = world.trail[gmi];
+        var gmSp = new THREE.Sprite(new THREE.SpriteMaterial({
+          map: mistTex, transparent: true, opacity: 0.3, depthWrite: false
+        }));
+        gmSp.scale.set(130 + (gm % 3) * 30, 18 + (gm % 2) * 7, 1);
+        gmSp.position.set(gmp.x + ((gm % 2) ? -22 : 18), gmp.y + 5, gmp.z);
+        scene.add(gmSp);
+        clouds.push(gmSp);
+      }
+    }
+
+    /* ---- Victoria Falls: the mile-wide curtain across the First Gorge ----
+       The last stretch of trail rides the Knife-Edge rim. Across the chasm,
+       the curtain drops in named segments split by basalt islands — Devil's
+       Cataract, Main Falls, Rainbow Falls, the Eastern Cataract — with the
+       flat upper Zambezi arriving at the lip and spray columns towering out
+       of the gorge. Built in world space; the group sits at the origin. */
+    var wf = null;
+    if (id === "falls" && world.def.gorge) {
+      wf = new THREE.Group();
+      var G = world.def.gorge;
+      var n3 = world.trailN;
+      var trailXAt = function (z2) {
+        var ti3 = Math.max(0, Math.min(n3 - 1, Math.round((z2 - world.trail[0].z) / 5)));
+        return world.trail[ti3];
+      };
+      var zA = world.trail[Math.floor(n3 * G.fromFrac)].z + 14;
+      var zB = Math.min(world.trail[n3 - 1].z + 80, world.z0 + (world.nz - 1) * world.step - 10);
+
+      var waterTexA = streakTex.clone(); waterTexA.needsUpdate = true;
+      waterTexA.repeat.set(3, 2.6);
+      var waterTexB = streakTex.clone(); waterTexB.needsUpdate = true;
+      waterTexB.repeat.set(4, 1.7);
+      wf.waterTexA = waterTexA; wf.waterTexB = waterTexB;
+      var basaltM = new THREE.MeshStandardMaterial({ color: 0x3E4440, roughness: 0.97 });
+      var curtainM = new THREE.MeshBasicMaterial({
+        map: waterTexA, transparent: true, opacity: 0.96, color: 0xEAF9F6,
+        depthWrite: false, side: THREE.DoubleSide
+      });
+      var shimmerM = new THREE.MeshBasicMaterial({
+        map: waterTexB, transparent: true, opacity: 0.5, color: 0xFFFFFF,
+        blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide
+      });
+      var lipM = new THREE.MeshBasicMaterial({ color: 0xDFF3EE, transparent: true, opacity: 0.9, depthWrite: false });
+      var floorM = new THREE.MeshPhongMaterial({
+        color: 0x16342E, shininess: 90, specular: 0x88BCB0, transparent: true, opacity: 0.94
+      });
+
+      /* smoothed wall line: anchors average the trail over ±45 m so the
+         curtain runs as one continuous wall instead of zigzag slabs */
+      function anchor(z2) {
+        var sx = 0, sy = 0, cnt = 0;
+        for (var ai = 0; ai < n3; ai++) {
+          if (Math.abs(world.trail[ai].z - z2) < 45) { sx += world.trail[ai].x; sy += world.trail[ai].y; cnt++; }
+        }
+        if (!cnt) { var lastP = world.trail[n3 - 1]; sx = lastP.x; sy = lastP.y; cnt = 1; }
+        return { x: sx / cnt + G.offset + G.width - 2, lip: sy / cnt + 5, floor: sy / cnt - G.depth };
+      }
+      function wallQuad(a0, a1, z0q, z1q, mat, xOff, topPad, botPad, vRep) {
+        var gq = new THREE.BufferGeometry();
+        gq.setAttribute("position", new THREE.BufferAttribute(new Float32Array([
+          a0.x + xOff, a0.floor - botPad, z0q,
+          a0.x + xOff, a0.lip + topPad, z0q,
+          a1.x + xOff, a1.lip + topPad, z1q,
+          a1.x + xOff, a1.floor - botPad, z1q
+        ]), 3));
+        var uw = (z1q - z0q) / 30;
+        gq.setAttribute("uv", new THREE.BufferAttribute(new Float32Array([
+          0, 0, 0, vRep, uw, vRep, uw, 0
+        ]), 2));
+        gq.setIndex([0, 1, 2, 0, 2, 3]);
+        gq.computeVertexNormals();
+        var mq = new THREE.Mesh(gq, mat);
+        wf.add(mq);
+        return mq;
+      }
+
+      /* segment pattern along the gorge: [curtain width, island width] */
+      var PATTERN = [[46, 10], [82, 16], [64, 9], [40, 8], [52, 12]];
+      var segZ = zA, pat = 0;
+      var plunges = [];
+      while (segZ < zB - 12) {
+        var segW = Math.min(PATTERN[pat % PATTERN.length][0], zB - segZ);
+        var islW = PATTERN[pat % PATTERN.length][1];
+        var a0 = anchor(segZ), a1 = anchor(segZ + segW);
+        var zMid = segZ + segW / 2;
+
+        wallQuad(a0, a1, segZ, segZ + segW, curtainM, 0, 1, 2, 3.2);
+        wallQuad(a0, a1, segZ, segZ + segW, shimmerM, -0.4, 0.6, 2, 1.9);
+        /* the upper Zambezi arriving flat behind this stretch of lip */
+        var riv = new THREE.Mesh(new THREE.PlaneGeometry(52, segW + islW + 4),
+          new THREE.MeshBasicMaterial({ color: 0xBFE8E2, transparent: true, opacity: 0.8 }));
+        riv.rotation.x = -Math.PI / 2;
+        riv.rotation.z = Math.PI / 2;
+        riv.position.set((a0.x + a1.x) / 2 + 27, (a0.lip + a1.lip) / 2 + 0.35, zMid + islW / 2);
+        wf.add(riv);
+        /* bright lip strip where the river folds over the edge */
+        var lip = new THREE.Mesh(new THREE.PlaneGeometry(segW, 6), lipM);
+        lip.rotation.set(-Math.PI / 2 + 0.1, -Math.PI / 2, 0, "YXZ");
+        lip.position.set((a0.x + a1.x) / 2 + 2.4, (a0.lip + a1.lip) / 2 + 0.6, zMid);
+        wf.add(lip);
+        /* the gorge floor pool under this curtain */
+        var pool = new THREE.Mesh(new THREE.PlaneGeometry(G.width - 8, segW + islW), floorM);
+        pool.rotation.x = -Math.PI / 2;
+        pool.rotation.z = Math.PI / 2;
+        pool.position.set((a0.x + a1.x) / 2 - G.width / 2 + 4, (a0.floor + a1.floor) / 2 + 1.6, zMid + islW / 2);
+        wf.add(pool);
+        plunges.push({ x: (a0.x + a1.x) / 2 - 7, y: (a0.floor + a1.floor) / 2 + 2, z: zMid });
+
+        /* basalt island buttress between this curtain and the next — it just
+           breaks the lip line, like Livingstone Island does */
+        if (segZ + segW + islW < zB) {
+          var am = anchor(segZ + segW + islW / 2);
+          var isl = new THREE.Mesh(new THREE.BoxGeometry(12, am.lip - am.floor + 3, islW + 2), basaltM);
+          isl.position.set(am.x, (am.lip + am.floor) / 2 + 0.5, segZ + segW + islW / 2);
+          wf.add(isl);
+        }
+        segZ += segW + islW;
+        pat++;
+      }
+
+      /* towering spray columns — the smoke that thunders — rising from mid
+         gorge so they accent the curtain instead of hiding it */
+      wf.mists = [];
+      for (var mi = 0; mi < plunges.length; mi++) {
+        var pl = plunges[mi];
+        var m2 = new THREE.Sprite(new THREE.SpriteMaterial({ map: mistTex, transparent: true, opacity: 0.3, depthWrite: false }));
+        m2.scale.set(40 + (mi % 3) * 12, 62 + (mi % 2) * 20, 1);
+        m2.position.set(pl.x - 24, pl.y + 26, pl.z);
+        wf.add(m2);
+        wf.mists.push(m2);
+      }
+
+      /* plunge rings on the biggest pool */
       wf.rings = [];
+      var ringAt = plunges[Math.min(1, plunges.length - 1)];
       for (var qi = 0; qi < 3; qi++) {
         var ring = new THREE.Mesh(new THREE.RingGeometry(1, 1.4, 22),
           new THREE.MeshBasicMaterial({ color: 0xFFFFFF, transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide }));
         ring.rotation.x = -Math.PI / 2;
-        ring.position.set(0, -5.5, 4);
+        ring.position.set(ringAt.x, ringAt.y + 0.3, ringAt.z);
         ring.userData.phase = qi / 3;
         wf.add(ring);
         wf.rings.push(ring);
       }
 
-      /* rising spray particles */
+      /* rising spray particles clustered at the plunge points */
       if (!lightMode) {
-        var sprayN = 70;
+        var sprayN = 90;
         var sprayPos = new Float32Array(sprayN * 3);
         wf.sprayData = [];
         for (var pi = 0; pi < sprayN; pi++) {
-          wf.sprayData.push({ a: Math.random() * 6.28, r: 2 + Math.random() * 9, v: 2 + Math.random() * 4, life: Math.random() });
+          var pb = plunges[pi % plunges.length];
+          wf.sprayData.push({
+            a: Math.random() * 6.28, r: 3 + Math.random() * 12, v: 4 + Math.random() * 6,
+            life: Math.random(), bx: pb.x, by: pb.y, bz: pb.z + (Math.random() - 0.5) * 24
+          });
         }
         var sprayGeo = new THREE.BufferGeometry();
         sprayGeo.setAttribute("position", new THREE.BufferAttribute(sprayPos, 3));
         var spray = new THREE.Points(sprayGeo, new THREE.PointsMaterial({
-          map: mistTex, size: 3.6, transparent: true, opacity: 0.45, depthWrite: false
+          map: mistTex, size: 5, transparent: true, opacity: 0.45, depthWrite: false
         }));
         wf.add(spray);
         wf.spray = spray;
       }
 
-      /* drifting mist billboards */
-      wf.mists = [];
-      for (var mi = 0; mi < 6; mi++) {
-        var m2 = new THREE.Sprite(new THREE.SpriteMaterial({ map: mistTex, transparent: true, opacity: 0.45, depthWrite: false }));
-        m2.scale.set(30 + mi * 7, 14 + mi * 2.5, 1);
-        m2.position.set(-8 + mi * 4, -3 + (mi % 2) * 4, 5 + mi);
-        wf.add(m2);
-        wf.mists.push(m2);
-      }
-
-      /* sun shafts through the mist */
+      /* sun shafts + the double rainbow over the chasm */
+      var vpTp = trailXAt(world.trail[n3 - 1].z);
       if (!lightMode) {
         for (var hi = 0; hi < 2; hi++) {
-          var shaft = new THREE.Mesh(new THREE.PlaneGeometry(7 + hi * 4, 54),
+          var shaft = new THREE.Mesh(new THREE.PlaneGeometry(9 + hi * 5, 70),
             new THREE.MeshBasicMaterial({
-              color: 0xFFF8E0, transparent: true, opacity: 0.10,
+              color: 0xFFF8E0, transparent: true, opacity: 0.09,
               blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false
             }));
-          shaft.position.set(-6 + hi * 10, 16, 6 + hi * 2);
-          shaft.rotation.z = 0.35;
-          shaft.rotation.y = 0.4;
+          shaft.position.set(vpTp.x + G.offset + 30 + hi * 16, vpTp.y + 26, vpTp.z - 40 - hi * 30);
+          shaft.rotation.z = 0.3;
           wf.add(shaft);
         }
       }
-
-      /* rainbow */
       var rcols = [0xE8791D, 0xF7B733, 0x2A9D8F];
-      for (var ri = 0; ri < 3; ri++) {
-        var arc = new THREE.Mesh(new THREE.TorusGeometry(17 - ri * 1.2, 0.4, 6, 26, Math.PI),
-          new THREE.MeshBasicMaterial({ color: rcols[ri], transparent: true, opacity: 0.32, depthWrite: false }));
-        arc.position.set(-4, -5, 9);
-        wf.add(arc);
-      }
+      [[34, vpTp.z - 26, 0.34], [23, vpTp.z + 26, 0.2]].forEach(function (rb) {
+        for (var ri = 0; ri < 3; ri++) {
+          var arc = new THREE.Mesh(new THREE.TorusGeometry(rb[0] - ri * 1.5, 0.55, 6, 30, Math.PI),
+            new THREE.MeshBasicMaterial({ color: rcols[ri], transparent: true, opacity: rb[2], depthWrite: false }));
+          arc.position.set(vpTp.x + G.offset + G.width * 0.45, vpTp.y - G.depth + 10, rb[1]);
+          wf.add(arc);
+        }
+      });
 
-      wf.position.set(wfx, CORE.heightAt(world, wfx, wfz), wfz);
-      wf.rotation.y = -Math.PI / 2.3;
-      wf.wallH = wallH;
-      wf.worldPos = new THREE.Vector3(wfx, CORE.heightAt(world, wfx, wfz), wfz);
+      wf.worldPos = new THREE.Vector3(vpTp.x + G.offset + G.width / 2, vpTp.y, world.trail[Math.floor(n3 * 0.95)].z);
       scene.add(wf);
     }
 
@@ -1461,9 +1667,9 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       scene: scene, coinMesh: coinMesh, clouds: clouds, wf: wf,
       dome: dome, sky: skyObj, ridges: [ridgeFar, ridgeNear], sunSp: sunSp, sun: sun, sunDir: sunDir,
       birds: birds, exposure: exposure, swayMats: sceneLeafMats.slice(),
-      crocs: crocs, riverTex: riverTex
+      crocs: crocs, riverTex: riverTex, batStreams: batStreams
     };
-    sceneCache[id] = cached;
+    sceneCache[key] = cached;
     return cached;
   }
 
@@ -1630,26 +1836,34 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     return g;
   }
 
-  function buildHippo() {
+  function buildHippo(land) {
     var grey = lam(0x6E5A64), greyD = lam(0x59464F);
     var g = new THREE.Group();
     var back = new THREE.Mesh(new THREE.SphereGeometry(1.3, 10, 8), grey);
-    back.scale.set(0.85, 0.5, 1.15);
-    back.position.set(0, -0.25, -0.4);
+    back.scale.set(0.85, land ? 0.62 : 0.5, 1.15);
+    back.position.set(0, land ? 0.62 : -0.25, -0.4);
     g.add(back);
+    if (land) {
+      [[-0.45, 0.35], [0.45, 0.35], [-0.45, -1.1], [0.45, -1.1]].forEach(function (lp) {
+        var leg = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.19, 0.6, 8), grey);
+        leg.position.set(lp[0], 0.3, lp[1]);
+        g.add(leg);
+      });
+    }
+    var hLift = land ? 0.55 : 0;
     var head = new THREE.Mesh(new THREE.SphereGeometry(0.62, 10, 8), grey);
     head.scale.set(0.9, 0.62, 1.25);
-    head.position.set(0, 0.02, 1.05);
+    head.position.set(0, 0.02 + hLift, 1.05);
     g.add(head);
     [-0.24, 0.24].forEach(function (x) {
       var ear = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 5), greyD);
-      ear.position.set(x, 0.42, 0.78);
+      ear.position.set(x, 0.42 + hLift, 0.78);
       g.add(ear);
       var eye = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 5), greyD);
-      eye.position.set(x, 0.3, 1.06);
+      eye.position.set(x, 0.3 + hLift, 1.06);
       g.add(eye);
       var nostril = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 5), greyD);
-      nostril.position.set(x * 0.55, 0.28, 1.65);
+      nostril.position.set(x * 0.55, 0.28 + hLift, 1.65);
       g.add(nostril);
     });
     return g;
@@ -1945,6 +2159,9 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   var CRASH_MSG = {
     landing: "OUCH! 💥 Bend those knees on big drops!",
     croc: "CROC! 🐊 Give those teeth some space!",
+    hippo: "HIPPO! 🦛 Two tonnes of do-not-touch!",
+    elephant: "ELEPHANT! 🐘 Give the big fella room!",
+    antelope: "PUKU! 🦌 Nearly a puku pancake!",
     miombo: "Tree! 🌳 Keep it on the trail!",
     baobab: "That baobab is 1000 years old — and solid! 💥",
     acacia: "Tree! 🌳 Keep it on the trail!",
@@ -1979,6 +2196,11 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
         toast("SPLASH! 🐊 The Zambezi is NOT a shortcut!");
         SFX.splash();
         spawnDust(st.x, st.y + 0.5, st.z, 12);
+      }
+      else if (e.t === "gorge") {
+        toast("THE GORGE! 🌊 Respect the Smoke that Thunders!");
+        SFX.splash();
+        if (!reducedMotion) shakeT = 0.4;
       }
       else if (e.t === "respawn") toast("Back on track! 🚵");
       else if (e.t === "gate") SFX.gate();
@@ -2132,6 +2354,12 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     for (var i = 0; i < sc.clouds.length; i++) {
       sc.clouds[i].position.x += Math.sin(i * 1.7) * 0.7 * dt;
     }
+    /* bat rivers drift down the valley */
+    for (i = 0; i < sc.batStreams.length; i++) {
+      var bs = sc.batStreams[i];
+      bs.position.z = ((t * (9 + i * 3)) % 420) - 210;
+      bs.position.x = Math.sin(t * 0.08 + i * 1.7) * 9;
+    }
     /* birds wheel in slow circles, wings flapping */
     for (i = 0; i < sc.birds.length; i++) {
       var fl = sc.birds[i];
@@ -2184,9 +2412,9 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
           sd.life += dt * 0.5;
           if (sd.life > 1) sd.life -= 1;
           pos.setXYZ(i,
-            Math.cos(sd.a) * sd.r,
-            -5 + sd.life * sd.v * 4,
-            4 + Math.sin(sd.a) * sd.r * 0.5);
+            sd.bx + Math.cos(sd.a) * sd.r,
+            sd.by + sd.life * sd.v * 7,
+            sd.bz + Math.sin(sd.a) * sd.r * 0.5);
         }
         pos.needsUpdate = true;
         sc.wf.spray.material.opacity = 0.4;
@@ -2195,7 +2423,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       if (riderX !== undefined) {
         var dxw = sc.wf.worldPos.x - riderX, dzw = sc.wf.worldPos.z - riderZ;
         var distW = Math.sqrt(dxw * dxw + dzw * dzw);
-        fallsRumble(Math.max(0, Math.min(1, 1 - distW / 150)));
+        fallsRumble(Math.max(0, Math.min(1, 1 - distW / 320)));
       }
     }
   }
@@ -2253,6 +2481,24 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     camSnap = true;
     refreshMenu();
     if (clubOn && !clubGhosts[selTrack]) fetchClubGhosts(selTrack);
+  });
+
+  /* time-of-day chips */
+  function refreshTodChips() {
+    document.querySelectorAll(".tod-chip").forEach(function (c) {
+      c.classList.toggle("is-selected", c.getAttribute("data-tod") === todSel);
+    });
+  }
+  refreshTodChips();
+  var todRow = $("tod-row");
+  if (todRow) todRow.addEventListener("click", function (e) {
+    var chip = e.target.closest("[data-tod]");
+    if (!chip) return;
+    todSel = chip.getAttribute("data-tod");
+    if (TOD_ORDER.indexOf(todSel) < 0) todSel = "auto";
+    lsSet("zr3_tod", todSel);
+    refreshTodChips();
+    camSnap = true;   /* menu attract loop rebuilds against the relit scene */
   });
 
   document.querySelectorAll(".jersey").forEach(function (b) {
@@ -2493,13 +2739,13 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       var dur = b.wc.armand.timeMs / 1000;
       var gt = menuT % (dur + 2.5);
       var gp = CORE.ghostPosAt3(b.wc.armand, Math.min(gt, dur));
-      if (!menuGhostRig || menuGhostRig.sceneId !== selTrack) {
+      if (!menuGhostRig || menuGhostRig.sceneId !== selTrack + "|" + todSel) {
         if (menuGhostRig && menuGhostRig.rig.group.parent) menuGhostRig.rig.group.parent.remove(menuGhostRig.rig.group);
         var rig = buildRiderMesh(0x1F7A48);
         enableRigShadows(rig);
         rig.blob.visible = lightMode;
         b.sc.scene.add(rig.group);
-        menuGhostRig = { rig: rig, sceneId: selTrack };
+        menuGhostRig = { rig: rig, sceneId: selTrack + "|" + todSel };
       }
       placeRig(menuGhostRig.rig, gp.x, gp.y, gp.z, gp.yaw, 0);
       menuGhostRig.rig.wheelF.rotation.x -= 14 * dt;
