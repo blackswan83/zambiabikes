@@ -4199,6 +4199,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   var mpRigs = {};               /* peer id -> a rig on the hill */
   var mpFlags = {};              /* peer id -> the name floating over them */
   var mpArmed = false;           /* waiting on the server's countdown */
+  var mpPending = null;          /* your own result, until the server echoes it */
 
   function mpOn() { return !!(NET && NET.room); }
 
@@ -4392,6 +4393,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     if (!NET.room || mpArmed) return;
     mpArmed = true;
     mpMode = true;
+    mpPending = null;
     setPlayers(1, false);            /* a live race is one rider per screen */
     if (NET.room.track !== selTrack) selectTrack(NET.room.track);
     if (NET.room.tod !== todSel) { todSel = NET.room.tod; lsSet("zr3_tod", todSel); refreshTodChips(); }
@@ -4406,11 +4408,16 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
 
   function mpFinishRace() {
     var st = run.st;
-    NET.finish({
+    var r = {
       timeMs: Math.round(st.finishT * 1000),
       coins: st.coinCount,
       crashes: st.crashes
-    });
+    };
+    NET.finish(r);
+    /* The server's word on the finishing order is a round trip away. Keep our own
+       result here so the screen can show it at once, rather than leaving the rider
+       who just crossed the line reading their own name under "still out there". */
+    mpPending = r;
     renderMpResults();
   }
 
@@ -4420,7 +4427,23 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     var order = room.finishOrder.slice();
     var mine = null;
     order.forEach(function (f) { if (f.id === NET.you) mine = f; });
-    var waiting = room.players.filter(function (p) { return !p.finished; });
+    /* Not in the server's order yet? Then we only just crossed and the echo is
+       still in flight: show our own time now and let the echo correct the place. */
+    if (!mine && mpPending) {
+      var me = NET.me();
+      mine = {
+        id: NET.you,
+        name: (me && me.name) || "You",
+        jersey: (me && me.jersey) || (MPC && MPC.JERSEYS ? MPC.JERSEYS[0] : "#1F7A48"),
+        place: order.length + 1,
+        result: mpPending,
+        pending: true
+      };
+      order.push(mine);
+    }
+    var waiting = room.players.filter(function (p) {
+      return !p.finished && !(mine && p.id === NET.you);
+    });
 
     var cards = order.map(function (f, i) {
       var crown = i === 0 ? "🏆" : i === 1 ? "🥈" : "🚵";
@@ -4447,7 +4470,8 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
 
     el.resultsContent.innerHTML =
       '<div class="results-medal">📡</div>' +
-      "<h2>" + (mine && mine.place === 1 ? "You win!" :
+      "<h2>" + (mine && mine.pending ? "Across the line!" :
+        mine && mine.place === 1 ? "You win!" :
         order.length ? order[0].name + " wins" : "Race over") + "</h2>" +
       '<p class="gr-tag">' + (CORE.TRACKS3[room.track] ? CORE.TRACKS3[room.track].name : room.track) +
         " · code " + room.code + "</p>" +
@@ -4470,6 +4494,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   function mpLeaveAll() {
     mpMode = false;
     mpArmed = false;
+    mpPending = null;
     mpClearRigs();
     if (el.mpBoard) el.mpBoard.hidden = true;
   }
