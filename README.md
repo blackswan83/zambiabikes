@@ -122,7 +122,7 @@ fish-eye.
 
 **Race a friend, live** (`js/mp-core.js`, the WebSocket half of `server.js`,
 `js/net.js`) — two children on two devices, on the same hill, at the same
-moment. One of them presses **Start a race** and gets a four-letter code; the
+moment. One of them presses **Start a race** and gets a four-character code; the
 other types it in. That is the whole of it: there is no lobby, no matchmaking,
 no directory, no way to search for a race and no way to be put in one with a
 stranger. Codes are generated from an alphabet with no `O`/`0`, `I`/`1`, `S`/`5`
@@ -140,10 +140,29 @@ usual way: send a stamp, halve the round trip). While you ride, your friends
 appear as full riders in their own jersey colours with their names floating over
 them, and a corner panel shows who is where and by how many metres.
 
-The trade for that honesty is that a rider could lie about their position, which
-is exactly why **a live race sets no personal bests, wins no medals, unlocks
-nothing and never reaches the club board**. Records still come only from a solo
-run whose Ghost Code the server re-simulates through `js/game3d-core.js`.
+**The clock belongs to the server.** A rider's own timer is their own frame
+loop, and a frame loop stops: switch tabs, take a call, lock the iPad, and it
+freezes while everybody else keeps riding — so reading the time off it would
+hand the quickest run to whoever got interrupted, and would let place (arrival
+at the server) and time (measured on the device) disagree on the same screen. A
+live race is therefore timed from the moment the flag dropped to the moment the
+finish reached the server, on one clock, for everybody, and the on-screen timer
+during a live race counts that same clock. Coins and crashes are still the
+rider's own count, because they decide nothing.
+
+The trade for that honesty is that a rider could still lie about their position,
+which is exactly why **a live race sets no personal bests, wins no medals,
+unlocks nothing and never reaches the club board**. Records still come only from
+a solo run whose Ghost Code the server re-simulates through `js/game3d-core.js`.
+
+**When the wifi goes.** The socket is pinged every thirty seconds and a device
+that stops answering is dropped, because wifi does not always say goodbye — a
+closed lid or a walk out of range can leave a half-open connection holding a
+seat in the room that can never be ready, so the flag can never drop. On the
+other side, losing the connection mid-race says so: the friend's rider is
+cleared rather than left frozen on the trail, a line goes up on screen, and
+crossing the line gives a panel that says the race could not be timed instead of
+a single-player results screen congratulating you on a run nobody was watching.
 
 Rooms live in memory and nowhere else — nothing about a race is written to the
 database, to disk or to a log. A room exists while somebody is in it and is gone
@@ -151,6 +170,13 @@ when the last person leaves, which is the right lifetime for four kids racing
 after school and means a race leaves no record of who played with whom. Live
 racing only appears at all if a server answers `/api/mp/status`; on GitHub Pages
 the button never shows and the game is exactly what it was.
+
+A code is four characters out of an alphabet of twenty-three, so 279,841 of
+them, and the whole safety story is that you cannot be put in a race you were
+not read into. That only holds if nobody can sit there dialling, so wrong codes
+have their own small budget — eight per connection, then the socket is hung up
+on — separately from the ordinary message allowance, and one machine cannot hold
+open a fleet of connections to widen it.
 
 **Weather.** A chip row beside the time-of-day chips: Clear, 🌧️ Rain, ⛈️ Storm.
 Rain is a single instanced sheet whose vertex shader wraps every streak inside a
@@ -227,7 +253,7 @@ which shares the same design and its own `ZRG1…` ghost codes.
 - Ghost Codes are validated and sanitized on import and contain nothing but
   rider positions, a time and a first name.
 - **A live race is private to whoever has the code.** No lobby, no matchmaking,
-  no directory, no discovery — the only way into a room is a four-letter code
+  no directory, no discovery — the only way into a room is a four-character code
   somebody read out to you. Nobody can join once a race has started.
 - **The multiplayer protocol has no message that carries free text.** There is
   no chat because there is nowhere to put one: the only thing a player ever

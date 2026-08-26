@@ -1726,13 +1726,36 @@
 .mp-hint { margin: 0; font-size: calc(var(--ts) * 0.88); line-height: 1.4; color: rgba(255, 246, 224, 0.72); }
 
 /* the code, big enough to read out loud across a room */
+/* This is the one thing on the screen that has to survive being read out loud
+   across a kitchen table by one ten-year-old to another, so it is the biggest
+   thing on the screen — and one click selects the whole of it. */
+.mp-code-shout {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: calc(var(--ts) * 0.5);
+  padding: calc(var(--ts) * 0.4) calc(var(--ts) * 0.6);
+  border-radius: 10px;
+  background: rgba(255, 183, 51, 0.10);
+  border: 2px solid rgba(247, 183, 51, 0.35);
+}
+.mp-code-lead, .mp-code-say {
+  font-size: calc(var(--ts) * 0.85);
+  color: var(--sun-soft);
+  letter-spacing: 0.04em;
+}
 .mp-code-tag {
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 1.5em;
-  letter-spacing: 0.28em;
+  font-size: calc(var(--ts) * 2.6);
+  line-height: 1;
+  letter-spacing: 0.22em;
   color: var(--sun);
   text-shadow: 0 2px 0 rgba(0, 0, 0, 0.45);
+  user-select: all;
+  -webkit-user-select: all;
+  cursor: text;
 }
 
 .mp-join { display: flex; gap: 0.4rem; align-items: center; }
@@ -1821,6 +1844,9 @@
   min-width: 8.5rem;
 }
 .mp-board[hidden] { display: none; }
+/* in full screen the ⛶ and ❚❚ buttons drop to 3.6rem, which is exactly where the
+   standings sit — so the standings drop below them */
+.game-stage:fullscreen .mp-board { top: 6.8rem; }
 .mp-board li { display: flex; align-items: center; gap: 0.4rem; }
 .mp-board .mpb-dot {
   width: 0.6rem; height: 0.6rem; border-radius: 50%;

@@ -369,8 +369,26 @@ app.use(function (err, req, res, next) { /* eslint-disable-line no-unused-vars *
 const MP = require("./js/mp-core.js");
 
 const rooms = new Map();          /* code -> room */
-const sockets = new Map();        /* id -> { ws, code, rate } */
+const sockets = new Map();        /* id -> { ws, code, rate, miss, ip } */
+const perIp = new Map();          /* ip -> how many sockets it is holding open */
 let nextClientId = 1;
+
+/* A code is four characters out of an alphabet of 23, so 279,841 of them, and
+   the whole safety story is that you cannot be put in a race you were not read
+   into. That only holds if nobody can sit there dialling: the ordinary message
+   budget would allow thousands of guesses a minute. Wrong codes get their own,
+   much smaller budget, and one machine cannot hold open a fleet of sockets to
+   widen it. */
+const MISSES_PER_SOCKET = 8;
+const SOCKETS_PER_IP = 8;
+const ALIVE_SWEEP_MS = 30000;
+
+function closeSocket(id, why) {
+  const s = sockets.get(id);
+  if (!s) return;
+  send(s.ws, "err", { why: why });
+  try { s.ws.close(4029, "slow down"); } catch (e) { /* already gone */ }
+}
 
 function roomOf(id) {
   const s = sockets.get(id);
@@ -416,6 +434,16 @@ function handle(id, msg, now) {
   if (!s) return;
   const type = String(msg && msg.t || "");
 
+  /* Anybody still connected is a room still in use. Without this the idle sweep
+     could clear a room out from under two children who left the lobby open
+     while they went to find a snack, and every button afterwards would quietly
+     do nothing. */
+  if (s.code) {
+    const here = rooms.get(s.code);
+    if (here) here.touchedAt = now;
+    else s.code = null;
+  }
+
   if (type === "ping") {
     /* the client uses this to work out the offset between its clock and
        ours, so a countdown ends at the same instant on every screen */
@@ -441,7 +469,18 @@ function handle(id, msg, now) {
     const code = MP.cleanCode(msg.code);
     if (!code) return sendTo(id, "err", { why: "that is not a race code" });
     const room = rooms.get(code);
-    if (!room) return sendTo(id, "err", { why: "no race with that code — check it and try again" });
+    if (!room) {
+      /* A mistyped code must not cost them the room they are already in, so
+         this answers before anybody leaves anything. Dialling for rooms is
+         budgeted separately from ordinary chatter. */
+      s.miss = (s.miss || 0) + 1;
+      if (s.miss > MISSES_PER_SOCKET) return closeSocket(id, "too many wrong codes");
+      return sendTo(id, "err", { why: "no race with that code — check it and try again" });
+    }
+    /* Their own code, typed into the join box — a thing a ten-year-old does.
+       Without this, leaving to join the room they are the only member of
+       deletes it out from under them and the code stops working. */
+    if (s.code === code) return sendTo(id, "joined", { you: id, room: MP.roomView(room) });
     leaveRoom(id, now);
     const add = MP.addPlayer(room, id, msg.name, msg.jersey, now);
     if (add.error) return sendTo(id, "err", { why: add.error });
@@ -503,15 +542,38 @@ function attachMultiplayer(server) {
   const { WebSocketServer } = require("ws");
   const wss = new WebSocketServer({ server: server, path: "/mp", maxPayload: 4096 });
 
-  wss.on("connection", function (ws) {
+  wss.on("connection", function (ws, req) {
+    /* Same reasoning as `app.set("trust proxy", 1)` above: on Railway every
+       socket arrives from the proxy, so the socket address is the same for the
+       whole world and a per-address cap would lock everyone out at eight. On a
+       laptop on the home wifi there is no forwarded header and this is the
+       device's own address, which is what we want. */
+    const fwd = req && req.headers && req.headers["x-forwarded-for"];
+    const ip = (fwd ? String(fwd).split(",")[0].trim() : "") ||
+      (req && req.socket && req.socket.remoteAddress) || "?";
+    const held = perIp.get(ip) || 0;
+    if (held >= SOCKETS_PER_IP) {
+      send(ws, "err", { why: "too many races open from here" });
+      try { ws.close(4029, "too many"); } catch (e) { /* already gone */ }
+      return;
+    }
+    perIp.set(ip, held + 1);
+
     const id = "p" + (nextClientId++);
-    sockets.set(id, { ws: ws, code: null, rate: { n: 0, at: 0 } });
+    sockets.set(id, { ws: ws, code: null, rate: { n: 0, at: 0 }, miss: 0, ip: ip });
+    /* Wifi does not always say goodbye. A laptop lid, a walk out of range, a
+       hop to a hotspot: the TCP connection can sit there half-open and the room
+       keeps a rider who is not coming back — one who can never be ready, so the
+       flag can never drop. Something has to actually ask. */
+    ws.isAlive = true;
+    ws.on("pong", function () { ws.isAlive = true; });
     send(ws, "hello", { you: id, now: Date.now(), posHz: MP.POS_HZ, jerseys: MP.JERSEYS });
 
     ws.on("message", function (raw) {
       const now = Date.now();
       const s = sockets.get(id);
       if (!s) return;
+      ws.isAlive = true;
       /* a fixed budget of messages a second: a rider sends about fifteen */
       const sec = Math.floor(now / 1000);
       if (s.rate.at !== sec) { s.rate.at = sec; s.rate.n = 0; }
@@ -528,9 +590,20 @@ function attachMultiplayer(server) {
     ws.on("close", function () {
       leaveRoom(id, Date.now());
       sockets.delete(id);
+      const n = (perIp.get(ip) || 1) - 1;
+      if (n > 0) perIp.set(ip, n); else perIp.delete(ip);
     });
     ws.on("error", function () { /* close follows */ });
   });
+
+  const alive = setInterval(function () {
+    wss.clients.forEach(function (ws) {
+      if (ws.isAlive === false) { try { ws.terminate(); } catch (e) { /* gone */ } return; }
+      ws.isAlive = false;
+      try { ws.ping(); } catch (e) { /* gone */ }
+    });
+  }, ALIVE_SWEEP_MS);
+  alive.unref && alive.unref();
 
   /* the only clock in the system: it drops the flag and sweeps up */
   const timer = setInterval(function () {

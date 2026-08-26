@@ -35,6 +35,11 @@
       this.samples++;
     }
   };
+  /* a first guess, ignoring the trip: good enough to draw with, and it leaves
+     bestRtt alone so the first real ping/pong pair takes over */
+  Clock.prototype.seed = function (serverNow) {
+    if (this.samples === 0) this.offset = serverNow - Date.now();
+  };
   Clock.prototype.serverNow = function () { return Date.now() + this.offset; };
   /* how long until a server timestamp arrives, in this device's terms */
   Clock.prototype.until = function (serverAt) { return serverAt - this.serverNow(); };
@@ -94,10 +99,14 @@
     ws.onclose = function () {
       clearInterval(self._pingTimer);
       self._pingTimer = null;
+      var wasIn = !!self.room;
       self.state = "closed";
       self.ws = null;
       self.room = null;
       self.peers = {};
+      /* Losing the room is not a state change like any other: somebody may be
+         halfway down a mountain believing they are racing. Say so plainly. */
+      if (wasIn) self.fire("lost");
       self.fire("state");
       /* come back on our own if the game still wants a connection */
       if (self._wantOpen && self._retry < 5) {
@@ -127,7 +136,11 @@
     if (type === "hello") {
       this.you = m.you;
       this.posHz = m.posHz || this.posHz;
-      this.clock.sample(Date.now(), m.now, Date.now());
+      /* A rough offset to be going on with — but NOT through sample(), which
+         would record a round trip of zero and then refuse every real
+         measurement for being slower than a number that was never measured. */
+      this.clock.seed(m.now);
+      this.ping();
       this.fire("state");
       return;
     }

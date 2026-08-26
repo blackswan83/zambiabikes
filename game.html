@@ -278,7 +278,8 @@
             <div class="mp-body">
               <section class="mp-col" id="mp-entry">
                 <h3>Start a race</h3>
-                <p class="mp-hint">You get a four-letter code. Read it to your friend — a
+                <p class="mp-hint">You get a four-character code — letters and numbers. Read it to your
+                friend — a
                 grown-up can send it for you.</p>
                 <button type="button" class="btn btn--copper btn--small" id="btn-mp-create">Start a race 🏁</button>
                 <h3>Or join one</h3>
@@ -288,12 +289,16 @@
                          inputmode="latin" placeholder="CODE" aria-label="Race code">
                   <button type="button" class="btn btn--forest btn--small" id="btn-mp-join">Join</button>
                 </div>
-                <p class="mp-err" id="mp-err" role="status"></p>
               </section>
 
               <section class="mp-col" id="mp-lobby" hidden>
-                <h3>The start line <span class="mp-code-tag" id="mp-code-tag"></span></h3>
-                <ul class="mp-riders" id="mp-riders"></ul>
+                <h3>The start line</h3>
+                <p class="mp-code-shout">
+                  <span class="mp-code-lead">Your race code</span>
+                  <strong class="mp-code-tag" id="mp-code-tag"></strong>
+                  <span class="mp-code-say">read it out to your friend</span>
+                </p>
+                <ul class="mp-riders" id="mp-riders" aria-live="polite"></ul>
                 <p class="mp-hint" id="mp-hosthint"></p>
                 <div class="menu-row mp-actions">
                   <button type="button" class="btn btn--forest btn--small" id="btn-mp-ready">I'm ready 👍</button>
@@ -301,6 +306,8 @@
                   <button type="button" class="btn btn--ghost btn--small" id="btn-mp-leave">Leave</button>
                 </div>
               </section>
+
+              <p class="mp-err" id="mp-err" role="status"></p>
             </div>
 
             <p class="mp-safe">🛡️ A race is private to whoever has the code. There is no chat,

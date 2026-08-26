@@ -251,8 +251,19 @@
     var p = findPlayer(room, id);
     if (!p || p.finished) return null;
     p.finished = true;
+    /* THE CLOCK IS OURS. A rider's own timer is their own frame loop, and a
+       frame loop stops: switch tabs, take a call, lock the iPad, and it freezes
+       while everybody else keeps riding. Read the time off that and the child
+       who paused posts the quicker run — which is also why place (arrival here)
+       and time (measured there) could disagree on the same screen. So the race
+       is timed from the moment the flag dropped to the moment the finish
+       reached us, on one clock, for everybody. Coins and crashes are the
+       rider's own count: they decide nothing, so there is nothing to win by
+       fibbing about them. */
     p.result = {
-      timeMs: Math.max(0, Math.min(3600000, Math.round(Number(result && result.timeMs) || 0))),
+      timeMs: Math.max(0, Math.min(3600000, Math.round(
+        room.startAt ? (now || 0) - room.startAt
+                     : Number(result && result.timeMs) || 0))),
       coins: Math.max(0, Math.min(9999, Math.round(Number(result && result.coins) || 0))),
       crashes: Math.max(0, Math.min(999, Math.round(Number(result && result.crashes) || 0)))
     };

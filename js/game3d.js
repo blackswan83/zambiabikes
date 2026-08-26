@@ -64,6 +64,10 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   }
 
   function fmtTime(ms) {
+    /* a dash, not "NaN:NaN" — a time nobody has set is a blank, and a child at
+       the end of a run that already went wrong should not be shown a stack
+       trace's idea of a number */
+    if (!isFinite(ms)) return "—";
     ms = Math.round(ms / 100) * 100;
     var m = Math.floor(ms / 60000);
     var s = (ms % 60000) / 1000;
@@ -2954,7 +2958,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
 
     /* a live race is a race between the riders in the room: the same deal as
        two on one sofa — no medals, no bests, no ghost, nothing to the board */
-    if (mpMode && NET && NET.room) { mpFinishRace(); return; }
+    if (mpMode) { mpFinishRace(); return; }
 
     /* two on the sofa is a race between THEM: no medals, no personal bests,
        no ghost recording and nothing sent to the club board */
@@ -3625,7 +3629,16 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     if (players() === 2) { updateHUD2(world); return; }
     var st = run.st;
     updateTurboHUD(st);
-    var ms = Math.round((st.finished ? st.finishT : st.t) * 1000);
+    /* In a live race the clock on screen is the club server's, counted from the
+       moment the flag dropped — the same clock the result is measured on. Your
+       own timer stops when your frame loop does; the race does not. */
+    var ms;
+    if (mpMode && NET && NET.room && NET.room.startAt) {
+      if (!st.finished) run.mpMs = Math.max(0, NET.clock.serverNow() - NET.room.startAt);
+      ms = run.mpMs || 0;
+    } else {
+      ms = Math.round((st.finished ? st.finishT : st.t) * 1000);
+    }
     el.time.textContent = fmtTime(ms);
     el.score.textContent = "🪙 " + st.score;
     var sp = Math.sqrt(st.vx * st.vx + st.vz * st.vz);
@@ -4210,8 +4223,8 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   var mpFlags = {};              /* peer id -> the name floating over them */
   var mpArmed = false;           /* waiting on the server's countdown */
   var mpPending = null;          /* your own result, until the server echoes it */
-
-  function mpOn() { return !!(NET && NET.room); }
+  var mpLost = false;            /* the club server went away mid-race */
+  var mpSaved = null;            /* the rider's own track/light/weather, borrowed */
 
   function mpSetup() {
     return { track: selTrack, tod: todSel, wx: wxSel };
@@ -4222,9 +4235,14 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   function openMp() {
     if (!NET) return;
     mode = "mp";
+    mpErr("");                       /* never open on the last refusal */
     if (NET.state !== "open") NET.connect();
     renderMp();
     showOnly(el.mp);
+    /* a child who came here to join a race wants the box their friend's code
+       goes in, not a hunt for it */
+    var box = $("mp-code");
+    if (box && !NET.room) { try { box.focus(); } catch (e) { /* not focusable yet */ } }
   }
 
   function mpErr(txt) {
@@ -4404,16 +4422,28 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     mpArmed = true;
     mpMode = true;
     mpPending = null;
+    mpLost = false;
     setPlayers(1, false);            /* a live race is one rider per screen */
-    if (NET.room.track !== selTrack) selectTrack(NET.room.track);
-    if (NET.room.tod !== todSel) { todSel = NET.room.tod; lsSet("zr3_tod", todSel); refreshTodChips(); }
-    if (NET.room.wx !== wxSel) { wxSel = NET.room.wx; lsSet("zr3_wx", wxSel); refreshTodChips(); }
+    /* The host picks the mountain and the weather for the race, not for their
+       friend's game. Borrow the settings, remember what this rider had, and
+       give it back when the race is over — otherwise a friend's choice of storm
+       quietly follows them home and disqualifies their solo runs. */
+    mpSaved = { track: selTrack, tod: todSel, wx: wxSel };
+    if (NET.room.track !== selTrack) selectTrack(NET.room.track, false);
+    todSel = NET.room.tod;
+    wxSel = NET.room.wx;
+    refreshTodChips();
     startRace();
     /* replace the local 3-2-1 with one keyed to the server's moment */
     run.countT = Math.max(0.2, NET.clock.until(NET.room.startAt) / 1000);
     run.lastBeep = Math.ceil(run.countT) + 1;
     mpAttachRigs(run.b.sc.scene);
-    if (el.mpBoard) el.mpBoard.hidden = false;
+    if (el.mpBoard) {
+      /* wipe last race's standings: opening a countdown on a board that says
+         everybody already finished reads like the race is over before it starts */
+      el.mpBoard.innerHTML = "";
+      el.mpBoard.hidden = false;
+    }
   }
 
   function mpFinishRace() {
@@ -4423,6 +4453,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       coins: st.coinCount,
       crashes: st.crashes
     };
+    if (!NET.room) { mpLost = true; renderMpResults(); return; }
     NET.finish(r);
     /* The server's word on the finishing order is a round trip away. Keep our own
        result here so the screen can show it at once, rather than leaving the rider
@@ -4431,9 +4462,43 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     renderMpResults();
   }
 
+  /* The club server went away while they were riding. They still rode it, and
+     they are owed a screen that says what happened instead of the single-player
+     panel congratulating them on a run nobody was watching. */
+  function mpLostResults() {
+    el.results.classList.remove("is-finale");
+    showResultsRow("results-row-mp");
+    var againBtn = $("btn-mp-again");
+    if (againBtn) againBtn.hidden = true;
+    var backBtn = $("btn-mp-back");
+    if (backBtn) { backBtn.disabled = false; backBtn.textContent = "Start another race"; }
+
+    var t = run && run.st ? fmtTime(Math.round(run.st.finishT * 1000)) : "—";
+    el.resultsContent.innerHTML =
+      '<div class="results-medal">📡</div>' +
+      "<h2>Lost the club server</h2>" +
+      '<p class="gr-tag">You finished the run — but the race could not be timed.</p>' +
+      '<div class="vs-grid"><div class="vs-card is-winner" style="--p-tint:' +
+        (MPC && MPC.JERSEYS ? MPC.JERSEYS[0] : "#1F7A48") + '">' +
+        '<span class="vs-crown">🚵</span>' +
+        '<span class="vs-name">Your run</span>' +
+        '<span class="vs-time">' + t + "</span>" +
+        '<span class="vs-line">on your own clock</span></div></div>' +
+      '<p class="results-note">The connection went away mid-race, so this one counts for ' +
+      "nobody — not your friend, not your ⏱ bests, not the club board. Check the wifi and " +
+      "read out a new code.</p>";
+
+    mode = "results";
+    el.results.hidden = false;
+    hideRideChrome();
+    stopRumble();
+    stopRain();
+    mpLeaveAll();   /* so the next ordinary run counts again */
+  }
+
   function renderMpResults() {
     var room = NET.room;
-    if (!room) return;
+    if (!room) { mpLostResults(); return; }
     var order = room.finishOrder.slice();
     var mine = null;
     order.forEach(function (f) { if (f.id === NET.you) mine = f; });
@@ -4486,7 +4551,10 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
           : "Waiting for the race to finish…";
     }
     var backBtn = $("btn-mp-back");
-    if (backBtn) backBtn.disabled = !canAgain;
+    if (backBtn) {
+      backBtn.disabled = !canAgain;
+      backBtn.textContent = canAgain ? "Back to the start line" : "Back to the start line — not yet";
+    }
 
     el.resultsContent.innerHTML =
       '<div class="results-medal">📡</div>' +
@@ -4515,6 +4583,14 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     mpMode = false;
     mpArmed = false;
     mpPending = null;
+    mpLost = false;
+    if (mpSaved) {
+      if (mpSaved.track !== selTrack) selectTrack(mpSaved.track, false);
+      todSel = mpSaved.tod;
+      wxSel = mpSaved.wx;
+      mpSaved = null;
+      refreshTodChips();
+    }
     mpClearRigs();
     if (el.mpBoard) el.mpBoard.hidden = true;
   }
@@ -4524,6 +4600,16 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   if (NET) {
     NET.onEvent = function (type, data) {
       if (type === "error") { mpErr(data.why); renderMp(); return; }
+      if (type === "lost") {
+        if (mpMode && !mpLost) {
+          mpLost = true;
+          mpClearRigs();          /* no phantom friend frozen on the trail */
+          if (el.mpBoard) el.mpBoard.hidden = true;
+          toastAll("📡 Lost the club server — you are riding on your own");
+        }
+        renderMp();
+        return;
+      }
       if (type === "state") { renderMp(); return; }
       if (type === "room") {
         mpErr("");
@@ -4542,6 +4628,8 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
         if (mpMode && mode === "results") renderMpResults();
         if (NET.room && NET.room.state === "lobby" && mpArmed) {
           /* the host lined everyone up again */
+          stopRumble();
+          stopRain();
           mpLeaveAll();
           mode = "mp";
           showOnly(el.mp);
@@ -4567,7 +4655,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     onMp("btn-mp-join", function () {
       var box = $("mp-code");
       var code = box ? box.value : "";
-      if (!MPC.cleanCode(code)) { mpErr("That code should be four letters — check it and try again."); return; }
+      if (!MPC.cleanCode(code)) { mpErr("A code is four letters or numbers — check it and try again."); return; }
       mpErr("");
       NET.join(code, CORE.sanitizeName(profile.name), profile.jersey);
     });
@@ -4798,10 +4886,12 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       : "<em>Not ridden yet — set a time!</em>";
   }
 
-  function selectTrack(id) {
+  /* persist defaults to true; a live race passes false, because the mountain is
+     the host's choice for that race and not a change to this rider's own game */
+  function selectTrack(id, persist) {
     if (!CORE.TRACKS3[id] || id === selTrack) return;
     selTrack = id;
-    lsSet("zr3_seltrack", selTrack);
+    if (persist !== false) lsSet("zr3_seltrack", selTrack);
     snapAllViews();
     refreshMenu();
     if (clubOn && !clubGhosts[selTrack]) fetchClubGhosts(selTrack);
@@ -5155,7 +5245,15 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     }
 
     if (mode === "count") {
-      run.countT -= dt;
+      /* A live countdown is read off the server's deadline every frame, not
+         counted down locally: dt is clamped at 0.1s, so a device having a slow
+         moment would otherwise drift behind and roll out late through no fault
+         of the child holding it. */
+      if (mpMode && NET && NET.room && NET.room.startAt) {
+        run.countT = NET.clock.until(NET.room.startAt) / 1000;
+      } else {
+        run.countT -= dt;
+      }
       var n = Math.ceil(run.countT);
       if (n !== run.lastBeep && n > 0) { run.lastBeep = n; SFX.count(false); }
       var cdTxt = run.countT > 0 ? String(Math.max(1, n)) : "GO!";
@@ -5173,7 +5271,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
         animatePlayer(r, dt);
         updateCamera(r.view, r.st, dt, world);
       });
-      if (mpMode && NET) { NET.pushPos(run.st); mpAnimate(dt); }
+      if (mpMode && NET) { NET.pushPos(run.st); mpAnimate(dt); mpBoard(world); }
       animateGhosts(0, dt);
       updateCoins(sc, world, run.taken, run.clock);
       animateScene(sc, run.clock, dt, run.st.x, run.st.y, run.st.z, riderSpots());
