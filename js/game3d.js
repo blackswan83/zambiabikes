@@ -331,7 +331,14 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     turboFill: $("turbo-fill"), turboGain: $("turbo-gain"), turboHint: $("turbo-hint")
   };
 
-  /* every toast belongs to a rider; with two of them it lands in that
+  /* news that belongs to the whole race, not to one rider — it goes up in
+     both halves, because both of them need to know */
+  function toastAll(txt) {
+    toast(txt, 0);
+    if (players() === 2) toast(txt, 1);
+  }
+
+  /* every other toast belongs to a rider; with two of them it lands in that
      rider's own half instead of shouting across both */
   function toast(txt, p) {
     var t = (players() === 2 && p === 1) ? $("trick-toast-2") : el.toast;
@@ -417,7 +424,10 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
        threshold means what it looks like it means: only the genuine
        highlights bloom. */
     composer.addPass(new OutputPass());
-    bloomPass = new UnrealBloomPass(new THREE.Vector2(viewW, vh), 0.28, 0.3, 0.86);
+    /* Threshold in DISPLAY space: 0.86 still caught most of a bright African
+       sky and blew the horizon out. 0.93 catches the sun, the water and the
+       coins, which is what should glow. */
+    bloomPass = new UnrealBloomPass(new THREE.Vector2(viewW, vh), 0.22, 0.28, 0.93);
     composer.addPass(bloomPass);
     var fxaa = new FXAAPass();
     fxaa.setSize(viewW * pr, vh * pr);
@@ -544,7 +554,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   function renderFrame(sc) {
     renderer.toneMappingExposure = sc.exposure;
     /* rain flattens the highlights, and lightning is all highlight */
-    if (bloomPass) bloomPass.strength = 0.28 * (1 - 0.42 * (sc.wxK || 0)) + 0.34 * (sc.flash || 0);
+    if (bloomPass) bloomPass.strength = 0.22 * (1 - 0.42 * (sc.wxK || 0)) + 0.3 * (sc.flash || 0);
     var n = players();
     for (var i = 0; i < n; i++) {
       var v = views[i];
@@ -2130,8 +2140,12 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
        up, which is what rain does when you ride into it. */
     var rain = null;
     if (wxK > 0) {
-      var RAIN_N = lightMode ? 420 : 1200;
-      var RAIN_BOX = new THREE.Vector3(58, 34, 58);
+      /* Many thin, faint, SHORT streaks close in beat a few long bright ones:
+         the first reads as rain, the second reads as white poles. A tighter
+         box also puts the same number of drops nearer the camera, where they
+         are the only ones you can actually see. */
+      var RAIN_N = lightMode ? 700 : 2000;
+      var RAIN_BOX = new THREE.Vector3(38, 24, 38);
       var quadG = new THREE.PlaneGeometry(1, 1);
       var rGeo = new THREE.InstancedBufferGeometry();
       rGeo.index = quadG.index;
@@ -2155,8 +2169,8 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
           uBox: { value: RAIN_BOX },
           uLean: { value: new THREE.Vector2(0, 0) },   /* how far the streak lies over */
           uLen: { value: 1.0 },
-          uTint: { value: new THREE.Color(0xC9DCE4) },
-          uAlpha: { value: Math.min(0.85, 0.34 + 0.3 * wxK) }
+          uTint: { value: new THREE.Color(0xBACBD6) },
+          uAlpha: { value: Math.min(0.4, 0.16 + 0.12 * wxK) }
         },
         vertexShader: [
           "attribute vec4 aSeed;",
@@ -2169,14 +2183,14 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
           "  p = mod(p + uBox * 0.5, uBox) - uBox * 0.5;",   /* wrap inside the box */
           "  vec3 world = p + uCam;",
           /* the quad: y is the streak's length, x its (thin) width */
-          "  float len = (1.6 + aSeed.w * 2.2) * uLen;",
-          "  float wid = 0.035 + aSeed.w * 0.035;",
+          "  float len = (0.42 + aSeed.w * 0.62) * uLen;",
+          "  float wid = 0.012 + aSeed.w * 0.016;",
           "  vec3 up = normalize(vec3(uLean.x, -1.0, uLean.y));",
           "  vec3 side = normalize(cross(up, normalize(uCam - world + vec3(0.0, 0.001, 0.0))));",
           "  world += up * (position.y * len) + side * (position.x * wid);",
           "  vec4 mv = modelViewMatrix * vec4(world, 1.0);",
           /* fade the far ones out so the box has no visible edge */
-          "  vFade = 1.0 - smoothstep(uBox.x * 0.24, uBox.x * 0.5, length(p.xz));",
+          "  vFade = 1.0 - smoothstep(uBox.x * 0.16, uBox.x * 0.46, length(p.xz));",
           "  gl_Position = projectionMatrix * mv;",
           "}"
         ].join("\n"),
@@ -3226,12 +3240,12 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   }
   function announceFinish(r) {
     if (r.place === 1) {
-      toast(r.name + " takes it! 🏁");
+      toastAll(r.name + " takes it! 🏁");
       SFX.finish();
       /* the rider still out there gets a fair run home, then the flag drops */
       run.chaseT = CHASE_GRACE;
     } else {
-      toast(r.name + " home too! 🏁");
+      toastAll(r.name + " home too! 🏁");
       SFX.gate();
     }
   }
@@ -3445,7 +3459,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       var u = sc.rain.material.uniforms;
       /* ride into it and the streaks lie over and stretch out */
       u.uLean.value.set(0.22 + spd * 0.035, spd * 0.012);
-      u.uLen.value = 1 + spd * 0.09;
+      u.uLen.value = 1 + spd * 0.16;   /* ride into it and it stretches out */
     }
 
     /* ---- lightning: rare, soft, and never twice in a hurry ---- */
@@ -4778,7 +4792,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
             run.finishers++;
             r.place = run.finishers;
           });
-          toast("Flag's down! 🏁");
+          toastAll("Flag's down! 🏁");
         }
       }
 
