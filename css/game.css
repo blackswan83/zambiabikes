@@ -1442,3 +1442,219 @@
     .overlay--menu .cs-body { grid-template-columns: 88px 1fr; }
   }
 }
+
+/* ====================================================================
+   TWO PLAYERS, ONE SCREEN
+   The canvas is cut into a top strip and a bottom strip. A downhill rider
+   needs to see LEFT and RIGHT to pick a line round a tree, so the split
+   runs horizontally and each player keeps the full width. Each strip gets
+   its own compact readout tucked into its top edge, colour-keyed to that
+   rider's jersey so nobody has to ask which half is theirs.
+   ==================================================================== */
+
+/* two strips need more height than one, so the stage gets squarer in 2P */
+.game-stage.is-2p { aspect-ratio: 4 / 3; }
+.game-stage.is-2p:fullscreen { aspect-ratio: auto; }
+
+.hud2 { position: absolute; inset: 0; pointer-events: none; z-index: 4; }
+.hud2[hidden] { display: none; }
+
+/* the seam between the two views, so the split reads as deliberate */
+.hud2-seam {
+  position: absolute;
+  left: 0; right: 0; top: 50%;
+  height: 3px;
+  transform: translateY(-1.5px);
+  background: linear-gradient(90deg, transparent, rgba(255, 246, 224, 0.55) 12%,
+    rgba(255, 246, 224, 0.55) 88%, transparent);
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.6);
+}
+
+.hud2-side {
+  position: absolute;
+  left: 0.5rem;
+  right: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.2rem 0.45rem;
+  border-radius: 8px;
+  background: rgba(9, 22, 14, 0.5);
+  border: 2px solid var(--p-tint, rgba(255, 246, 224, 0.4));
+  border-left-width: 6px;
+  color: #FFF6E0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(0.6rem, 1.35vw, 0.8rem);
+  line-height: 1.5;
+  white-space: nowrap;
+}
+/* the top strip stops short of the pause and fullscreen buttons */
+.hud2-side--p1 { top: 0.45rem; right: 5.9rem; }
+.hud2-side--p2 { top: calc(50% + 0.45rem); }
+
+/* a rider's own name, in their own colour — not "Player 2" */
+.hud2-tag {
+  flex: 0 0 auto;
+  max-width: 12ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0.02em;
+  color: var(--p-tint, var(--sun));
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+.hud2-time { font-variant-numeric: tabular-nums; font-size: 1.15em; color: var(--sun); }
+.hud2-chip {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.9;
+  padding: 0 0.3rem;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+/* a matchbox-sized turbo readout: the key to hit, and how hard they're going */
+.hud2-turbo { display: inline-flex; align-items: center; gap: 0.28rem; }
+.hud2-turbo b {
+  font-size: 0.82em;
+  padding: 0 0.32rem;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-bottom-width: 2px;
+}
+.hud2-turbo i {
+  display: block;
+  width: clamp(38px, 6vw, 62px);
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.5);
+  box-shadow: inset 0 0 0 1px rgba(255, 246, 224, 0.25);
+  overflow: hidden;
+}
+.hud2-turbo em {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: 999px;
+  background: var(--sun);
+  transition: width 0.08s linear;
+}
+.hud2-turbo[data-state="on"] b { background: var(--flame); border-color: var(--flame); color: #fff; }
+.hud2-turbo[data-state="on"] em { background: linear-gradient(90deg, #56E0C8, var(--sun) 55%, var(--flame)); }
+.hud2-turbo[data-state="cool"] { opacity: 0.6; }
+.hud2-turbo[data-state="cool"] em { background: rgba(255, 246, 224, 0.45); transition: width 0.3s linear; }
+
+.hud2-prog {
+  flex: 1 1 auto;
+  min-width: 30px;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(12, 46, 28, 0.6);
+  box-shadow: inset 0 0 0 1.5px rgba(255, 243, 196, 0.4);
+  overflow: hidden;
+}
+.hud2-prog i {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: 999px;
+  background: var(--p-tint, var(--sun));
+}
+
+.hud2-flag {
+  flex: 0 0 auto;
+  padding: 0 0.4rem;
+  border-radius: 5px;
+  background: var(--sun);
+  color: #43290F;
+  letter-spacing: 0.06em;
+}
+.hud2-flag[hidden] { display: none; }
+
+/* the single-player HUD steps aside when there are two of them */
+.is-2p .hud .hud-top, .is-2p .hud .turbo, .is-2p .hud .hud-progress { display: none; }
+
+/* the 1-player / 2-player switch, and player two's own name and jersey */
+.players-row { display: flex; flex-wrap: wrap; gap: 0.35rem; justify-content: center; }
+.pl-chip {
+  font: inherit;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.82rem;
+  color: #FFF6E0;
+  background: rgba(255, 255, 255, 0.1);
+  border: 2px solid rgba(255, 246, 224, 0.35);
+  border-radius: 999px;
+  padding: 0.22rem 0.85rem;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.pl-chip:hover { background: rgba(255, 255, 255, 0.22); }
+.pl-chip.is-selected { background: var(--sun); border-color: var(--sun); color: #43290F; }
+
+.rider-row--p2 label { color: var(--sun-soft); }
+.rider-row--p2[hidden] { display: none; }
+
+.two-up-keys {
+  margin: 0;
+  font-size: 0.74rem;
+  line-height: 1.6;
+  color: rgba(255, 246, 224, 0.8);
+}
+.two-up-keys[hidden] { display: none; }
+.two-up-keys b { font-family: var(--font-display); color: var(--sun); margin-right: 0.15rem; }
+.two-up-keys kbd {
+  font: inherit;
+  font-size: 0.92em;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 0 0.3rem;
+  margin: 0 0.06rem;
+}
+
+/* two-up results: the head to head */
+.vs-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+  max-width: 40rem;
+  margin: 0.5rem auto;
+}
+.vs-card {
+  display: grid;
+  gap: 0.1rem;
+  padding: 0.5rem 0.6rem;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.34);
+  box-shadow: inset 0 0 0 2px var(--p-tint, rgba(247, 183, 51, 0.3));
+  text-align: center;
+}
+.vs-card.is-winner { background: rgba(247, 183, 51, 0.2); box-shadow: inset 0 0 0 3px var(--sun); }
+.vs-name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(0.85rem, 2vw, 1.05rem);
+  color: var(--p-tint, #FFF6E0);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vs-time {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(1.3rem, 3.4vw, 1.9rem);
+  line-height: 1.1;
+  color: var(--sun);
+}
+.vs-line { font-size: clamp(0.66rem, 1.5vw, 0.8rem); color: rgba(255, 246, 224, 0.8); }
+.vs-crown { font-size: 1.4rem; line-height: 1; }
+.vs-gap {
+  margin: 0.2rem 0 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(0.72rem, 1.7vw, 0.9rem);
+  color: var(--sun-soft);
+}

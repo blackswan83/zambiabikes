@@ -69,6 +69,9 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   /* ---------- persistent state (zr3_* keys; profile shared with classic) ---------- */
 
   var profile = lsGet("zr_profile", { name: "", jersey: "#1F7A48" });
+  /* player two on the same keyboard keeps their own name and jersey, so the
+     kid on the arrow keys is somebody, not "Player 2" */
+  var profile2 = lsGet("zr_profile2", { name: "", jersey: "#E8791D" });
   if (!profile || typeof profile !== "object") profile = { name: "", jersey: "#1F7A48" };
   var BIKES = window.ZB_BIKES;
   var career = BIKES ? BIKES.loadCareer() : null;
@@ -138,21 +141,59 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
 
   /* ---------- input ---------- */
 
-  var input = { pedal: false, brake: false, left: false, right: false, hop: false, turbo: false };
-  /* every physical K press queues one tap; the physics loop consumes them one
-     per step so a fast tapper never loses a press between frames */
-  var turboTaps = 0;
-  var KEYMAP = {
+  function newInput() {
+    return { pedal: false, brake: false, left: false, right: false, hop: false, turbo: false };
+  }
+  /* one set of controls per rider; `input` always points at player one, so
+     every existing single-player code path is untouched */
+  var inputs = [newInput(), newInput()];
+  var input = inputs[0];
+  /* every physical turbo press queues one tap; the physics loop consumes them
+     one per step so a fast tapper never loses a press between frames */
+  var turboTaps = [0, 0];
+
+  /* One player has the whole keyboard. Two players split it down the middle:
+     player one keeps the left hand side (WASD, shift to hop, Q to turbo) and
+     player two takes the right (arrows, right shift to hop, Enter to turbo).
+     Both turbo keys are big and reachable, because turbo is TAPPED as fast as
+     a ten-year-old can go. */
+  var KEYMAP_1 = {
     ArrowUp: "pedal", KeyW: "pedal",
     ArrowDown: "brake", KeyS: "brake",
     ArrowLeft: "left", KeyA: "left",
     ArrowRight: "right", KeyD: "right",
     Space: "hop"
   };
+  var KEYMAP_2 = {
+    KeyW: [0, "pedal"], KeyS: [0, "brake"], KeyA: [0, "left"], KeyD: [0, "right"],
+    ShiftLeft: [0, "hop"], Space: [0, "hop"],
+    ArrowUp: [1, "pedal"], ArrowDown: [1, "brake"],
+    ArrowLeft: [1, "left"], ArrowRight: [1, "right"],
+    ShiftRight: [1, "hop"]
+  };
+  var TURBO_KEY_1 = { KeyK: 0 };
+  var TURBO_KEY_2 = { KeyQ: 0, Enter: 1, NumpadEnter: 1 };
+
+  /* which rider does this key belong to, and what does it do? */
+  function keyBinding(code) {
+    if (players() === 2) {
+      var b2 = KEYMAP_2[code];
+      return b2 ? { p: b2[0], k: b2[1] } : null;
+    }
+    var k1 = KEYMAP_1[code];
+    return k1 ? { p: 0, k: k1 } : null;
+  }
+  function turboBinding(code) {
+    var t = players() === 2 ? TURBO_KEY_2[code] : TURBO_KEY_1[code];
+    return t === undefined ? -1 : t;
+  }
 
   function clearInput() {
-    input.pedal = input.brake = input.left = input.right = input.hop = input.turbo = false;
-    turboTaps = 0;
+    for (var i = 0; i < inputs.length; i++) {
+      var q = inputs[i];
+      q.pedal = q.brake = q.left = q.right = q.hop = q.turbo = false;
+      turboTaps[i] = 0;
+    }
     document.querySelectorAll(".tc-btn.is-down").forEach(function (b) { b.classList.remove("is-down"); });
   }
 
@@ -168,22 +209,25 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       e.preventDefault();
       return;
     }
-    if (e.code === "KeyK" && (mode === "race" || mode === "count")) { turboTaps++; e.preventDefault(); return; }
-    if (e.code === "KeyB" && mode === "race" && run && run.hasBell) { SFX.bell(); return; }
+    if (mode === "race" || mode === "count") {
+      var tp = turboBinding(e.code);
+      if (tp >= 0) { turboTaps[tp]++; e.preventDefault(); return; }
+    }
+    if (e.code === "KeyB" && mode === "race" && run && run.riders[0].hasBell) { SFX.bell(); return; }
     if (e.code === "KeyP" || e.code === "Escape") {
       if (mode === "race" || mode === "count") { pauseGame(); e.preventDefault(); }
       else if (mode === "pause") { resumeGame(); e.preventDefault(); }
       return;
     }
-    var k = KEYMAP[e.code];
-    if (k) {
+    var bind = keyBinding(e.code);
+    if (bind) {
       if (mode === "race" || mode === "count") e.preventDefault();
-      input[k] = true;
+      inputs[bind.p][bind.k] = true;
     }
   });
   document.addEventListener("keyup", function (e) {
-    var k = KEYMAP[e.code];
-    if (k) input[k] = false;
+    var bind = keyBinding(e.code);
+    if (bind) inputs[bind.p][bind.k] = false;
   });
   window.addEventListener("blur", function () {
     clearInput();
@@ -214,7 +258,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     if (!tb) return;
     tb.addEventListener("pointerdown", function (e) {
       e.preventDefault();
-      if (mode === "race" || mode === "count") turboTaps++;
+      if (mode === "race" || mode === "count") turboTaps[0]++;
       tb.classList.add("is-down");
     });
     ["pointerup", "pointercancel", "pointerleave"].forEach(function (ev) {
@@ -266,6 +310,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     lbTabs: $("lb-tabs"), lbList: $("lb-list"),
     ghostList: $("ghost-list"), ghostInput: $("ghost-input"), ghostMsg: $("ghost-import-msg"),
     fsBtn: $("btn-fs"), hint: $("controls-hint"), hintKeys: $("hint-keys"), hintTouch: $("hint-touch"),
+    hud2: $("hud2"),
     tour: $("screen-tour"), brief: $("screen-brief"), shop: $("screen-shop"),
     exitBtn: $("btn-exit"), turbo: $("turbo"), turboState: $("turbo-state"),
     turboFill: $("turbo-fill"), turboGain: $("turbo-gain"), turboHint: $("turbo-hint")
@@ -282,6 +327,10 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
      THREE setup
      ==================================================================== */
 
+  /* how many people are riding this screen right now: 1 or 2 */
+  var numPlayers = 1;
+  function players() { return numPlayers; }
+
   var viewW = 960, viewH = 540;
   var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: !lightMode });
   renderer.setSize(viewW, viewH, false);
@@ -292,26 +341,55 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   renderer.shadowMap.enabled = !lightMode;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-  var camera = new THREE.PerspectiveCamera(68, viewW / viewH, 0.1, 4200);
+  /* A "view" is one player's window on the world: a camera and the chase
+     state that drives it. One player has one view; two players have two,
+     stacked one above the other in the same canvas. Everything downstream
+     (followEnvironment, updateCoins, renderFrame) reads the ACTIVE view
+     through the module-level camera/camPos/camLook, which useView() swings
+     from one to the other around each half of the frame. */
+  function newView() {
+    return {
+      camera: new THREE.PerspectiveCamera(68, viewW / viewH, 0.1, 4200),
+      pos: new THREE.Vector3(),
+      look: new THREE.Vector3(),
+      snap: true,
+      dip: 0,
+      shake: 0,
+      /* the slice of canvas this view owns, in pixels from the bottom left */
+      rect: { x: 0, y: 0, w: viewW, h: viewH }
+    };
+  }
+  var views = [newView(), newView()];
+  var camera = views[0].camera;
 
   /* ---------- post-processing (full detail only): bloom + FXAA ---------- */
 
-  var composer = null, cRenderPass = null;
+  /* The composer is sized to ONE VIEW, not to the canvas. Three.js applies a
+     render target's own viewport while rendering into it and only applies the
+     renderer's viewport to the final draw onto the canvas — so a half-height
+     composer processes half-height buffers (no wasted fill, no bloom bleeding
+     across the seam) and its last pass lands in whichever slice the renderer's
+     viewport and scissor are pointing at. One composer serves both players. */
+  var composer = null, cRenderPass = null, composerH = 0;
   function initComposer() {
     if (composer) { composer.dispose(); composer = null; }
+    composerH = 0;
     if (lightMode) return;
     var pr = Math.min(window.devicePixelRatio || 1, 1.6);
+    var vh = players() === 2 ? Math.floor(viewH / 2) : viewH;
     composer = new EffectComposer(renderer);
     composer.setPixelRatio(pr);
-    composer.setSize(viewW, viewH);
+    composer.setSize(viewW, vh);
+    composerH = vh;
     cRenderPass = new RenderPass(new THREE.Scene(), camera);
     composer.addPass(cRenderPass);
-    composer.addPass(new UnrealBloomPass(new THREE.Vector2(viewW, viewH), 0.14, 0.45, 1.0));
+    composer.addPass(new UnrealBloomPass(new THREE.Vector2(viewW, vh), 0.14, 0.45, 1.0));
     composer.addPass(new OutputPass());
     var fxaa = new FXAAPass();
-    fxaa.setSize(viewW * pr, viewH * pr);
+    fxaa.setSize(viewW * pr, vh * pr);
     composer.addPass(fxaa);
   }
+  layoutViews();
   initComposer();
 
   /* ---------- fullscreen: the stage takes the whole display ---------- */
@@ -320,9 +398,27 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   function setRenderSize(w, h) {
     viewW = w; viewH = h;
     renderer.setSize(w, h, false);
-    camera.aspect = w / h;
-    camera.updateProjectionMatrix();
+    layoutViews();
     initComposer();
+  }
+
+  /* Carve the canvas into one slice per player. Two players get a top and a
+     bottom strip: a downhill rider needs to see LEFT and RIGHT to pick a line
+     round a tree, so the split runs horizontally and each player keeps the
+     full width. */
+  function layoutViews() {
+    var n = players();
+    for (var i = 0; i < views.length; i++) {
+      var v = views[i];
+      var h = n === 2 ? Math.floor(viewH / 2) : viewH;
+      /* player 1 on top: WebGL counts y from the bottom, so P1 sits higher */
+      v.rect.x = 0;
+      v.rect.y = n === 2 ? (i === 0 ? viewH - h : 0) : 0;
+      v.rect.w = viewW;
+      v.rect.h = h;
+      v.camera.aspect = v.rect.w / Math.max(1, v.rect.h);
+      v.camera.updateProjectionMatrix();
+    }
   }
   /* Safari (iPad) still ships the webkit-prefixed API */
   function fsElement() { return document.fullscreenElement || document.webkitFullscreenElement || null; }
@@ -344,9 +440,11 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       /* cap the buffer so weak GPUs keep their frame rate on huge screens */
       var s = Math.min(1, 1920 / window.innerWidth);
       setRenderSize(Math.round(window.innerWidth * s), Math.round(window.innerHeight * s));
-    } else if (viewW !== 960) {
-      setRenderSize(960, 540);
+      return;
     }
+    /* windowed: 16:9 for one rider, 4:3 for two so each strip has some height */
+    var wantH = players() === 2 ? 720 : 540;
+    if (viewW !== 960 || viewH !== wantH) setRenderSize(960, wantH);
   }
   if (el.fsBtn && stageEl && fsSupported(stageEl)) {
     el.fsBtn.hidden = false;
@@ -377,15 +475,36 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     }, undefined, function () { /* asset absent — procedural stays */ });
   }
 
-  function renderFrame(sc) {
-    renderer.toneMappingExposure = sc.exposure;
-    if (composer) {
+  /* Draw one player's slice. The scissor keeps the clear and the final blit
+     inside that slice, so the other player's half is never touched. */
+  function renderView(sc, v) {
+    var r = v.rect;
+    renderer.setViewport(r.x, r.y, r.w, r.h);
+    renderer.setScissor(r.x, r.y, r.w, r.h);
+    renderer.setScissorTest(true);
+    if (composer && composerH === r.h) {
       cRenderPass.scene = sc.scene;
-      cRenderPass.camera = camera;
+      cRenderPass.camera = v.camera;
       composer.render();
     } else {
-      renderer.render(sc.scene, camera);
+      renderer.render(sc.scene, v.camera);
     }
+  }
+
+  /* Backdrop objects (sky dome, haze ridges, sun sprite) sit ON the camera, so
+     they have to be re-placed for each view right before that view is drawn. */
+  function renderFrame(sc) {
+    renderer.toneMappingExposure = sc.exposure;
+    var n = players();
+    for (var i = 0; i < n; i++) {
+      var v = views[i];
+      useView(v);
+      parkBackdrop(sc);
+      renderView(sc, v);
+    }
+    renderer.setScissorTest(false);
+    renderer.setViewport(0, 0, viewW, viewH);
+    if (n > 1) useView(views[0]);
   }
 
   /* canvas-drawn textures for sprites */
@@ -2014,8 +2133,12 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   var menuT = 0;
   var lastTs = 0;
   var acc = 0;
-  var shakeT = 0;
   var playerRig = null;
+  var playerRigs = [];
+
+  /* player one is the saved profile; player two is their own little profile so
+     two kids on one keyboard each get their own name and jersey */
+  function riderProfile(i) { return i === 1 ? profile2 : profile; }
   var ghostRigs = [];
   var coinDummy = new THREE.Object3D();
 
@@ -2032,10 +2155,15 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   }
 
   function attachRigs(scene, ghosts) {
-    if (playerRig && playerRig.group.parent) playerRig.group.parent.remove(playerRig.group);
-    playerRig = buildRiderMesh(new THREE.Color(profile.jersey || "#1F7A48").getHex(), currentBikeCfg());
-    enableRigShadows(playerRig);
-    scene.add(playerRig.group);
+    playerRigs.forEach(function (r) { if (r.group.parent) r.group.parent.remove(r.group); });
+    playerRigs = [];
+    for (var pi = 0; pi < players(); pi++) {
+      var rg = buildRiderMesh(new THREE.Color(riderProfile(pi).jersey || "#1F7A48").getHex(), currentBikeCfg());
+      enableRigShadows(rg);
+      scene.add(rg.group);
+      playerRigs.push(rg);
+    }
+    playerRig = playerRigs[0];
     ghostRigs.forEach(function (r) { if (r.rig.group.parent) r.rig.group.parent.remove(r.rig.group); });
     ghostRigs = [];
     (ghosts || []).forEach(function (gh) {
@@ -2067,13 +2195,52 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
 
   /* ---------- race lifecycle ---------- */
 
+  /* Build one rider, ready to roll. Everything that used to be spread across
+     startRace for the single player now happens once per person on the sofa. */
+  function makeRider(i, b, world, devAt, bikeCfg, bikeStats) {
+    var st = CORE.newRider3(world);
+    if (bikeStats) st.stats = bikeStats;
+    /* dev spawn point, e.g. game.html#at=0.9 — handy for testing the finish */
+    if (devAt) {
+      var gi = Math.max(2, Math.min(world.finishIdx - 4, Math.floor(world.finishIdx * parseFloat(devAt[1]))));
+      var dp = world.trail[gi], dq = world.trail[gi + 1];
+      st.x = dp.x; st.y = dp.y; st.z = dp.z;
+      st.yaw = Math.atan2(dq.x - dp.x, dq.z - dp.z);
+      st.trailIdx = gi; st.respawnIdx = gi;
+      st.coinPtr = 0;
+    }
+    /* two riders line up side by side on the gate, not inside each other */
+    if (players() === 2) {
+      var off = i === 0 ? -1.7 : 1.7;
+      st.x += Math.cos(st.yaw) * off;
+      st.z += -Math.sin(st.yaw) * off;
+      st.y = Math.max(st.y, CORE.heightAt(world, st.x, st.z));
+    }
+    return {
+      st: st,
+      view: views[i],
+      rig: playerRigs[i] || playerRigs[0],
+      input: inputs[i],
+      recorder: [],
+      step: 0,
+      idx: i,
+      name: CORE.sanitizeName(riderProfile(i).name) || (players() === 2 ? "Player " + (i + 1) : "Rider"),
+      jersey: riderProfile(i).jersey || (i ? "#E8791D" : "#1F7A48"),
+      place: 0,
+      bikeName: bikeCfg && BIKES ? BIKES.riderNameForBike(bikeCfg) : "",
+      hasBell: !!(bikeCfg && (bikeCfg.extras || []).indexOf("bell") >= 0)
+    };
+  }
+
   function startRace() {
     var b = currentBundle();
     var world = b.wc.world;
-    var st = CORE.newRider3(world);
     var bikeCfg = currentBikeCfg();
     var bikeStats = bikeCfg && BIKES ? BIKES.computeStats(bikeCfg) : null;
-    if (bikeStats) st.stats = bikeStats;
+    var devAt = /^#at=(0?\.[0-9]+)$/.exec(location.hash || "");
+    var practice = !!devAt;
+    var ghosts = [];
+
     /* on the tour a tired bike really is a tired bike: worn pads, a dragging
        chain and a loose headset all show up in the numbers the physics uses */
     if (tourMode && TOUR && tour) {
@@ -2087,21 +2254,10 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       worn.steer = (worn.steer || 1) * cs.steer;
       worn.roll = (worn.roll || 1) * cs.roll;
       worn.rough = (worn.rough || 1) * cs.rough;
-      st.stats = worn;
+      bikeStats = worn;
     }
-    /* dev spawn point, e.g. game.html#at=0.9 — handy for testing the finish */
-    var devAt = /^#at=(0?\.[0-9]+)$/.exec(location.hash || "");
-    var practice = !!devAt;
-    if (devAt) {
-      var gi = Math.max(2, Math.min(world.finishIdx - 4, Math.floor(world.finishIdx * parseFloat(devAt[1]))));
-      var dp = world.trail[gi], dq = world.trail[gi + 1];
-      st.x = dp.x; st.y = dp.y; st.z = dp.z;
-      st.yaw = Math.atan2(dq.x - dp.x, dq.z - dp.z);
-      st.trailIdx = gi; st.respawnIdx = gi;
-      st.coinPtr = 0;
-    }
-    var ghosts = [];
-    if (ghostsOn) {
+
+    if (ghostsOn && players() === 1) {
       ghosts.push(b.wc.armand, b.wc.arthur);
       var mine = lsGet("zr3_bestghost_" + selTrack, null);
       if (validGhostShape(mine)) {
@@ -2116,25 +2272,38 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
         if (!dup && ghosts.length < 6) ghosts.push({ name: c.name, color: 0xF7B733, samples: c.samples, timeMs: c.timeMs });
       });
     }
+    layoutViews();
     attachRigs(b.sc.scene, ghosts);
     initDust(b.sc.scene);
+
+    var riders = [];
+    for (var pi2 = 0; pi2 < players(); pi2++) {
+      riders.push(makeRider(pi2, b, world, devAt, bikeCfg, bikeStats));
+    }
+
+    /* Two riders share one set of coins, so whoever gets there first takes it.
+       That is the point: the wide line pays, and only once. */
     var taken = new Array(world.coins.length);
-    /* clear coins hovering on the spawn point so none sits on the rider */
+    /* clear coins hovering on a spawn point so none sits on a rider */
     for (var ci2 = 0; ci2 < world.coins.length; ci2++) {
       var co2 = world.coins[ci2];
-      var dxc = co2.x - st.x, dzc = co2.z - st.z;
-      if (dxc * dxc + dzc * dzc < 16) taken[ci2] = 1;
+      for (var ri3 = 0; ri3 < riders.length; ri3++) {
+        var dxc = co2.x - riders[ri3].st.x, dzc = co2.z - riders[ri3].st.z;
+        if (dxc * dxc + dzc * dzc < 16) { taken[ci2] = 1; break; }
+      }
     }
     run = {
-      b: b, st: st, taken: taken,
-      recorder: [], step: 0, ghosts: ghosts, countT: 2.7, endT: 0, lastBeep: 3,
-      practice: practice,
-      bikeName: bikeCfg && BIKES ? BIKES.riderNameForBike(bikeCfg) : "",
-      hasBell: !!(bikeCfg && (bikeCfg.extras || []).indexOf("bell") >= 0)
+      b: b, riders: riders, taken: taken,
+      /* aliases so every single-player path keeps working untouched */
+      st: riders[0].st, recorder: riders[0].recorder,
+      step: 0, ghosts: ghosts, countT: 2.7, endT: 0, lastBeep: 3,
+      practice: practice, finishers: 0,
+      bikeName: riders[0].bikeName,
+      hasBell: riders[0].hasBell
     };
     clearInput();
     acc = 0;
-    camSnap = true;
+    snapAllViews();
     mode = "count";
     el.menu.hidden = true; el.results.hidden = true; el.pause.hidden = true; el.howto.hidden = true;
     if (el.tour) el.tour.hidden = true;
@@ -2144,6 +2313,16 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     el.countdown.hidden = false;
     el.touch.hidden = !isTouch;
     if (el.exitBtn) el.exitBtn.hidden = false;
+    if (el.hud2) {
+      el.hud2.hidden = players() !== 2;
+      if (players() === 2) {
+        var e2b = hud2Els();
+        e2b[0].key.textContent = "Q";
+        e2b[1].key.textContent = "↵";
+        eachRider(function (r, i) { if (e2b[i]) e2b[i].flag.hidden = true; });
+        updateHUD2(world);
+      }
+    }
     el.hintKeys.hidden = isTouch;
     el.hintTouch.hidden = !isTouch;
     el.hint.hidden = false;
@@ -2182,6 +2361,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     stopRumble();
     el.pause.hidden = true; el.results.hidden = true; el.hud.hidden = true;
     el.countdown.hidden = true; el.touch.hidden = true; el.hint.hidden = true;
+    if (el.hud2) el.hud2.hidden = true;
     if (el.exitBtn) el.exitBtn.hidden = true;
     if (wasTour && TOUR) { openTour(); return; }
     el.menu.hidden = false;
@@ -2193,6 +2373,10 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     var wc = run.b.wc;
     var timeMs = Math.round(st.finishT * 1000);
     var name = CORE.sanitizeName(profile.name);
+
+    /* two on the sofa is a race between THEM: no medals, no personal bests,
+       no ghost recording and nothing sent to the club board */
+    if (players() === 2) { finishVersus(); return; }
 
     /* a tour leg keeps its own books: no medals, no board, no personal best —
        just the purse, the wear and the clock that runs across all ten */
@@ -2249,9 +2433,10 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     }
 
     el.results.classList.remove("is-finale");
-    var rowN0 = $("results-row"), rowT0 = $("results-row-tour");
+    var rowN0 = $("results-row"), rowT0 = $("results-row-tour"), rowV0 = $("results-row-vs");
     if (rowN0) rowN0.hidden = false;
     if (rowT0) rowT0.hidden = true;
+    if (rowV0) rowV0.hidden = true;
 
     var medalTxt = {
       gold: ["🥇", "GOLD! You beat Armand down the mountain — club legend!"],
@@ -2318,14 +2503,15 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     antelope: "Whoa! Give animals space!"
   };
 
-  function handleEvents(ev, st) {
+  function handleEvents(ev, st, v) {
+    v = v || views[0];
     for (var i = 0; i < ev.length; i++) {
       var e = ev[i];
       if (e.t === "coin") SFX.coin();
       else if (e.t === "hop") SFX.hop();
       else if (e.t === "land") {
         spawnDust(st.x, st.y, st.z, e.q === "hard" ? 8 : 4);
-        camDip = e.q === "hard" ? 0.55 : 0.25;
+        v.dip = e.q === "hard" ? 0.55 : 0.25;
         if (e.q === "hard") { SFX.hard(); toast("Heavy landing!"); }
         else SFX.land();
       }
@@ -2334,7 +2520,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
         toast(CRASH_MSG[e.why] || CRASH_MSG.landing);
         SFX.crash();
         spawnDust(st.x, st.y, st.z, 14);
-        if (!reducedMotion) shakeT = 0.5;
+        if (!reducedMotion) v.shake = 0.5;
       }
       else if (e.t === "splash") {
         toast("SPLASH! 🐊 The Zambezi is NOT a shortcut!");
@@ -2344,7 +2530,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       else if (e.t === "gorge") {
         toast("THE GORGE! 🌊 Respect the Smoke that Thunders!");
         SFX.splash();
-        if (!reducedMotion) shakeT = 0.4;
+        if (!reducedMotion) v.shake = 0.4;
       }
       else if (e.t === "trick") {
         toast(trickName(e) + " +" + e.pts);
@@ -2360,12 +2546,30 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
 
   /* ---------- camera ---------- */
 
-  var camPos = new THREE.Vector3();
-  var camLook = new THREE.Vector3();
-  var camSnap = true;
-  var camDip = 0;
+  /* pointers into the view being updated or drawn right now */
+  var camPos = views[0].pos;
+  var camLook = views[0].look;
+  function useView(v) {
+    camera = v.camera;
+    camPos = v.pos;
+    camLook = v.look;
+  }
+  function snapAllViews() {
+    for (var i = 0; i < views.length; i++) views[i].snap = true;
+  }
 
-  function updateCamera(st, dt, world) {
+  /* The camera's fov in three.js is VERTICAL, so a wide, short two-player
+     strip would fish-eye if we kept the single-player number. Aim at a
+     horizontal field of view instead and solve back — which reproduces the
+     one-player look exactly at 16:9 and stays sane in any slice shape. */
+  var HFOV_BASE = 98, HFOV_MAX = 116;
+  function fovForSpeed(cam, speed) {
+    var hf = Math.min(HFOV_MAX, HFOV_BASE + speed * 0.85) * Math.PI / 360;
+    return Math.atan(Math.tan(hf) / Math.max(0.35, cam.aspect)) * 360 / Math.PI;
+  }
+
+  function updateCamera(v, st, dt, world) {
+    var cam = v.camera;
     var fwdX = Math.sin(st.yaw), fwdZ = Math.cos(st.yaw);
     var speed = Math.sqrt(st.vx * st.vx + st.vz * st.vz);
     var back = 6.2 + speed * 0.06;
@@ -2376,37 +2580,38 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     var gY = CORE.heightAt(world, tx, tz) + 1.1;
     if (ty < gY) ty = gY;
 
-    if (camSnap) {
-      camPos.set(tx, ty, tz);
-      camSnap = false;
+    if (v.snap) {
+      v.pos.set(tx, ty, tz);
+      v.snap = false;
     } else {
       var k = Math.min(1, 5.5 * dt);
-      camPos.x += (tx - camPos.x) * k;
-      camPos.y += (ty - camPos.y) * Math.min(1, 4 * dt);
-      camPos.z += (tz - camPos.z) * k;
+      v.pos.x += (tx - v.pos.x) * k;
+      v.pos.y += (ty - v.pos.y) * Math.min(1, 4 * dt);
+      v.pos.z += (tz - v.pos.z) * k;
     }
     var sx = 0, sy = 0;
-    if (shakeT > 0) {
-      shakeT -= dt;
-      sx = (Math.random() - 0.5) * 0.3 * shakeT;
-      sy = (Math.random() - 0.5) * 0.3 * shakeT;
+    if (v.shake > 0) {
+      v.shake -= dt;
+      sx = (Math.random() - 0.5) * 0.3 * v.shake;
+      sy = (Math.random() - 0.5) * 0.3 * v.shake;
     } else if (st.offTrail && st.onGround && speed > 6 && !reducedMotion) {
       sx = (Math.random() - 0.5) * 0.05;
       sy = (Math.random() - 0.5) * 0.05;
     }
-    camDip *= Math.max(0, 1 - 6 * dt);
-    camera.position.set(camPos.x + sx, camPos.y + sy - camDip, camPos.z);
-    camLook.set(st.x + fwdX * 6, st.y + 1.1, st.z + fwdZ * 6);
-    camera.lookAt(camLook);
+    v.dip *= Math.max(0, 1 - 6 * dt);
+    cam.position.set(v.pos.x + sx, v.pos.y + sy - v.dip, v.pos.z);
+    v.look.set(st.x + fwdX * 6, st.y + 1.1, st.z + fwdZ * 6);
+    cam.lookAt(v.look);
     /* bank gently into the turns */
-    if (st.lean) camera.rotateZ(-st.lean * 0.35);
-    camera.fov = Math.min(84, 66 + speed * 0.5);
-    camera.updateProjectionMatrix();
+    if (st.lean) cam.rotateZ(-st.lean * 0.35);
+    cam.fov = fovForSpeed(cam, speed);
+    cam.updateProjectionMatrix();
   }
 
   /* ---------- rig animation ---------- */
 
-  function animatePlayer(st, dt) {
+  function animatePlayer(r, dt) {
+    var st = r.st, playerRig = r.rig, input = r.input;
     var speed = Math.sqrt(st.vx * st.vx + st.vz * st.vz);
     placeRig(playerRig, st.x, st.y, st.z, st.yaw + (st.spin || 0), st.lean);
     /* flips rotate the whole rider round the bars */
@@ -2450,6 +2655,35 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     if (st.onGround && speed > 9 && Math.random() < 0.25) spawnDust(st.x, st.y, st.z, 1);
   }
 
+  /* ---------- two riders, one sofa ---------- */
+
+  function eachRider(fn) {
+    for (var i = 0; i < run.riders.length; i++) fn(run.riders[i], i);
+  }
+  function allRidersDone() {
+    for (var i = 0; i < run.riders.length; i++) if (!run.riders[i].st.finished) return false;
+    return true;
+  }
+  /* the light aims at the middle of the pack and widens to cover the spread */
+  function aimRiderSun(sc) {
+    var n = run.riders.length;
+    if (n === 1) { aimSun(sc, run.st.x, run.st.y, run.st.z, 0); return; }
+    var a = run.riders[0].st, b2 = run.riders[1].st;
+    var dx = a.x - b2.x, dz = a.z - b2.z;
+    aimSun(sc, (a.x + b2.x) / 2, (a.y + b2.y) / 2, (a.z + b2.z) / 2, Math.sqrt(dx * dx + dz * dz));
+  }
+  function announceFinish(r) {
+    if (r.place === 1) {
+      toast(r.name + " takes it! 🏁");
+      SFX.finish();
+      /* the rider still out there gets a fair run home, then the flag drops */
+      run.chaseT = CHASE_GRACE;
+    } else {
+      toast(r.name + " home too! 🏁");
+      SFX.gate();
+    }
+  }
+
   function animateGhosts(tSec, dt) {
     ghostRigs.forEach(function (gr) {
       var gp = CORE.ghostPosAt3(gr.ghost, tSec);
@@ -2465,14 +2699,35 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   }
 
   /* keep sky, horizon, sun disc and shadow frustum glued to the action */
-  function followEnvironment(sc, fx, fy, fz) {
+  /* the infinite backdrop rides on whichever camera is about to draw */
+  function parkBackdrop(sc) {
     if (sc.dome) sc.dome.position.copy(camera.position);
     if (sc.sky) sc.sky.position.copy(camera.position);
     sc.ridges[0].position.set(camera.position.x, camera.position.y - 55, camera.position.z);
     sc.ridges[1].position.set(camera.position.x, camera.position.y - 55, camera.position.z);
     if (sc.sunSp) sc.sunSp.position.copy(camera.position).addScaledVector(sc.sunDir, 700);
+  }
+
+  /* The shadow camera is a fixed 120-unit box, so with two riders it aims at
+     the point between them and widens just enough to cover both — up to a
+     limit, past which the trailing rider loses their shadow rather than the
+     whole map going soft. */
+  function aimSun(sc, fx, fy, fz, spread) {
     sc.sun.position.set(fx, fy, fz).addScaledVector(sc.sunDir, 220);
     sc.sun.target.position.set(fx, fy, fz);
+    if (!sc.sun.castShadow) return;
+    var want = Math.max(60, Math.min(130, 60 + (spread || 0) * 0.6));
+    if (Math.abs(want - sc.sun.shadow.camera.right) > 1) {
+      var c = sc.sun.shadow.camera;
+      c.left = -want; c.right = want; c.top = want; c.bottom = -want;
+      c.updateProjectionMatrix();
+    }
+  }
+
+  /* one call site for the common single-rider case */
+  function followEnvironment(sc, fx, fy, fz) {
+    parkBackdrop(sc);
+    aimSun(sc, fx, fy, fz, 0);
   }
 
   /* low waterfall rumble that swells as you approach the falls */
@@ -2597,7 +2852,9 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
 
   /* ---------- HUD ---------- */
 
-  function updateHUD(st, world) {
+  function updateHUD(world) {
+    if (players() === 2) { updateHUD2(world); return; }
+    var st = run.st;
     updateTurboHUD(st);
     var ms = Math.round((st.finished ? st.finishT : st.t) * 1000);
     el.time.textContent = fmtTime(ms);
@@ -2606,6 +2863,60 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     el.speed.textContent = Math.round(sp * 3.6) + " km/h";
     var prog = Math.max(0, Math.min(1, st.trailIdx / world.finishIdx));
     el.progress.style.width = (prog * 100).toFixed(1) + "%";
+  }
+
+  /* the two compact strips, one tucked into the top of each half */
+  var h2 = null;
+  function hud2Els() {
+    if (h2) return h2;
+    h2 = [];
+    for (var i = 1; i <= 2; i++) {
+      h2.push({
+        side: $("hud2-p" + i), tag: $("p" + i + "-tag"), time: $("p" + i + "-time"),
+        score: $("p" + i + "-score"), speed: $("p" + i + "-speed"),
+        turbo: $("p" + i + "-turbo"), key: $("p" + i + "-turbo-label"),
+        fill: $("p" + i + "-turbo-fill"), prog: $("p" + i + "-prog"), flag: $("p" + i + "-flag")
+      });
+    }
+    return h2;
+  }
+
+  var PLACE_WORD = ["", "1st 🏆", "2nd"];
+  function updateHUD2(world) {
+    var e2 = hud2Els();
+    eachRider(function (r, i) {
+      var g = e2[i];
+      if (!g || !g.side) return;
+      var st = r.st;
+      g.side.style.setProperty("--p-tint", r.jersey);
+      g.tag.textContent = r.name;
+      g.time.textContent = fmtTime(Math.round((st.finished ? st.finishT : st.t) * 1000));
+      g.score.textContent = "🪙 " + st.score;
+      g.speed.textContent = Math.round(Math.sqrt(st.vx * st.vx + st.vz * st.vz) * 3.6) + " km/h";
+      g.prog.style.width = (Math.max(0, Math.min(1, st.trailIdx / world.finishIdx)) * 100).toFixed(1) + "%";
+
+      var pct = Math.round((st.throttle || 0) * 100);
+      if (st.turboT > 0) {
+        g.turbo.dataset.state = "on";
+        g.fill.style.width = pct + "%";
+      } else if (st.turboCd > 0) {
+        g.turbo.dataset.state = "cool";
+        g.fill.style.width = (100 - (st.turboCd / CORE.TURBO_COOLDOWN) * 100).toFixed(0) + "%";
+      } else {
+        g.turbo.dataset.state = "ready";
+        g.fill.style.width = "100%";
+      }
+
+      if (st.finished) {
+        g.flag.hidden = false;
+        g.flag.textContent = r.timedOut ? "flagged" : (PLACE_WORD[r.place] || "home");
+      } else if (run.chaseT > 0) {
+        g.flag.hidden = false;
+        g.flag.textContent = Math.ceil(run.chaseT) + "s to get home!";
+      } else {
+        g.flag.hidden = true;
+      }
+    });
   }
 
   /* the throttle readout: how the turbo works, and how hard you are working */
@@ -2682,6 +2993,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
 
   function openTour() {
     if (!TOUR) return;
+    setPlayers(1);                 /* the tour is one rider, one clock */
     if (!tour) tour = loadTour() || TOUR.freshTour(profile.name);
     if (!preTourTrack) preTourTrack = CORE.TRACK3_ORDER.indexOf(selTrack) >= 0 ? selTrack : CORE.TRACK3_ORDER[0];
     tour.rider = profile.name || tour.rider;
@@ -2960,8 +3272,10 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       finale;
 
     var rowN = $("results-row"), rowT = $("results-row-tour"), next = $("btn-tour-next");
+    var rowV1 = $("results-row-vs");
     if (rowN) rowN.hidden = true;
     if (rowT) rowT.hidden = false;
+    if (rowV1) rowV1.hidden = true;
     if (next) {
       next.hidden = last;
       next.textContent = "Workshop, then stage " + (st.n + 1) + " 🔧";
@@ -2979,10 +3293,60 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     /* the results overlay lets the mountain show through on purpose; the HUD,
        the turbo meter and the exit button showing through with it is clutter */
     el.hud.hidden = true;          /* the turbo meter lives inside the HUD */
+    if (el.hud2) el.hud2.hidden = true;
     el.countdown.hidden = true;
     el.touch.hidden = true;
     el.hint.hidden = true;
     if (el.exitBtn) el.exitBtn.hidden = true;
+  }
+
+  /* the head to head */
+  function finishVersus() {
+    var order = run.riders.slice().sort(function (a, b2) {
+      if (a.timedOut !== b2.timedOut) return a.timedOut ? 1 : -1;
+      return a.st.finishT - b2.st.finishT;
+    });
+    var win = order[0], lose = order[1];
+    var gap = lose && !lose.timedOut && !win.timedOut
+      ? Math.round((lose.st.finishT - win.st.finishT) * 1000) : 0;
+
+    var cards = run.riders.map(function (r) {
+      var won = r === win && !r.timedOut;
+      return '<div class="vs-card' + (won ? " is-winner" : "") + '" style="--p-tint:' + r.jersey + '">' +
+        '<span class="vs-crown">' + (won ? "🏆" : r.timedOut ? "🏳️" : "🚵") + "</span>" +
+        '<span class="vs-name">' + r.name + "</span>" +
+        '<span class="vs-time">' + (r.timedOut ? "—" : fmtTime(Math.round(r.st.finishT * 1000))) + "</span>" +
+        '<span class="vs-line">🪙 ' + r.st.score + " · " +
+          (r.st.crashes ? r.st.crashes + (r.st.crashes === 1 ? " crash" : " crashes") : "clean run") +
+          (r.st.tricks ? " · " + r.st.tricks + " tricks" : "") + "</span>" +
+        "</div>";
+    }).join("");
+
+    el.results.classList.remove("is-finale");
+    var rowN = $("results-row"), rowT = $("results-row-tour"), rowV = $("results-row-vs");
+    if (rowN) rowN.hidden = true;
+    if (rowT) rowT.hidden = true;
+    if (rowV) rowV.hidden = false;
+
+    el.resultsContent.innerHTML =
+      '<div class="results-medal">🏁</div>' +
+      "<h2>" + (win.timedOut ? "Time!" : win.name + " wins!") + "</h2>" +
+      '<p class="gr-tag">' + CORE.TRACKS3[selTrack].name + "</p>" +
+      '<div class="vs-grid">' + cards + "</div>" +
+      (gap
+        ? '<p class="vs-gap">' + fmtTime(gap) + " between them" +
+          (gap < 1500 ? " — a photo finish! 📸" : "") + "</p>"
+        : lose && lose.timedOut
+          ? '<p class="vs-gap">' + lose.name + " ran out of road before the flag.</p>"
+          : "") +
+      '<p class="results-note">Two-up races stay between the two of you: no personal bests, ' +
+      "no Ghost Codes and nothing goes to the club board. Ride solo for those.</p>";
+
+    mode = "results";
+    el.results.hidden = false;
+    hideRideChrome();
+    stopRumble();
+    SFX.finish();
   }
 
   function resStat(k, v, note) {
@@ -3050,6 +3414,59 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     onTour("btn-tour-road", openTour);
     onTour("btn-tour-menu", function () { leaveTour(); quitToMenu(); });
   }
+
+  /* ---------- one rider or two ---------- */
+
+  function setPlayers(n) {
+    n = n === 2 ? 2 : 1;
+    if (n === numPlayers) return;
+    numPlayers = n;
+    lsSet("zr3_players", n);
+    if (stageEl) stageEl.classList.toggle("is-2p", n === 2);
+    var row2 = $("rider-row-2"), keys = $("two-up-keys");
+    if (row2) row2.hidden = n !== 2;
+    if (keys) keys.hidden = n !== 2;
+    document.querySelectorAll("[data-players]").forEach(function (b2) {
+      b2.classList.toggle("is-selected", Number(b2.getAttribute("data-players")) === n);
+    });
+    /* Two strips need more height than one, so the stage goes from 16:9 to
+       4:3 and the drawing buffer follows it. */
+    syncRenderSize();
+    layoutViews();
+    initComposer();
+    snapAllViews();
+    /* on-screen thumb controls only ever drive player one, so they step aside */
+    if (n === 2 && el.touch) el.touch.hidden = true;
+    refreshMenu();
+  }
+
+  (function () {
+    var row = $("players-row");
+    if (row) {
+      row.addEventListener("click", function (e) {
+        var b2 = e.target.closest("[data-players]");
+        if (b2) setPlayers(Number(b2.getAttribute("data-players")));
+      });
+    }
+    var n2 = $("rider-name-2");
+    if (n2) {
+      n2.value = profile2.name || "";
+      n2.addEventListener("input", function () {
+        profile2.name = CORE.sanitizeName(n2.value);
+        lsSet("zr_profile2", profile2);
+      });
+    }
+    document.querySelectorAll("[data-jersey2]").forEach(function (b2) {
+      b2.classList.toggle("is-selected", b2.getAttribute("data-jersey2") === profile2.jersey);
+      b2.addEventListener("click", function () {
+        profile2.jersey = b2.getAttribute("data-jersey2");
+        lsSet("zr_profile2", profile2);
+        document.querySelectorAll("[data-jersey2]").forEach(function (o) {
+          o.classList.toggle("is-selected", o === b2);
+        });
+      });
+    });
+  })();
 
   /* ---------- menu ---------- */
 
@@ -3187,7 +3604,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     if (!CORE.TRACKS3[id] || id === selTrack) return;
     selTrack = id;
     lsSet("zr3_seltrack", selTrack);
-    camSnap = true;
+    snapAllViews();
     refreshMenu();
     if (clubOn && !clubGhosts[selTrack]) fetchClubGhosts(selTrack);
   }
@@ -3219,7 +3636,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     document.querySelectorAll(".jersey").forEach(function (b) {
       b.classList.toggle("is-selected", b.getAttribute("data-jersey") === profile.jersey);
     });
-    camSnap = true;
+    snapAllViews();
   }
 
   el.trackCards.addEventListener("click", function (e) {
@@ -3243,7 +3660,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     if (TOD_ORDER.indexOf(todSel) < 0) todSel = "auto";
     lsSet("zr3_tod", todSel);
     refreshTodChips();
-    camSnap = true;   /* menu attract loop rebuilds against the relit scene */
+    snapAllViews();   /* menu attract loop rebuilds against the relit scene */
   });
 
   document.querySelectorAll(".jersey").forEach(function (b) {
@@ -3295,6 +3712,11 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   $("btn-restart").addEventListener("click", function () { startRace(); });
   $("btn-quit").addEventListener("click", quitToMenu);
   $("btn-retry").addEventListener("click", function () { startRace(); });
+  (function () {
+    var again = $("btn-vs-again"), back = $("btn-vs-menu");
+    if (again) again.addEventListener("click", function () { startRace(); });
+    if (back) back.addEventListener("click", quitToMenu);
+  })();
   $("btn-menu").addEventListener("click", quitToMenu);
 
   /* ---------- ghost codes ---------- */
@@ -3470,6 +3892,10 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
 
   /* ---------- main loop ---------- */
 
+  /* Once the first rider is home the other gets this long to get there too,
+     so a two-player race can never stall on a kid stuck in a river. */
+  var CHASE_GRACE = 45;
+
   var DT = CORE.DT;
   var menuGhostRig = null;
 
@@ -3499,8 +3925,8 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       animateScene(b.sc, menuT, dt);
       /* orbiting-ish chase cam for the attract loop */
       var st0 = { x: gp.x, y: gp.y, z: gp.z, yaw: gp.yaw, vx: 0, vz: 0, offTrail: false, onGround: true };
-      updateCamera(st0, dt, b.wc.world);
-      followEnvironment(b.sc, gp.x, gp.y, gp.z);
+      updateCamera(views[0], st0, dt, b.wc.world);
+      aimSun(b.sc, gp.x, gp.y, gp.z, 0);
       renderFrame(b.sc);
       return;
     }
@@ -3526,13 +3952,15 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       } else if (run.countT <= 0 && run.lastBeep !== 0) {
         run.lastBeep = 0; SFX.count(true);
       }
-      animatePlayer(run.st, dt);
+      eachRider(function (r) {
+        animatePlayer(r, dt);
+        updateCamera(r.view, r.st, dt, world);
+      });
       animateGhosts(0, dt);
       updateCoins(sc, world, run.taken, run.st.t);
       animateScene(sc, run.st.t, dt, run.st.x, run.st.y, run.st.z);
-      updateCamera(run.st, dt, world);
-      followEnvironment(sc, run.st.x, run.st.y, run.st.z);
-      updateHUD(run.st, world);
+      aimRiderSun(sc);
+      updateHUD(world);
       renderFrame(sc);
       return;
     }
@@ -3541,20 +3969,35 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       acc += dt;
       var ev = [];
       var steps = 0;
+      /* One fixed-rate accumulator, both riders stepped inside it: they share a
+         clock, a world and a coin field, and stepRider3 keeps all its state on
+         the rider it is given, so two of them never tread on each other. */
       while (acc >= DT && steps < 5) {
-        ev.length = 0;
-        input.turbo = turboTaps > 0;
-        if (input.turbo) turboTaps--;
-        /* in the air the same keys mean tricks: pedal/brake flip, steer spins */
-        var aloft = !run.st.onGround;
-        input.flipF = aloft && input.pedal;
-        input.flipB = aloft && input.brake;
-        input.spinL = aloft && input.left;
-        input.spinR = aloft && input.right;
-        CORE.stepRider3(run.st, input, world, ev, run.taken);
-        handleEvents(ev, run.st);
-        if (run.step % 6 === 0) {
-          run.recorder.push([Math.round(run.st.x * 10), Math.round(run.st.y * 10), Math.round(run.st.z * 10), Math.round(run.st.yaw * 100)]);
+        for (var ri = 0; ri < run.riders.length; ri++) {
+          var rr = run.riders[ri];
+          if (rr.st.finished) continue;
+          var inp = rr.input;
+          inp.turbo = turboTaps[rr.idx] > 0;
+          if (inp.turbo) turboTaps[rr.idx]--;
+          /* in the air the same keys mean tricks: pedal/brake flip, steer spins */
+          var aloft = !rr.st.onGround;
+          inp.flipF = aloft && inp.pedal;
+          inp.flipB = aloft && inp.brake;
+          inp.spinL = aloft && inp.left;
+          inp.spinR = aloft && inp.right;
+          ev.length = 0;
+          CORE.stepRider3(rr.st, inp, world, ev, run.taken);
+          handleEvents(ev, rr.st, rr.view);
+          if (rr.step % 6 === 0) {
+            rr.recorder.push([Math.round(rr.st.x * 10), Math.round(rr.st.y * 10), Math.round(rr.st.z * 10), Math.round(rr.st.yaw * 100)]);
+          }
+          rr.step++;
+          /* first past the arch takes the win; the other rides their leg out */
+          if (rr.st.finished && !rr.place) {
+            run.finishers++;
+            rr.place = run.finishers;
+            if (players() === 2) announceFinish(rr);
+          }
         }
         run.step++;
         acc -= DT;
@@ -3562,18 +4005,39 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       }
       if (steps === 5) acc = 0;
 
-      animatePlayer(run.st, dt);
+      /* the flag falls on the stragglers when the grace period runs out */
+      if (run.chaseT > 0 && !allRidersDone()) {
+        run.chaseT -= dt;
+        if (run.chaseT <= 0) {
+          eachRider(function (r) {
+            if (r.st.finished) return;
+            r.st.finished = true;
+            r.st.finishT = r.st.t;
+            r.timedOut = true;
+            run.finishers++;
+            r.place = run.finishers;
+          });
+          toast("Flag's down! 🏁");
+        }
+      }
+
+      eachRider(function (r) {
+        animatePlayer(r, dt);
+        updateCamera(r.view, r.st, dt, world);
+      });
       animateGhosts(run.st.t, dt);
       updateCoins(sc, world, run.taken, run.st.t);
       animateScene(sc, run.st.t, dt, run.st.x, run.st.y, run.st.z);
       updateDust(dt);
-      updateCamera(run.st, dt, world);
-      followEnvironment(sc, run.st.x, run.st.y, run.st.z);
-      updateHUD(run.st, world);
+      aimRiderSun(sc);
+      updateHUD(world);
       renderFrame(sc);
-      if (location.search.indexOf("dbg3d") !== -1) window.__dbg = { sc: sc, camera: camera, renderer: renderer, world: world, st: run.st, THREE: THREE };
+      if (location.search.indexOf("dbg3d") !== -1) {
+        window.__dbg = { sc: sc, camera: camera, renderer: renderer, world: world,
+          st: run.st, riders: run.riders, views: views, THREE: THREE };
+      }
 
-      if (run.st.finished) {
+      if (allRidersDone()) {
         run.endT += dt;
         if (run.endT > 1.4) finishRace();
       }
@@ -3590,5 +4054,8 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   refreshMenu();
   refreshGhostList();
   refreshLeaderboard();
+  /* a saved two-up choice survives a reload — restored here, once everything
+     the menu reads from actually exists */
+  if (lsGet("zr3_players", 1) === 2) setPlayers(2);
   requestAnimationFrame(loop);
 })();

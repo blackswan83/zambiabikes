@@ -107,6 +107,29 @@
           <div class="hud-progress"><div class="hud-progress__fill" id="hud-progress-fill"></div><span class="hud-progress__flag" aria-hidden="true">🏁</span></div>
         </div>
 
+        <!-- two players on one screen: a compact strip at the top of each half -->
+        <div class="hud2" id="hud2" hidden>
+          <div class="hud2-side hud2-side--p1" id="hud2-p1">
+            <span class="hud2-tag" id="p1-tag">P1</span>
+            <span class="hud2-time" id="p1-time">0:00.0</span>
+            <span class="hud2-chip" id="p1-score">🪙 0</span>
+            <span class="hud2-chip" id="p1-speed">0 km/h</span>
+            <span class="hud2-turbo" id="p1-turbo" data-state="ready"><b id="p1-turbo-label">Q</b><i><em id="p1-turbo-fill"></em></i></span>
+            <span class="hud2-prog"><i id="p1-prog"></i></span>
+            <span class="hud2-flag" id="p1-flag" hidden></span>
+          </div>
+          <div class="hud2-side hud2-side--p2" id="hud2-p2">
+            <span class="hud2-tag" id="p2-tag">P2</span>
+            <span class="hud2-time" id="p2-time">0:00.0</span>
+            <span class="hud2-chip" id="p2-score">🪙 0</span>
+            <span class="hud2-chip" id="p2-speed">0 km/h</span>
+            <span class="hud2-turbo" id="p2-turbo" data-state="ready"><b id="p2-turbo-label">↵</b><i><em id="p2-turbo-fill"></em></i></span>
+            <span class="hud2-prog"><i id="p2-prog"></i></span>
+            <span class="hud2-flag" id="p2-flag" hidden></span>
+          </div>
+          <span class="hud2-seam" aria-hidden="true"></span>
+        </div>
+
         <div class="countdown" id="countdown" hidden>3</div>
 
         <div class="touch-controls" id="touch-controls" hidden>
@@ -127,6 +150,10 @@
           <p class="gr-tag">The official Zambia Bikes downhill game — free, forever.</p>
           <div class="gr-panel">
             <div class="menu-side">
+            <div class="players-row" id="players-row" role="group" aria-label="How many riders">
+              <button type="button" class="pl-chip is-selected" data-players="1">🚵 1 player</button>
+              <button type="button" class="pl-chip" data-players="2">🚵🚵 2 players — same screen</button>
+            </div>
             <div class="rider-row">
               <label for="rider-name">Rider name</label>
               <input id="rider-name" maxlength="12" autocomplete="off" spellcheck="false" placeholder="Rider">
@@ -137,6 +164,20 @@
                 <button type="button" class="jersey" data-jersey="#8E44AD" style="background:#8E44AD" aria-label="Purple jersey"></button>
               </span>
             </div>
+            <div class="rider-row rider-row--p2" id="rider-row-2" hidden>
+              <label for="rider-name-2">Player 2</label>
+              <input id="rider-name-2" maxlength="12" autocomplete="off" spellcheck="false" placeholder="Rider 2">
+              <span class="jersey-swatches" role="group" aria-label="Player 2 jersey colour">
+                <button type="button" class="jersey jersey2" data-jersey2="#E8791D" style="background:#E8791D" aria-label="Copper jersey"></button>
+                <button type="button" class="jersey jersey2" data-jersey2="#8E44AD" style="background:#8E44AD" aria-label="Purple jersey"></button>
+                <button type="button" class="jersey jersey2" data-jersey2="#2A9D8F" style="background:#2A9D8F" aria-label="River teal jersey"></button>
+                <button type="button" class="jersey jersey2" data-jersey2="#F7B733" style="background:#F7B733" aria-label="Sun yellow jersey"></button>
+              </span>
+            </div>
+            <p class="two-up-keys" id="two-up-keys" hidden>
+              <b>Player 1</b> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> · hop <kbd>shift</kbd> · turbo <kbd>Q</kbd>
+              &nbsp;&nbsp;<b>Player 2</b> <kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd> · hop <kbd>⇧ right</kbd> · turbo <kbd>enter</kbd>
+            </p>
             <p class="gr-tag" id="menu-bike" style="margin:0"></p>
             <div class="tod-row" id="tod-row" role="group" aria-label="Time of day">
               <span class="tod-label">Ride at</span>
@@ -318,6 +359,10 @@
             <button type="button" class="btn btn--copper" id="btn-retry">Ride it again</button>
             <button type="button" class="btn btn--ghost" id="btn-copy-ghost">Copy my Ghost Code</button>
             <button type="button" class="btn btn--ghost" id="btn-menu">Back to menu</button>
+          </div>
+          <div class="menu-row" id="results-row-vs" style="margin-top:0.6rem" hidden>
+            <button type="button" class="btn btn--copper btn--big" id="btn-vs-again">Best of three? 🏁</button>
+            <button type="button" class="btn btn--ghost btn--small" id="btn-vs-menu">Back to menu</button>
           </div>
           <div class="menu-row" id="results-row-tour" style="margin-top:0.6rem" hidden>
             <button type="button" class="btn btn--copper btn--big" id="btn-tour-next">Workshop, then the next stage 🔧</button>
