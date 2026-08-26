@@ -266,6 +266,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     lbTabs: $("lb-tabs"), lbList: $("lb-list"),
     ghostList: $("ghost-list"), ghostInput: $("ghost-input"), ghostMsg: $("ghost-import-msg"),
     fsBtn: $("btn-fs"), hint: $("controls-hint"), hintKeys: $("hint-keys"), hintTouch: $("hint-touch"),
+    tour: $("screen-tour"), brief: $("screen-brief"), shop: $("screen-shop"),
     exitBtn: $("btn-exit"), turbo: $("turbo"), turboState: $("turbo-state"),
     turboFill: $("turbo-fill"), turboGain: $("turbo-gain"), turboHint: $("turbo-hint")
   };
@@ -2007,6 +2008,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
 
   var mode = "menu";
   var selTrack = lsGet("zr3_seltrack", "miombo");
+  if (CORE.TRACK3_ORDER.indexOf(selTrack) < 0) selTrack = "miombo";
   if (!CORE.TRACKS3[selTrack]) selTrack = "miombo";
   var run = null;
   var menuT = 0;
@@ -2072,6 +2074,21 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     var bikeCfg = currentBikeCfg();
     var bikeStats = bikeCfg && BIKES ? BIKES.computeStats(bikeCfg) : null;
     if (bikeStats) st.stats = bikeStats;
+    /* on the tour a tired bike really is a tired bike: worn pads, a dragging
+       chain and a loose headset all show up in the numbers the physics uses */
+    if (tourMode && TOUR && tour) {
+      var cs = TOUR.conditionStats(tour.condition);
+      var base = bikeStats || {};
+      var worn = {};
+      Object.keys(CORE.DEFAULT_STATS || {}).concat(Object.keys(base)).forEach(function (k) {
+        worn[k] = base[k] !== undefined ? base[k] : 1;
+      });
+      worn.brake = (worn.brake || 1) * cs.brake;
+      worn.steer = (worn.steer || 1) * cs.steer;
+      worn.roll = (worn.roll || 1) * cs.roll;
+      worn.rough = (worn.rough || 1) * cs.rough;
+      st.stats = worn;
+    }
     /* dev spawn point, e.g. game.html#at=0.9 — handy for testing the finish */
     var devAt = /^#at=(0?\.[0-9]+)$/.exec(location.hash || "");
     var practice = !!devAt;
@@ -2120,6 +2137,9 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     camSnap = true;
     mode = "count";
     el.menu.hidden = true; el.results.hidden = true; el.pause.hidden = true; el.howto.hidden = true;
+    if (el.tour) el.tour.hidden = true;
+    if (el.brief) el.brief.hidden = true;
+    if (el.shop) el.shop.hidden = true;
     el.hud.hidden = false;
     el.countdown.hidden = false;
     el.touch.hidden = !isTouch;
@@ -2151,6 +2171,11 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   }
 
   function quitToMenu() {
+    /* abandoning a tour leg drops you back into the roadbook to try again —
+       the mechanical is rolled from the stage, so you cannot re-roll your luck */
+    var wasTour = tourMode;
+    tourMode = false;
+    pendingFault = null;
     mode = "menu";
     run = null;
     clearInput();
@@ -2158,6 +2183,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     el.pause.hidden = true; el.results.hidden = true; el.hud.hidden = true;
     el.countdown.hidden = true; el.touch.hidden = true; el.hint.hidden = true;
     if (el.exitBtn) el.exitBtn.hidden = true;
+    if (wasTour && TOUR) { openTour(); return; }
     el.menu.hidden = false;
     refreshMenu();
   }
@@ -2167,6 +2193,10 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     var wc = run.b.wc;
     var timeMs = Math.round(st.finishT * 1000);
     var name = CORE.sanitizeName(profile.name);
+
+    /* a tour leg keeps its own books: no medals, no board, no personal best —
+       just the purse, the wear and the clock that runs across all ten */
+    if (tourMode && tour) { finishTourStage(st, timeMs); return; }
 
     var gold = Math.min(wc.armand.timeMs, wc.arthur.timeMs);
     var silver = Math.max(wc.armand.timeMs, wc.arthur.timeMs);
@@ -2218,6 +2248,11 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       lsSet("zr3_scores", scores);
     }
 
+    el.results.classList.remove("is-finale");
+    var rowN0 = $("results-row"), rowT0 = $("results-row-tour");
+    if (rowN0) rowN0.hidden = false;
+    if (rowT0) rowT0.hidden = true;
+
     var medalTxt = {
       gold: ["🥇", "GOLD! You beat Armand down the mountain — club legend!"],
       silver: ["🥈", "Silver! Faster than Arthur — Armand is next."],
@@ -2246,9 +2281,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
 
     mode = "results";
     el.results.hidden = false;
-    el.hud.hidden = true;
-    el.touch.hidden = true;
-    if (el.exitBtn) el.exitBtn.hidden = true;
+    hideRideChrome();
     stopRumble();
     SFX.finish();
     refreshLeaderboard();
@@ -2599,6 +2632,423 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       el.turboGain.textContent = "";
       el.turboFill.style.width = "100%";
     }
+  }
+
+  /* ====================================================================
+     THE GREAT ZAMBIA TOUR
+     Ten legs around the country with the clock running across all of them.
+     Between legs you stand in the workshop and decide what to fix and what
+     to carry — which is where the tour is actually won.
+     ==================================================================== */
+
+  var TOUR = window.ZR_TOUR || null;
+  if (TOUR) TOUR.register(CORE);
+
+  var tour = null;                 /* live progress, or null outside the tour */
+  var tourMode = false;            /* is the current run a tour stage? */
+  var pendingFault = null;         /* the mechanical waiting to strike */
+  var tourSnap = null;             /* the tour exactly as it stood before this leg */
+  var preTourTrack = null;         /* the mountain the rider was on before the tour */
+
+  /* the tour borrows selTrack for its stages; the main menu gets its own back */
+  function leaveTour() {
+    tourMode = false;
+    pendingFault = null;
+    if (preTourTrack && CORE.TRACK3_ORDER.indexOf(selTrack) < 0) selectTrack(preTourTrack);
+    preTourTrack = null;
+  }
+
+  function loadTour() {
+    var t = lsGet(TOUR.KEY, null);
+    return TOUR.validTour(t) ? t : null;
+  }
+  function saveTour() { if (tour) lsSet(TOUR.KEY, tour); }
+
+  /* the fastest lap of the whole country this device has ever done */
+  function bestTour() {
+    var b = lsGet("zr3_tourbest", null);
+    return b && typeof b.timeMs === "number" && b.timeMs > 0 ? b : null;
+  }
+
+  function tourStage() { return tour ? TOUR.stageAt(tour.stage) : null; }
+
+  function showOnly(which) {
+    [el.menu, el.tour, el.brief, el.shop, el.results, el.howto, el.pause].forEach(function (o) {
+      if (o) o.hidden = o !== which;
+    });
+  }
+
+  /* ---------- the roadbook: every leg, and where you have got to ---------- */
+
+  function openTour() {
+    if (!TOUR) return;
+    if (!tour) tour = loadTour() || TOUR.freshTour(profile.name);
+    if (!preTourTrack) preTourTrack = CORE.TRACK3_ORDER.indexOf(selTrack) >= 0 ? selTrack : CORE.TRACK3_ORDER[0];
+    tour.rider = profile.name || tour.rider;
+    saveTour();
+    mode = "tour";
+    renderTour();
+    showOnly(el.tour);
+  }
+
+  function renderTour() {
+    var done = tour.stage;
+    var total = TOUR.STAGES.length;
+    $("tour-sub").textContent = done >= total
+      ? "Tour complete — " + fmtTime(TOUR.totalMs(tour)) + " around the whole country."
+      : "Ten legs, " + (TOUR.TOTAL_M / 1000).toFixed(1) + " km, one clock. " +
+        (done ? "Stage " + (done + 1) + " of " + total + " next." : "Roll out from Livingstone.");
+
+    var html = "";
+    TOUR.STAGES.forEach(function (st, i) {
+      var r = tour.results[i];
+      var state = r ? "done" : i === done ? "next" : "todo";
+      html += '<li class="rb-row rb-row--' + state + '">' +
+        '<span class="rb-n">' + st.n + "</span>" +
+        '<span class="rb-main"><b>' + st.name + "</b>" +
+        '<i>' + st.from + " → " + st.to + " · " + st.length + " m · " +
+          TOUR.SURFACES[st.surface].label + " " + TOUR.WEATHER[st.weather].icon + "</i></span>" +
+        '<span class="rb-time">' + (r
+          ? fmtTime(r.timeMs) + (r.lostMs ? ' <em title="lost to a mechanical">+' + Math.round(r.lostMs / 1000) + "s</em>" : "")
+          : i === done ? "▶" : "—") + "</span></li>";
+    });
+    $("tour-roadbook").innerHTML = html;
+
+    $("tour-total").textContent = tour.results.length ? fmtTime(TOUR.totalMs(tour)) : "—";
+    $("tour-cash").textContent = "K " + tour.kwacha;
+    $("tour-cond").textContent = Math.round(tour.condition) + "%";
+    setCondBar($("tour-cond-bar"), tour.condition);
+    $("tour-number").textContent = "#" + tour.number + " · rolls out " + TOUR.startTimeLabel(tour.number);
+    var bt = bestTour();
+    $("tour-best").textContent = bt ? fmtTime(bt.timeMs) + (bt.rider ? " · " + bt.rider : "") : "not yet";
+    $("tour-note").innerHTML = done >= total
+      ? "You brought it home. The board in the clubhouse has your name on it."
+      : "Your race number is your start time, the way it was on the old road races — number " +
+        tour.number + " leaves at " + TOUR.startTimeLabel(tour.number) + ".";
+
+    var go = $("btn-tour-go");
+    go.textContent = done >= total ? "Ride the tour again" : done ? "Continue — stage " + (done + 1) : "Start stage 1";
+  }
+
+  function setCondBar(bar, c) {
+    if (!bar) return;
+    bar.style.width = Math.max(0, Math.min(100, c)) + "%";
+    bar.className = c > 72 ? "is-good" : c > 45 ? "is-worn" : "is-bad";
+  }
+
+  /* ---------- the briefing card ---------- */
+
+  function openBrief() {
+    var st = tourStage();
+    if (!st) { openTour(); return; }
+    mode = "tour";
+    /* the mountain behind the card is the one you are about to ride, and the
+       world it builds is the world the stage starts in — nothing wasted */
+    selTrack = st.id;
+    var W = TOUR.WEATHER[st.weather], S = TOUR.SURFACES[st.surface];
+    $("brief-kicker").textContent = "Stage " + st.n + " of " + TOUR.STAGES.length +
+      " · leaves at " + TOUR.startTimeLabel(tour.number);
+    $("brief-name").textContent = st.name;
+    $("brief-route").textContent = st.from + " → " + st.to;
+    $("brief-blurb").textContent = st.blurb;
+    var mapEl = $("brief-map");
+    if (mapEl) mapEl.innerHTML = courseMapSVG(st.id);
+    $("brief-grid").innerHTML =
+      briefCell("Distance", st.length + " m") +
+      briefCell("Surface", S.label, S.note) +
+      briefCell("Weather", W.icon + " " + W.label) +
+      briefCell("Par time", fmtTime(TOUR.targetMs(st))) +
+      briefCell("Condition", Math.round(tour.condition) + "%") +
+      briefCell("In the bag", tour.bag.length + " / " + TOUR.BAG_SLOTS);
+
+    var risk = TOUR.faultRisk(tour.condition);
+    var riskEl = $("brief-risk");
+    riskEl.className = "brief-risk" + (risk <= 0 ? " brief-risk--ok" : "");
+    riskEl.innerHTML = risk <= 0
+      ? "🔧 The bike is in good order — nothing should break today."
+      : "⚠️ <b>" + Math.round(risk * 100) + "% chance of a mechanical</b> on this leg. " +
+        "Carrying the right spare turns a disaster into a roadside stop.";
+
+    $("brief-bag").innerHTML = tour.bag.length
+      ? "<b>In the bag:</b> " + tour.bag.map(function (id) {
+          return "<em>" + TOUR.SPARES[id].icon + " " + TOUR.SPARES[id].name + "</em>";
+        }).join(" · ")
+      : "<b>In the bag:</b> nothing at all. Anything that breaks out there stays broken.";
+    showOnly(el.brief);
+  }
+
+  function briefCell(k, v, note) {
+    return '<div class="brief-cell"><b>' + k + "</b><span>" + v + "</span>" +
+      (note ? "<i>" + note + "</i>" : "") + "</div>";
+  }
+
+  /* ---------- the workshop ---------- */
+
+  function openShop() {
+    mode = "tour";
+    renderShop();
+    showOnly(el.shop);
+  }
+
+  function renderShop() {
+    var st = tourStage();
+    $("shop-sub").textContent = st
+      ? "Before stage " + st.n + " — " + st.name + ". You have K " + tour.kwacha + "."
+      : "You have K " + tour.kwacha + ".";
+    $("shop-floor").textContent = TOUR.RISK_FLOOR;
+    $("shop-van").innerHTML = "🚐 The Grown-Up Crew's support van meets you at every stage finish and " +
+      "gives the bike a free once-over — that is the <b>+" + TOUR.FREE_FETTLE +
+      "%</b> already in the bar. Everything past it costs kwacha.";
+    setCondBar($("shop-cond-bar"), tour.condition);
+    var missing = Math.round(100 - tour.condition);
+    $("shop-cond").innerHTML = "Bike condition <b>" + Math.round(tour.condition) + "%</b>" +
+      (missing ? " — a full rebuild costs <b>K " + (missing * TOUR.REPAIR_PER_POINT) + "</b>" : " — nothing to fix.");
+
+    /* three tiers, but only the ones that are actually different: on a
+       nearly-new bike "quick fettle" and "full rebuild" are the same job */
+    var rep = "", offered = {};
+    [[10, "Quick fettle"], [30, "Proper service"], [missing, "Full rebuild"]].forEach(function (o) {
+      var pts = Math.min(o[0], missing);
+      if (pts <= 0 || offered[pts]) return;
+      offered[pts] = 1;
+      var label = pts >= missing ? "Full rebuild" : o[1];
+      var cost = pts * TOUR.REPAIR_PER_POINT;
+      var can = tour.kwacha >= cost;
+      rep += '<button type="button" class="btn btn--small ' + (can ? "btn--forest" : "btn--ghost") +
+        '" data-repair="' + pts + '"' + (can ? "" : " disabled") + ">" + label +
+        " → " + Math.round(tour.condition + pts) + "% · K " + cost + "</button>";
+    });
+    $("shop-repair").innerHTML = rep || '<span class="shop-hint">The bike is perfect. Go and ride it.</span>';
+
+    $("bag-count").textContent = tour.bag.length + " / " + TOUR.BAG_SLOTS;
+    $("bag-list").innerHTML = tour.bag.length
+      ? tour.bag.map(function (id, i) {
+          var sp = TOUR.SPARES[id];
+          return '<li><span>' + sp.icon + " " + sp.name + "</span>" +
+            '<button type="button" class="bag-drop" data-drop="' + i + '" aria-label="Leave behind">✕</button></li>';
+        }).join("")
+      : '<li class="bag-empty">Empty. Anything that breaks out there stays broken.</li>';
+
+    var grid = "";
+    Object.keys(TOUR.SPARES).forEach(function (id) {
+      var sp = TOUR.SPARES[id];
+      var have = tour.bag.indexOf(id) >= 0;
+      var full = tour.bag.length >= TOUR.BAG_SLOTS;
+      var afford = tour.kwacha >= sp.kwacha;
+      var dis = have || full || !afford;
+      grid += '<button type="button" class="spare' + (have ? " is-packed" : "") + '"' +
+        (dis ? " disabled" : "") + ' data-buy="' + id + '">' +
+        '<span class="spare-i">' + sp.icon + "</span>" +
+        "<b>" + sp.name + "</b>" +
+        '<i>' + sp.desc + "</i>" +
+        '<span class="spare-k">' + (have ? "packed" : "K " + sp.kwacha) + "</span></button>";
+    });
+    $("spare-grid").innerHTML = grid;
+  }
+
+  /* ---------- running a stage ---------- */
+
+  function startTourStage() {
+    var st = tourStage();
+    if (!st) { openTour(); return; }
+    /* keep the tour exactly as it stands, so "ride it again" can put it back */
+    tourSnap = JSON.parse(JSON.stringify(tour));
+    /* decide the mechanical now, so the briefing's stated risk was honest.
+       It is seeded off the stage, so riding the leg again meets the same
+       mechanical — you can ride better, you cannot re-roll your luck. */
+    /* Seeded off the rider's race number and the stage, so a rider's luck is
+       their own and riding the same leg again meets the same mechanical.
+       You can ride better; you cannot re-roll your luck. */
+    pendingFault = TOUR.rollFault(st, tour.condition, tour.bag, tour.number + tour.stage);
+    selTrack = st.id;
+    tourMode = true;
+    startRace();
+  }
+
+  /* put the tour back exactly as it was before the last leg, then ride it again */
+  function retryTourStage() {
+    if (!tourSnap) return;
+    tour = JSON.parse(JSON.stringify(tourSnap));
+    saveTour();
+    startTourStage();
+  }
+
+  /* what the tour does with a finished stage, instead of the normal results */
+  function finishTourStage(st2, timeMs) {
+    var st = tourStage();
+    var coins = st2.coinCount, crashes = st2.crashes;
+    var pay = TOUR.stageEarnings(st, timeMs, coins, crashes);
+    var wear = TOUR.stageWear(st, crashes);
+    var lostMs = 0, faultLine = "";
+
+    if (pendingFault) {
+      lostMs = pendingFault.lostS * 1000;
+      var f = pendingFault.fault;
+      if (pendingFault.fixedBy) {
+        var used = pendingFault.fixedBy;
+        tour.bag.splice(tour.bag.indexOf(used), 1);
+        faultLine = '<p class="res-fault res-fault--ok">' + f.icon + " <b>" + f.name + "!</b> " +
+          f.story + " You had the " + TOUR.SPARES[used].name.toLowerCase() +
+          " in the bag — fixed at the roadside, <b>" + pendingFault.lostS + "s</b> lost.</p>";
+      } else {
+        faultLine = '<p class="res-fault">' + f.icon + " <b>" + f.name + "!</b> " + f.story +
+          " Nothing in the bag would fix it, so you nursed it home — <b>" +
+          pendingFault.lostS + "s</b> lost.</p>";
+      }
+    }
+    pendingFault = null;
+
+    tour.kwacha += pay.total;
+    tour.condition = Math.max(5, tour.condition - wear);
+    /* the Grown-Up Crew's support van is waiting at every stage finish */
+    var vanPts = TOUR.fettle(tour);
+    tour.results.push({ id: st.id, timeMs: timeMs, lostMs: lostMs, coins: coins, crashes: crashes, pay: pay.total });
+    tour.stage++;
+    saveTour();
+
+    var beatPar = timeMs <= TOUR.targetMs(st);
+    var last = tour.stage >= TOUR.STAGES.length;
+
+    /* the payoff for forty minutes of riding: a whole-country time to beat */
+    var finale = "";
+    if (last) {
+      var total = TOUR.totalMs(tour);
+      var prev = bestTour();
+      var record = !prev || total < prev.timeMs;
+      if (record) lsSet("zr3_tourbest", { timeMs: total, rider: CORE.sanitizeName(tour.rider || profile.name) });
+      var brokeCount = tour.results.filter(function (r) { return r.lostMs > 0; }).length;
+      var lostAll = tour.results.reduce(function (a2, r) { return a2 + (r.lostMs || 0); }, 0);
+      finale =
+        '<div class="tour-finale">' +
+          "<h3>The Great Zambia Tour — <em>complete</em></h3>" +
+          '<p class="tf-time">' + fmtTime(total) + "</p>" +
+          '<p class="tf-line">Ten legs · ' + (TOUR.TOTAL_M / 1000).toFixed(1) +
+            " km · Livingstone to Livingstone the long way round.</p>" +
+          '<p class="tf-line">' + (brokeCount
+            ? brokeCount + (brokeCount === 1 ? " mechanical" : " mechanicals") + " on the road cost you " +
+              Math.round(lostAll / 1000) + " seconds."
+            : "Ten legs and not a single mechanical — that bike was looked after.") +
+            " You finished with <b>K " + tour.kwacha + "</b> in the purse.</p>" +
+          (record
+            ? '<p class="tf-record">🏅 A new best time around Zambia' +
+              (prev ? " — " + fmtTime(prev.timeMs - total) + " quicker than your last one." : ".") + "</p>"
+            : '<p class="tf-line">Your best is still ' + fmtTime(prev.timeMs) + " — " +
+              fmtTime(total - prev.timeMs) + " to find.</p>") +
+        "</div>";
+    }
+    el.resultsContent.innerHTML =
+      '<div class="results-medal">' + (last ? "🏆" : beatPar ? "⏱️" : "🚵") + "</div>" +
+      "<h2>Stage " + st.n + " — " + st.name + "</h2>" +
+      '<p class="gr-tag">' + st.from + " → " + st.to + "</p>" +
+      '<div class="res-stats">' +
+        resStat("Stage time", fmtTime(timeMs)) +
+        resStat("Par", fmtTime(TOUR.targetMs(st)), beatPar ? "beaten" : "missed") +
+        resStat("Tour total", fmtTime(TOUR.totalMs(tour))) +
+      "</div>" +
+      faultLine +
+      '<div class="res-stats res-stats--pay">' +
+        resStat("Distance", "K " + pay.base) +
+        resStat("Coins", "K " + pay.coins) +
+        resStat("Under par", "K " + pay.bonus) +
+        resStat("No crashes", "K " + pay.tidy) +
+        resStat("Earned", "K " + pay.total) +
+      "</div>" +
+      '<p class="res-wear">🔧 The leg took <b>' + wear + "%</b> out of the bike" +
+        (vanPts ? ", and the club van 🚐 put <b>" + vanPts + "%</b> back for free" : "") +
+        " — condition now <b>" + Math.round(tour.condition) + "%</b>. Purse: <b>K " +
+        tour.kwacha + "</b>.</p>" +
+      finale;
+
+    var rowN = $("results-row"), rowT = $("results-row-tour"), next = $("btn-tour-next");
+    if (rowN) rowN.hidden = true;
+    if (rowT) rowT.hidden = false;
+    if (next) {
+      next.hidden = last;
+      next.textContent = "Workshop, then stage " + (st.n + 1) + " 🔧";
+    }
+    el.results.classList.toggle("is-finale", last);
+    tourMode = false;
+    mode = "results";
+    hideRideChrome();
+    stopRumble();
+    SFX.finish();
+    showOnly(el.results);
+  }
+
+  function hideRideChrome() {
+    /* the results overlay lets the mountain show through on purpose; the HUD,
+       the turbo meter and the exit button showing through with it is clutter */
+    el.hud.hidden = true;          /* the turbo meter lives inside the HUD */
+    el.countdown.hidden = true;
+    el.touch.hidden = true;
+    el.hint.hidden = true;
+    if (el.exitBtn) el.exitBtn.hidden = true;
+  }
+
+  function resStat(k, v, note) {
+    var nil = /^K 0$/.test(String(v));
+    return '<span class="res-stat' + (nil ? " res-stat--nil" : "") + '"><b>' + k + "</b>" + v +
+      (note ? '<i class="res-note">' + note + "</i>" : "") + "</span>";
+  }
+
+  /* ---------- wiring ---------- */
+
+  if (TOUR) {
+    var onTour = function (id, fn) {
+      var b = $(id);
+      if (b) b.addEventListener("click", fn);
+    };
+    onTour("btn-tour-open", openTour);
+    onTour("btn-tour-exit", function () { leaveTour(); mode = "menu"; showOnly(el.menu); refreshMenu(); });
+    onTour("btn-tour-go", function () {
+      if (tour.stage >= TOUR.STAGES.length) { tour = TOUR.freshTour(profile.name); saveTour(); }
+      openBrief();
+    });
+    onTour("btn-tour-restart", function () {
+      tour = TOUR.freshTour(profile.name);
+      saveTour();
+      renderTour();
+    });
+    onTour("btn-brief-go", startTourStage);
+    onTour("btn-brief-shop", openShop);
+    onTour("btn-brief-back", openTour);
+    onTour("btn-shop-done", openBrief);
+
+    $("shop-repair").addEventListener("click", function (e) {
+      var b = e.target.closest("[data-repair]");
+      if (!b) return;
+      var pts = Number(b.getAttribute("data-repair"));
+      var cost = pts * TOUR.REPAIR_PER_POINT;
+      if (tour.kwacha < cost) return;
+      tour.kwacha -= cost;
+      tour.condition = Math.min(100, tour.condition + pts);
+      saveTour();
+      renderShop();
+      SFX.gate();
+    });
+    $("spare-grid").addEventListener("click", function (e) {
+      var b = e.target.closest("[data-buy]");
+      if (!b) return;
+      var id = b.getAttribute("data-buy");
+      var sp = TOUR.SPARES[id];
+      if (tour.bag.indexOf(id) >= 0 || tour.bag.length >= TOUR.BAG_SLOTS || tour.kwacha < sp.kwacha) return;
+      tour.kwacha -= sp.kwacha;
+      tour.bag.push(id);
+      saveTour();
+      renderShop();
+      SFX.coin();
+    });
+    $("bag-list").addEventListener("click", function (e) {
+      var b = e.target.closest("[data-drop]");
+      if (!b) return;
+      tour.bag.splice(Number(b.getAttribute("data-drop")), 1);
+      saveTour();
+      renderShop();
+    });
+    onTour("btn-tour-next", openShop);
+    onTour("btn-tour-retry", retryTourStage);
+    onTour("btn-tour-road", openTour);
+    onTour("btn-tour-menu", function () { leaveTour(); quitToMenu(); });
   }
 
   /* ---------- menu ---------- */
@@ -3028,7 +3478,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     var dt = Math.min(0.1, (ts - lastTs) / 1000 || 0.016);
     lastTs = ts;
 
-    if (mode === "menu") {
+    if (mode === "menu" || mode === "tour") {
       menuT += dt;
       var b = currentBundle();
       var dur = b.wc.armand.timeMs / 1000;

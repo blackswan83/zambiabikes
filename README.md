@@ -8,8 +8,9 @@ The website of Zambia Bikes — a kids' mountain-biking club founded by two
 
 The site organizes guided mountain-bike tours across Zambia for kids and
 hosts **Zambia Rush**, a free Descenders-inspired downhill game set in
-Zambian landscapes — miombo forest, baobab ridges and the Mosi-oa-Tunya
-falls canyon.
+Zambian landscapes — miombo forest, baobab ridges, the Kasanka bat swamp,
+the Lower Zambezi and the Mosi-oa-Tunya falls canyon — plus **The Great
+Zambia Tour**, a ten-stage rally around the whole country.
 
 ## What's inside
 
@@ -91,6 +92,39 @@ clicks and tire pressure psi — real setup mechanics with recommended bands
 and verdicts, all of which change the ride. Dream parts are **earned by
 riding** (finish tracks, beat ghosts, collect coins — tracked in
 `zr3_career`), never bought.
+
+**The Great Zambia Tour** (`js/tour.js` + the tour screens in `js/game3d.js`):
+ten legs and 16.5 km around the real country, on one clock that never stops —
+Livingstone → the Falls → Kazungula → Choma → Kafue → Lusaka → Ndola →
+Kasanka → Bangweulu → South Luangwa → Livingstone. Roughly half an hour of
+riding at a good pace, closer to an hour on a first attempt. It borrows its
+shape from the old Mille Miglia road races: your **race number is your start
+time** (number 822 rolls out at 08:22), each leg pays you in kwacha for
+distance, coins, beating par and staying upright, and between legs you stand
+in **the workshop**.
+
+That workshop is where the tour is actually won. Every leg wears the bike
+down by 10–34% depending on surface, weather and how often you crashed, and a
+worn bike genuinely brakes worse, steers slower and drags more — the tour
+feeds `conditionStats` straight into the same physics stats the Garage does.
+Below 72% condition things start to *break*: seven mechanicals (puncture,
+snapped chain, worn pads, broken spoke, gear cable, cut tyre, grinding
+bearings), each answered by one of nine spares. The bag holds six, so
+choosing what to carry is the game — carry a chain link and a snapped chain
+costs 20 seconds instead of 70. A rebuild from nothing is K 1000 against a
+tour's earnings of about K 2500, so nobody gets a perfect bike *and* a full
+bag.
+
+Three deliberate kindnesses, none of which the old games had: the risk of a
+mechanical is **stated on the briefing card before you ride**, never sprung
+on you; mechanicals cost time, never the tour; and the Grown-Up Crew's
+**support van** meets you at every stage finish with a free +10% once-over,
+which is what stops a bad day turning into a death spiral. Every stage can be
+ridden again, and doing so rolls the tour back exactly — your luck is seeded
+off your race number and the stage, so you can ride better but you can never
+re-roll it. The tour is **free**, like everything else here; nothing in
+Zambia Rush is behind a payment. Progress lives in `zr3_tour` and your best
+lap of the whole country in `zr3_tourbest`.
 
 Five 3D mountains: **Miombo Meander** (1.25 km), **Baobab Ridge** (1.5 km,
 sunset), **Kasanka Bat Storm** (1.4 km of dusk swamp forest under rivers of

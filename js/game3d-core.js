@@ -395,8 +395,12 @@
       zambezi: [["palm", 3, 1.4], ["miombo", 3, 2.0], ["reed", 3, 0], ["bush", 2, 0], ["grass", 3, 0], ["rock", 1, 1.1]],
       falls: [["miombo", 4, 2.0], ["palm", 2, 1.4], ["rock", 4, 1.4], ["fern", 3, 0], ["grass", 3, 0], ["bush", 1, 0]]
     };
+    /* a track may bring its own planting list; otherwise use the one
+       registered for its id, falling back to open miombo */
     var pool = [];
-    POOLS[def.id].forEach(function (e) { for (var q = 0; q < e[1]; q++) pool.push([e[0], e[2]]); });
+    (def.pool || POOLS[def.id] || POOLS.miombo).forEach(function (e) {
+      for (var q = 0; q < e[1]; q++) pool.push([e[0], e[2]]);
+    });
 
     var propCount = Math.floor(def.length * 1.35);
     for (i = 0; i < propCount; i++) {
@@ -484,7 +488,8 @@
       var ti2 = trailRangeForZ(fz);
       var fx = pts[Math.min(n - 1, ti2)].x + side * (26 + rng() * 40);
       if (Math.abs(fx) < X_HALF - 20) {
-        var ft = FAUNA[def.id][Math.floor(rng() * FAUNA[def.id].length)];
+        var fl = def.fauna || FAUNA[def.id] || FAUNA.miombo;
+        var ft = fl[Math.floor(rng() * fl.length)];
         world.props.push({ type: ft, x: fx, z: fz, y: heightAt(world, fx, fz), s: 1, rot: rng() * 6.28, r: 2.2 });
       }
       fz += 260 + rng() * 240;
@@ -968,7 +973,7 @@
     return {
       name: style.name, color: style.color,
       samples: samples, timeMs: Math.round(st.finishT * 1000),
-      score: st.score, crashes: st.crashes
+      score: st.score, crashes: st.crashes, coinCount: st.coinCount
     };
   }
 
@@ -1056,7 +1061,8 @@
     newRider3: newRider3, stepRider3: stepRider3, simulateAI3: simulateAI3, AI3_STYLES: AI3_STYLES,
     ghostPosAt3: ghostPosAt3, packGhost3: packGhost3, unpackGhost3: unpackGhost3,
     sanitizeName: sanitizeName, DT: DT, CARVE_R: CARVE_R, GHOST_HZ: GHOST_HZ, X_HALF: X_HALF,
-    trailPreview: trailPreview, TURBO_WINDOW: TURBO_WINDOW, TURBO_COOLDOWN: TURBO_COOLDOWN
+    trailPreview: trailPreview, TURBO_WINDOW: TURBO_WINDOW, TURBO_COOLDOWN: TURBO_COOLDOWN,
+    DEFAULT_STATS: DEFAULT_STATS
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = CORE;

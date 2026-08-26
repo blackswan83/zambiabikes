@@ -174,8 +174,11 @@
               <div class="track-cards" id="track-cards" role="group" aria-label="Choose a track"></div>
               <p class="cs-hint" aria-hidden="true">◀ ▶ arrow keys to browse</p>
             </div>
-            <div class="menu-row">
+            <div class="menu-row menu-row--go">
               <button type="button" class="btn btn--copper btn--big" id="btn-start">Start the ride 🚵</button>
+              <button type="button" class="btn btn--big tour-cta" id="btn-tour-open">
+                <span>🇿🇲 The Great Zambia Tour</span><i>ten legs · 16.5 km · one clock</i>
+              </button>
             </div>
           </div>
         </div>
@@ -204,6 +207,94 @@
           <button type="button" class="btn btn--copper" id="btn-howto-back">Got it!</button>
         </div>
 
+        <!-- ============ THE GREAT ZAMBIA TOUR ============ -->
+
+        <div class="overlay overlay--tour" id="screen-tour" hidden>
+          <div class="tour-sheet">
+            <div class="tour-head">
+              <h2>The Great <em>Zambia</em> Tour</h2>
+              <p class="tour-sub" id="tour-sub"></p>
+            </div>
+            <div class="tour-body">
+              <ol class="roadbook" id="tour-roadbook"></ol>
+              <aside class="tour-side">
+                <div class="tour-stat"><b>Total time</b><span id="tour-total">—</span></div>
+                <div class="tour-stat"><b>Kwacha</b><span id="tour-cash">—</span></div>
+                <div class="tour-stat"><b>Condition</b><span id="tour-cond">—</span></div>
+                <div class="cond-bar"><i id="tour-cond-bar"></i></div>
+                <div class="tour-stat"><b>Race number</b><span id="tour-number">—</span></div>
+                <div class="tour-stat"><b>Best tour</b><span id="tour-best">—</span></div>
+                <p class="tour-note" id="tour-note"></p>
+              </aside>
+            </div>
+            <div class="menu-row">
+              <button type="button" class="btn btn--copper btn--big" id="btn-tour-go">Start stage 1</button>
+              <button type="button" class="btn btn--ghost btn--small" id="btn-tour-restart">Start over</button>
+              <button type="button" class="btn btn--ghost btn--small" id="btn-tour-exit">Back to menu</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="overlay overlay--tour" id="screen-brief" hidden>
+          <div class="tour-sheet">
+            <div class="tour-head">
+              <p class="brief-kicker" id="brief-kicker"></p>
+              <h2 id="brief-name"></h2>
+              <p class="tour-sub" id="brief-route"></p>
+            </div>
+            <div class="brief-body">
+              <div class="cs-screen brief-map">
+                <svg class="cs-map" id="brief-map" viewBox="0 0 200 210" role="img" aria-label="Stage map"></svg>
+                <span class="cs-scan" aria-hidden="true"></span>
+                <span class="cs-screen-tag" aria-hidden="true">Stage map</span>
+              </div>
+              <div class="brief-info">
+                <p class="brief-blurb" id="brief-blurb"></p>
+                <div class="brief-grid" id="brief-grid"></div>
+                <p class="brief-risk" id="brief-risk"></p>
+                <p class="brief-bag" id="brief-bag"></p>
+              </div>
+            </div>
+            <div class="menu-row">
+              <button type="button" class="btn btn--copper btn--big" id="btn-brief-go">Roll out 🚵</button>
+              <button type="button" class="btn btn--ghost btn--small" id="btn-brief-shop">Workshop 🔧</button>
+              <button type="button" class="btn btn--ghost btn--small" id="btn-brief-back">Roadbook</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="overlay overlay--tour" id="screen-shop" hidden>
+          <div class="tour-sheet">
+            <div class="tour-head">
+              <h2>The <em>Workshop</em> 🔧</h2>
+              <p class="tour-sub" id="shop-sub"></p>
+            </div>
+            <div class="shop-body">
+              <section class="shop-col">
+                <h3>Repairs</h3>
+                <div class="cond-bar cond-bar--big"><i id="shop-cond-bar"></i></div>
+                <p class="shop-cond" id="shop-cond"></p>
+                <div class="menu-row shop-repair" id="shop-repair"></div>
+                <p class="shop-hint">A tired bike brakes worse, steers slower and drags. Below <span id="shop-floor">72</span>% things start to break.</p>
+                <p class="shop-van" id="shop-van"></p>
+              </section>
+              <section class="shop-col">
+                <h3>Your bag <span class="bag-count" id="bag-count"></span></h3>
+                <ul class="bag-list" id="bag-list"></ul>
+                <p class="shop-hint">Six slots, nine spares. What you leave behind is the whole game.</p>
+              </section>
+            </div>
+            <section class="shop-spares">
+              <h3>Spares for sale</h3>
+              <div class="spare-grid" id="spare-grid"></div>
+            </section>
+            <div class="menu-row">
+              <button type="button" class="btn btn--copper btn--big" id="btn-shop-done">Back to the stage</button>
+              <a class="btn btn--ghost btn--small" href="garage.html">Full Garage 🔧</a>
+            </div>
+          </div>
+        </div>
+
         <div class="overlay" id="screen-pause" hidden>
           <h2>Paused ⏸️</h2>
           <p class="gr-tag">Even downhill heroes need a mango break.</p>
@@ -223,10 +314,16 @@
 
         <div class="overlay" id="screen-results" hidden>
           <div id="results-content"></div>
-          <div class="menu-row" style="margin-top:0.6rem">
+          <div class="menu-row" id="results-row" style="margin-top:0.6rem">
             <button type="button" class="btn btn--copper" id="btn-retry">Ride it again</button>
             <button type="button" class="btn btn--ghost" id="btn-copy-ghost">Copy my Ghost Code</button>
             <button type="button" class="btn btn--ghost" id="btn-menu">Back to menu</button>
+          </div>
+          <div class="menu-row" id="results-row-tour" style="margin-top:0.6rem" hidden>
+            <button type="button" class="btn btn--copper btn--big" id="btn-tour-next">Workshop, then the next stage 🔧</button>
+            <button type="button" class="btn btn--ghost btn--small" id="btn-tour-retry">Ride this stage again</button>
+            <button type="button" class="btn btn--ghost btn--small" id="btn-tour-road">Roadbook 📖</button>
+            <button type="button" class="btn btn--ghost btn--small" id="btn-tour-menu">Back to menu</button>
           </div>
         </div>
       </div>
@@ -250,6 +347,23 @@
           pressure, and the paint booth sprays every zone down to the tire walls —
           <a href="garage.html">wrench on it in the Garage 🔧</a>. Dream parts are earned by riding,
           never bought.</p>
+        </article>
+
+        <article class="card reveal">
+          <span class="card-emoji">🇿🇲</span>
+          <h3>The Great Zambia Tour</h3>
+          <p>Ten legs, 16.5 km and <strong>one clock that never stops</strong> — Livingstone to the Falls,
+          down the Zambezi, up through Choma and the Kafue flats to Lusaka, across the Copperbelt to
+          Kasanka's bats, over the Bangweulu marsh and the Luangwa valley, then the long road home.
+          About half an hour of riding if you're quick, closer to an hour the first time.</p>
+          <p>Between legs you stand in <strong>the workshop</strong>. Every leg wears the bike down; a tired
+          bike brakes worse, steers slower and eventually starts <em>breaking</em>. You have kwacha, a
+          six-slot bag and nine spares to choose from — and you can't have everything. Carry the right
+          spare and a snapped chain costs you twenty seconds instead of seventy.</p>
+          <p style="margin-bottom:0"><strong>Nothing here costs real money and nothing is locked behind a
+          payment</strong> — the whole tour is free, like the rest of the game. Your race number is your
+          start time, the way it was on the old road races, and the Grown-Up Crew's support van meets you
+          at every stage finish with a free once-over, so a bad day can never run away from you.</p>
         </article>
 
         <article class="card ghost-box reveal">
@@ -355,6 +469,7 @@
 <script src="js/tours-data.js"></script>
 <script src="js/main.js"></script>
 <script src="js/bikes.js"></script>
+<script src="js/tour.js"></script>
 <script src="js/game3d-core.js"></script>
 <script type="importmap">{ "imports": { "three": "./js/vendor/three.module.min.js" } }</script>
 <script type="module" src="js/game3d.js"></script>
