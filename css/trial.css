@@ -340,3 +340,5 @@
 @media (prefers-reduced-motion: reduce) {
   .t-trick.is-pop, .trial-hud.is-bail, .trial-hud.is-gate { animation: none; }
 }
+
+.brief-bike { font-size: 0.78rem; color: rgba(255, 246, 224, 0.6); margin: 0.35rem 0 0; }

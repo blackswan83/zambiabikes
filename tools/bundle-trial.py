@@ -85,7 +85,7 @@ def read(p):
     with open(os.path.join(ROOT, p), encoding="utf-8") as f:
         return f.read()
 
-classic = [read("js/trial-core.js"), read("js/trial-audio.js")]
+classic = [read("js/bikes.js"), read("js/trial-core.js"), read("js/trial-audio.js")]
 css = [read("css/styles.css"), read("css/game.css"), read("css/trial.css")]
 
 page = read("trial.html")

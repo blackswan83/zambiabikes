@@ -15,6 +15,7 @@
 const test = require("node:test");
 const assert = require("node:assert");
 const T = require("../js/trial-core.js");
+const BIKES = require("../js/bikes.js");
 
 /* ---------- helpers ---------- */
 
@@ -31,7 +32,7 @@ function world(opts) {
 /* A rider who only tries to stay on the line — no tricks, no heroics. */
 function follow(w, opts) {
   opts = opts || {};
-  const st = T.newRider(w, { assist: opts.assist !== false });
+  const st = T.newRider(w, { assist: opts.assist !== false, stats: opts.stats || null });
   if (opts.at !== undefined) {
     const p = w.trail[opts.at], q = w.trail[opts.at + 2];
     st.x = p.x; st.y = p.y; st.z = p.z;
@@ -328,6 +329,33 @@ test("the bail bar empties and ends the run", () => {
   assert.ok(st.dead, "enough hard landings must empty the bar");
   assert.strictEqual(st.health, 0);
   assert.ok(st.bails >= 3, `expected several bails before the end, got ${st.bails}`);
+});
+
+/* ---------- the Garage ---------- */
+
+test("the bike on the stand in the Garage is the bike Trial rides", () => {
+  const career = BIKES.emptyCareer();
+  const trailBike = BIKES.computeStats(BIKES.normalizeConfig({}, career));
+  const hardtail = BIKES.computeStats(BIKES.normalizeConfig({ frame: "mopane_ht" }, career));
+
+  /* the eight numbers Trial's physics actually reads */
+  for (const k of ["pedal", "vcap", "brake", "steer", "roll", "rough", "landSoft", "hop"]) {
+    assert.strictEqual(typeof hardtail[k], "number", `${k} must be a number`);
+    assert.ok(Number.isFinite(hardtail[k]));
+  }
+  /* a hardtail pedals harder and lands worse — that has to survive the trip */
+  assert.ok(hardtail.pedal > trailBike.pedal, "a hardtail should pedal harder");
+  assert.ok(hardtail.rough > trailBike.rough, "a hardtail should suffer more off the smooth line");
+  assert.ok(hardtail.landSoft < trailBike.landSoft, "a hardtail should land harder");
+
+  const w = world({ seed: 4242, biome: "nyika", length: 1200 });
+  assert.strictEqual(T.newRider(w, { stats: hardtail }).stats, hardtail);
+
+  const soft = follow(w, { vMax: 14, stats: trailBike });
+  const hard = follow(w, { vMax: 14, stats: hardtail });
+  assert.ok(soft.st.finished && hard.st.finished, "both bikes should get down this hill");
+  assert.notStrictEqual(soft.st.finishT, hard.st.finishT,
+    "two different bikes should not ride identically");
 });
 
 /* ---------- the career ---------- */

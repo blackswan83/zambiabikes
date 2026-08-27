@@ -21,6 +21,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   "use strict";
 
   var CORE = window.TRIAL;
+  var BIKES = window.ZB_BIKES || null;
   var AUDIO = window.TRIAL_AUDIO || {
     unlock: function () {}, enable: function () {}, isEnabled: function () { return false; },
     begin: function () {}, end: function () {}, update: function () {},
@@ -723,19 +724,22 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
      The rider
      ========================================================================== */
 
-  function buildRider(jerseyHex, night) {
+  function buildRider(colors, night) {
+    colors = colors || STOCK_BIKE.colors;
     var g = new THREE.Group();
     g.rotation.order = "YXZ";
 
     var matte = function (c, rough) {
       return new THREE.MeshStandardMaterial({ color: c, roughness: rough === undefined ? 0.75 : rough, metalness: 0 });
     };
-    var frameMat = matte(jerseyHex, 0.42);
+    var frameMat = matte(colors.frame, 0.42);
     frameMat.metalness = 0.25;
-    var darkMat = matte(0x22201C, 0.85);
+    var darkMat = matte(colors.saddle, 0.85);
+    var gripMat = matte(colors.grips, 0.6);
+    var forkMat = matte(colors.fork, 0.5);
     var tyreMat = matte(0x141414, 0.95);
     var skinMat = matte(0x8A5A34, 0.85);
-    var kitMat = matte(jerseyHex, 0.8);
+    var kitMat = matte(colors.frame, 0.8);
     var helmetMat = matte(0xF2EDE0, 0.55);
 
     /* --- wheels --- */
@@ -750,7 +754,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
         var a = (s / 5) * Math.PI * 2;
         rimGeos.push(tube(0, 0, 0, 0, Math.sin(a) * 0.32, Math.cos(a) * 0.32, 0.012, 4));
       }
-      var spokes = new THREE.Mesh(mergeGeometries(rimGeos), matte(0xC9C6BE, 0.4));
+      var spokes = new THREE.Mesh(mergeGeometries(rimGeos), matte(colors.spokes, 0.4));
       spokes.material.metalness = 0.55;
       w.add(spokes);
       w.position.set(0, 0.34, zOff);
@@ -786,14 +790,14 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       tube(-0.085, 0.98, 0.4, -0.085, 0.34, frontAx[2], 0.026),
       tube(0.085, 0.98, 0.4, 0.085, 0.34, frontAx[2], 0.026)
     ];
-    var fork = new THREE.Mesh(mergeGeometries(forkGeos), matte(0x3A3835, 0.5));
+    var fork = new THREE.Mesh(mergeGeometries(forkGeos), forkMat);
     fork.castShadow = true;
     g.add(fork);
 
     var bars = new THREE.Mesh(mergeGeometries([
       tube(-0.31, 1.06, 0.42, 0.31, 1.06, 0.42, 0.021),
       tube(0, 0.98, 0.4, 0, 1.06, 0.42, 0.024)
-    ]), matte(0x3A3835, 0.45));
+    ]), gripMat);
     g.add(bars);
 
     var cranks = new THREE.Group();
@@ -989,6 +993,38 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   var clock = new THREE.Clock();   /* Timer needs an update() call per frame; Clock is enough here */
   var accumulator = 0;
 
+  /* Whatever is on the stand in the Garage is what you ride. The parts move
+     the same eight numbers Zambia Rush uses, and Trial's physics already
+     reads them, so a hardtail really does pedal harder and land worse. */
+  var STOCK_BIKE = {
+    stats: null, name: null, paintName: null,
+    colors: { frame: 0xE8791D, fork: 0x3A3835, rims: 0x22303A, saddle: 0x22201C,
+              grips: 0x22201C, spokes: 0xC9C6BE, chain: 0x22303A }
+  };
+
+  function garageBike() {
+    if (!BIKES) return STOCK_BIKE;
+    var cfg;
+    try { cfg = BIKES.loadConfig(BIKES.loadCareer()); } catch (e) { return STOCK_BIKE; }
+
+    /* normalizeConfig keeps colors.frame canonical and mirrors it into the
+       legacy `paint` field, so read the zone and fall back to the old one */
+    var colors = {};
+    Object.keys(STOCK_BIKE.colors).forEach(function (zone) {
+      var pid = (cfg.colors && cfg.colors[zone]) || (zone === "frame" ? cfg.paint : null);
+      var pd = pid && BIKES.getOption("paint", pid);
+      colors[zone] = pd ? new THREE.Color(pd.color).getHex() : STOCK_BIKE.colors[zone];
+    });
+    var frame = BIKES.getOption("frame", cfg.frame);
+    var framePaint = BIKES.getOption("paint", (cfg.colors && cfg.colors.frame) || cfg.paint);
+    return {
+      stats: BIKES.computeStats(cfg),
+      colors: colors,
+      name: frame ? frame.name : null,
+      paintName: framePaint ? framePaint.name : null
+    };
+  }
+
   function startRun(cfg) {
     var spec = CORE.makeSpec({
       seed: cfg.seed, biome: cfg.biome, modifier: cfg.modifier, length: cfg.length
@@ -996,12 +1032,13 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     var world = CORE.buildWorld(spec);
     buildScenery(world);
 
-    var rig = buildRider(cfg.jersey || 0xE8791D, !!spec.night);
+    var bike = garageBike();
+    var rig = buildRider(bike.colors, !!spec.night);
     scenery.root.add(rig.group);
     var dust = buildDust(world.biome.theme, !!spec.night);
     scenery.root.add(dust.object);
 
-    var st = CORE.newRider(world, { assist: save.settings.assist });
+    var st = CORE.newRider(world, { assist: save.settings.assist, stats: bike.stats });
 
     run = {
       cfg: cfg, world: world, st: st, rig: rig, dust: dust,
@@ -1524,6 +1561,13 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     $("brief-obj").textContent = CORE.objectiveLabel(node);
     $("brief-code").textContent = node.code;
     $("brief-meta").textContent = node.length + " m · +" + node.rep + " rep";
+    var bikeEl = $("brief-bike");
+    if (bikeEl) {
+      var bike = garageBike();
+      bikeEl.textContent = bike.name
+        ? "🔧 Riding your " + bike.name + (bike.paintName ? " in " + bike.paintName : "")
+        : "";
+    }
     pendingStart = {
       seed: node.seed, biome: node.biome, modifier: node.modifier,
       length: node.length, node: node

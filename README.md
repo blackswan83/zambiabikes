@@ -126,6 +126,7 @@ places for anyone who types it in.
 | Damage | A bail bar, not lives. Every crash takes a bite; style refills it; at zero the run is over. |
 | Progress | Five career stages, three nodes each, seeded from *your* career number — your Batoka is nobody else's Batoka. |
 | Assist | Landing assist is on by default (~115° of forgiveness). Off, it is ~55°. |
+| Bike | The build on the stand in **the Garage** is the bike you ride — the same eight stats Zambia Rush uses, and the same per-zone paint. |
 
 **Tests.** `npm test` runs the simulation suite in `test/trial.test.js` under
 plain node — no browser needed. It pins down the promises the generator
