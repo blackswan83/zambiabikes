@@ -1179,7 +1179,9 @@ void StepRider(FRiderState& St, const FInput& In, const FWorld& W,
 			{
 				Taken[I] = 1;
 				St.CoinCount++; St.Score += 25;
-				Ev.push_back(MakeEv(EEvent::Coin));
+				FEvent E = MakeEv(EEvent::Coin);
+				E.Index = I;
+				Ev.push_back(E);
 			}
 		}
 	}

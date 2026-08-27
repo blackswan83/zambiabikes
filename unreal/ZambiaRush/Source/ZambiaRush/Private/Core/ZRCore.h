@@ -193,6 +193,9 @@ namespace ZR
 		// Crash cause: a prop type, or one of the synthetic reasons below.
 		enum class ECause : uint8_t { Landing, TrickLanding, Prop } Cause = ECause::Landing;
 		EProp PropCause = EProp::Rock;
+		// Coin: which coin, so the renderer can take it off the hill. Carried
+		// here rather than diffed out of the Taken array by the caller.
+		int32_t Index = -1;
 	};
 
 	FRiderState NewRider(const FWorld& W);

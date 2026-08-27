@@ -159,8 +159,11 @@ namespace
 
 	int KernelRemPio2(const double* X, double* Y, int E0, int NX, int Prec)
 	{
-		int JZ, JX, JV, JP, JK, Carry, N, IQ[20], I, J, K, M, Q0, IH;
-		double Z, FW, F[20], FQ[20], Q[20];
+		int JZ, JX, JV, JP, JK, Carry, N, IQ[20] = {}, I, J, K, M, Q0, IH;
+		// Zero-initialised only to quiet -Wmaybe-uninitialized; fdlibm fills
+		// every element it reads. Unreal builds warnings-as-errors in some
+		// configurations, and this costs nothing.
+		double Z, FW, F[20] = {}, FQ[20] = {}, Q[20] = {};
 
 		JK = kInitJk[Prec];
 		JP = JK;
