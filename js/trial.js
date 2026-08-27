@@ -1358,6 +1358,8 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       } else if (e.t === "portage") {
         showTrick(e.feature ? "Walked the " + e.feature : "Walked it", 0, 1, false);
         flash("is-gate");
+      } else if (e.t === "gate") {
+        flash("is-gate");
       } else if (e.t === "takeoff") {
         run.dust.emit(run.st.x, run.st.y, run.st.z, 3, 1.6);
       }

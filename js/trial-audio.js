@@ -336,11 +336,13 @@
       if (!ready || !enabled) return;
       var speed = st ? Math.sqrt(st.vx * st.vx + st.vz * st.vz) : 10;
       switch (ev.t) {
-        case "hop":
-          tone(300, 0.09, "triangle", 0.1, 520);
-          burst({ freq: 900, q: 2, dur: 0.07, vol: 0.08 });
-          break;
         case "takeoff":
+          /* the core reports a bunny hop as a takeoff with why:"hop" — there
+             is no separate event, so the pop lives here with the whoosh */
+          if (ev.why === "hop") {
+            tone(300, 0.09, "triangle", 0.1, 520);
+            burst({ freq: 900, q: 2, dur: 0.07, vol: 0.08 });
+          }
           burst({ type: "highpass", freq: 900, freqTo: 2600, dur: 0.3, vol: 0.11, attack: 0.05 });
           break;
         case "land":
