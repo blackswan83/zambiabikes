@@ -2,9 +2,10 @@
   "name": "zambiabikes",
   "version": "1.0.0",
   "private": true,
-  "description": "Zambia Bikes — kids' mountain-bike club site, Zambia Rush game, and a tiny Express + Postgres backend.",
+  "description": "Zambia Bikes \u2014 kids' mountain-bike club site, Zambia Rush game, and a tiny Express + Postgres backend.",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test test/*.test.js"
   },
   "engines": {
     "node": ">=18"

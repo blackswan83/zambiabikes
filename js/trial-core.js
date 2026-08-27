@@ -53,6 +53,11 @@
 
   function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
 
+  /* Eased 0..1, flat at both ends. Landing ramps use it so they meet the
+     hillside tangentially: a landing that joins at an angle is a kicker in
+     disguise, and launches whoever rode it off its own knuckle. */
+  function ease(t) { return t * t * (3 - 2 * t); }
+
   function wrapPi(a) {
     while (a > Math.PI) a -= 2 * Math.PI;
     while (a < -Math.PI) a += 2 * Math.PI;
@@ -221,7 +226,7 @@
   function makeSpec(opts) {
     var b = BIOMES[opts.biome] || BIOMES.nyika;
     var spec = {
-      seed: (opts.seed >>> 0) || 1,
+      seed: normSeed(opts.seed),
       biome: b.id, biomeDef: b,
       modifier: opts.modifier || "none",
       length: opts.length || 1500,
@@ -281,7 +286,7 @@
       var k;
       for (k = 0; k <= lip; k++) F.dy[i + k] += h * Math.pow(k / lip, 1.7);
       for (k = 1; k <= gap; k++) F.dy[i + lip + k] += h + (-h - fall) * smoothstepN(k / gap, 0, 1);
-      for (k = 1; k <= land; k++) F.dy[i + lip + gap + k] += -fall - extra * (k / land);
+      for (k = 1; k <= land; k++) F.dy[i + lip + gap + k] += -fall - extra * ease(k / land);
       F.stepDown(i + lip + gap + land + 1, fall + extra);
       F.widen(i, i + lip + gap + land, 2.5 + size * 2.5);
       return {
@@ -314,7 +319,14 @@
       var descM = clamp(flight * 1.15, 15, 34);
       var desc = Math.max(4, Math.round(descM / TRAIL_DS));
       var land = Math.round(24 / TRAIL_DS);
-      var hole = Math.min(descM * 0.11, 2 + size * 2.4) * amp;
+      /* The hollow is capped as a fraction of the ramp it is cut into, because
+         that ratio *is* the angle of its far wall. Too deep for its length and
+         a rider who comes up short meets a wall head-on, cannot carry speed
+         back out, and — respawning at a checkpoint that cannot deliver more
+         speed than the one that just failed — is stuck in a loop with no way
+         down the mountain. Casing a gap should cost your speed and your
+         combo, never the run. */
+      var hole = Math.min(descM * 0.085, 2 + size * 2.4) * amp;
 
       var k, u;
       for (k = 0; k <= lip; k++) F.dy[i + k] += h * Math.pow(k / lip, 1.7);
@@ -323,10 +335,10 @@
         var ramp = h + (-h - fall) * smoothstepN(u, 0, 1);
         /* the hollow sits in the first half of the ramp, so anything that
            clears it lands on clean, steep, downhill dirt */
-        var gully = u < 0.66 ? 0.5 * hole * (1 - Math.cos(2 * Math.PI * u / 0.66)) : 0;
+        var gully = u < 0.75 ? 0.5 * hole * (1 - Math.cos(2 * Math.PI * u / 0.75)) : 0;
         F.dy[i + lip + k] += ramp - gully;
       }
-      for (k = 1; k <= land; k++) F.dy[i + lip + desc + k] += -fall - extra * (k / land);
+      for (k = 1; k <= land; k++) F.dy[i + lip + desc + k] += -fall - extra * ease(k / land);
       F.stepDown(i + lip + desc + land + 1, fall + extra);
       F.widen(i, i + lip + desc + land, 3.4);
       return {
@@ -353,7 +365,7 @@
       for (k = 1; k <= fallLen; k++) {
         F.dy[i + edge + k] += 0.45 * amp + (-0.45 * amp - deep) * smoothstepN(k / fallLen, 0, 1);
       }
-      for (k = 1; k <= land; k++) F.dy[i + edge + fallLen + k] += -deep - extra * Math.pow(k / land, 1.7);
+      for (k = 1; k <= land; k++) F.dy[i + edge + fallLen + k] += -deep - extra * ease(k / land);
       F.stepDown(i + edge + fallLen + land + 1, deep + extra);
       F.widen(i, i + edge + fallLen + land, 2.2);
       return {
@@ -1200,7 +1212,7 @@
   }
 
   function makeCareer(careerSeed) {
-    var rng = mulberry32((careerSeed >>> 0) || 20260101);
+    var rng = mulberry32(normSeed(careerSeed || 20260101));
     var stages = [];
     for (var s = 0; s < STAGE_PLAN.length; s++) {
       var plan = STAGE_PLAN[s];
@@ -1208,7 +1220,7 @@
       for (var nI = 0; nI < 3; nI++) {
         var biome = plan.pool[nI % plan.pool.length];
         var mod = plan.mods[nI];
-        var seed = (Math.floor(rng() * 0x7FFFFFFF)) >>> 0;
+        var seed = normSeed(Math.floor(rng() * 0x40000000));
         var spec = makeSpec({ seed: seed, biome: biome, modifier: mod, length: plan.len });
         var objKind = OBJ_PLAN[s][nI];
         var target = objectiveTarget(objKind, plan.tier, spec, rng);
@@ -1254,29 +1266,46 @@
 
   var ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";   /* no 0/O/1/I */
 
+  /* Six base-32 characters hold exactly 30 bits, so 30 bits is the whole seed
+     space. Every seed the game invents is folded into it before use — a code
+     that cannot rebuild its own mountain is worse than no code at all. */
+  var SEED_MASK = 0x3FFFFFFF;
+
+  function normSeed(v) {
+    var n = (v >>> 0) & SEED_MASK;
+    return n === 0 ? 1 : n;
+  }
+
+  function randomSeed() {
+    return normSeed(Math.floor(Math.random() * 0x40000000));
+  }
+
   function codeFromSeed(seed) {
-    var v = (seed >>> 0), out = "";
+    var v = normSeed(seed), out = "";
     for (var i = 0; i < 6; i++) { out = ALPHABET[v % 32] + out; v = Math.floor(v / 32); }
     return out.slice(0, 3) + "-" + out.slice(3);
   }
 
   function seedFromCode(code) {
-    var s = String(code || "").toUpperCase().replace(/[^0-9A-Z]/g, "");
-    if (!s.length) return null;
-    /* anything the player types is a valid mountain — unknown letters fold in */
+    var raw = String(code == null ? "" : code);
+    if (!raw.length) return null;
+    var s = raw.toUpperCase().replace(/[^0-9A-Z]/g, "");
+    /* Anything typed is a valid mountain. Even a handful of punctuation gets
+       one, by hashing what was actually typed rather than refusing it. */
+    var source = s.length ? s : raw;
     var v = 0;
-    for (var i = 0; i < s.length; i++) {
-      var idx = ALPHABET.indexOf(s[i]);
-      if (idx < 0) idx = s.charCodeAt(i) % 32;
-      v = (v * 32 + idx) >>> 0;
+    for (var i = 0; i < source.length; i++) {
+      var idx = s.length ? ALPHABET.indexOf(source[i]) : -1;
+      if (idx < 0) idx = source.charCodeAt(i) % 32;
+      v = ((v * 32) + idx) >>> 0;
     }
-    return v >>> 0;
+    return normSeed(v);
   }
 
   /* The daily mountain: same for everyone, new at midnight local time. */
   function dailySeed(date) {
     var d = date || new Date();
-    return ((d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate()) * 2654435761) >>> 0;
+    return normSeed((d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate()) * 2654435761);
   }
 
   /* ================= exports ================= */
@@ -1292,6 +1321,7 @@
     makeCareer: makeCareer, objectiveLabel: objectiveLabel,
     objectiveMet: objectiveMet, objectiveProgress: objectiveProgress,
     codeFromSeed: codeFromSeed, seedFromCode: seedFromCode, dailySeed: dailySeed,
+    normSeed: normSeed, randomSeed: randomSeed, SEED_MASK: SEED_MASK,
     fmtClock: fmtClock, mulberry32: mulberry32, vnoise: vnoise, clamp: clamp, wrapPi: wrapPi
   };
 

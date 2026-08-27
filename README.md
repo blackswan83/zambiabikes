@@ -127,6 +127,13 @@ places for anyone who types it in.
 | Progress | Five career stages, three nodes each, seeded from *your* career number — your Batoka is nobody else's Batoka. |
 | Assist | Landing assist is on by default (~115° of forgiveness). Off, it is ~55°. |
 
+**Tests.** `npm test` runs the simulation suite in `test/trial.test.js` under
+plain node — no browser needed. It pins down the promises the generator
+makes: one seed is one mountain, a printed trail code rebuilds exactly that
+mountain, nothing solid ever stands on the line, checkpoints never land
+inside a feature, every feature is survivable, and no landing meets the
+hillside at an angle sharp enough to launch the rider off its own knuckle.
+
 **Feature geometry is measured, not guessed.** A generator that *can* build an
 unrideable jump will build one, so each builder sizes its gully or landing
 ramp from the flight a rider can actually make off that specific lip. A
@@ -142,7 +149,7 @@ jump sizes — and counts the crashes:
 | Kicker | 1 700 | 0.3 % | 25 m/s off the biggest lips |
 | Whoops | 820 | 0.7 % | even across all speeds |
 | Step-down | 440 | 5.2 % | 21–25 m/s with no brakes |
-| Road gap | 515 | 8.5 % | 17–25 m/s, cased |
+| Road gap | 515 | 5.2 % | 17–25 m/s, cased |
 
 Gaps and drops are *allowed* to punish you — but only for sending it flat
 out, which is what the brake is for.

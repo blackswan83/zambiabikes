@@ -1552,7 +1552,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   function startFreeride() {
     var b = $("fr-biome"), m = $("fr-mod"), c = $("fr-code");
     var typed = c && c.value.trim();
-    var seed = typed ? CORE.seedFromCode(typed) : (Math.floor(Math.random() * 0x7FFFFFFF) >>> 0);
+    var seed = (typed && CORE.seedFromCode(typed)) || CORE.randomSeed();
     startRun({
       seed: seed,
       biome: b ? b.value : "nyika",
