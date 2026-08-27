@@ -93,13 +93,78 @@ import { OrbitControls } from "./vendor/addons/controls/OrbitControls.js";
   rim.position.set(-2.5, 1.6, -2.4);
   scene.add(rim);
 
-  var floor = new THREE.Mesh(new THREE.CircleGeometry(4.5, 40),
-    new THREE.MeshStandardMaterial({ color: 0xE3D3B4, roughness: 0.95 }));
+  /* ---- polished cement workshop floor ----
+     A power-floated slab: mottled pour, fine aggregate speckle, trowel
+     swirls and saw-cut joints, with a roughness map so the polish picks up
+     the sky in a soft sheen and the worn patches stay matte. */
+  var cementTex = canvasTex(1024, 1024, function (g, w, h) {
+    g.fillStyle = "#7E7E7A";
+    g.fillRect(0, 0, w, h);
+    var i, x, y;
+    for (i = 0; i < 240; i++) {                       /* uneven pour */
+      x = Math.random() * w; y = Math.random() * h;
+      var rad = 45 + Math.random() * 165;
+      var tone = Math.round(108 + Math.random() * 34);
+      var gr = g.createRadialGradient(x, y, 0, x, y, rad);
+      gr.addColorStop(0, "rgba(" + tone + "," + tone + "," + (tone - 4) + ",0.45)");
+      gr.addColorStop(1, "rgba(0,0,0,0)");
+      g.fillStyle = gr;
+      g.beginPath(); g.arc(x, y, rad, 0, 6.284); g.fill();
+    }
+    for (i = 0; i < 6000; i++) {                      /* aggregate */
+      var s = 0.4 + Math.random() * 1.5;
+      g.fillStyle = Math.random() < 0.5 ? "rgba(92,92,88,0.5)" : "rgba(168,168,162,0.38)";
+      g.fillRect(Math.random() * w, Math.random() * h, s, s);
+    }
+    g.lineWidth = 6;                                   /* trowel swirls */
+    g.strokeStyle = "rgba(255,255,255,0.022)";
+    for (i = 0; i < 30; i++) {
+      var cx = Math.random() * w, cy = Math.random() * h;
+      var r2 = 55 + Math.random() * 190, a0 = Math.random() * 6.284;
+      g.beginPath(); g.arc(cx, cy, r2, a0, a0 + 1 + Math.random()); g.stroke();
+    }
+    g.strokeStyle = "rgba(74,74,72,0.5)";              /* saw-cut joints */
+    g.lineWidth = 3.5;
+    [0.5].forEach(function (f) {
+      g.beginPath(); g.moveTo(f * w, 0); g.lineTo(f * w, h); g.stroke();
+      g.beginPath(); g.moveTo(0, f * h); g.lineTo(w, f * h); g.stroke();
+    });
+  });
+  cementTex.wrapS = cementTex.wrapT = THREE.RepeatWrapping;
+  cementTex.repeat.set(9, 9);
+  cementTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+
+  var cementRough = (function () {
+    var c = document.createElement("canvas");
+    c.width = c.height = 512;
+    var g = c.getContext("2d");
+    g.fillStyle = "#8A8A8A";                           /* polished, not a mirror */
+    g.fillRect(0, 0, 512, 512);
+    for (var i = 0; i < 130; i++) {                    /* matte worn patches */
+      var x = Math.random() * 512, y = Math.random() * 512, r = 20 + Math.random() * 90;
+      var gr = g.createRadialGradient(x, y, 0, x, y, r);
+      gr.addColorStop(0, "rgba(150,150,150,0.5)");
+      gr.addColorStop(1, "rgba(150,150,150,0)");
+      g.fillStyle = gr;
+      g.beginPath(); g.arc(x, y, r, 0, 6.284); g.fill();
+    }
+    var t = new THREE.CanvasTexture(c);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.repeat.set(9, 9);
+    return t;
+  })();
+
+  var floor = new THREE.Mesh(new THREE.CircleGeometry(13, 64),
+    new THREE.MeshStandardMaterial({
+      map: cementTex, roughnessMap: cementRough,
+      color: 0xE6E6E1, roughness: 1, metalness: 0, envMapIntensity: 0.28
+    }));
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
   scene.add(floor);
-  var ringMesh = new THREE.Mesh(new THREE.RingGeometry(1.28, 1.34, 48),
-    new THREE.MeshBasicMaterial({ color: 0xC9B58E }));
+  /* a worn painted bay ring, the way a real workshop marks its stand */
+  var ringMesh = new THREE.Mesh(new THREE.RingGeometry(1.28, 1.34, 64),
+    new THREE.MeshBasicMaterial({ color: 0xD8D2C4, transparent: true, opacity: 0.35 }));
   ringMesh.rotation.x = -Math.PI / 2;
   ringMesh.position.y = 0.002;
   scene.add(ringMesh);

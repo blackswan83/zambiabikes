@@ -31,7 +31,8 @@
   font-family: var(--font-display);
   font-weight: 600;
   font-size: 0.85rem;
-  color: var(--ink-soft);
+  color: #F4EFE4;                      /* legible over the cement floor */
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.65);
   pointer-events: none;
 }
 

@@ -50,11 +50,13 @@
       hazards: [{ type: "hippo", from: 260, every: 290, lat: 2.6, spread: 1.6, r: 1.5 }],
       seed: 20260912, length: 1250, slope: 0.105, wobble: 0.85, kickerEvery: 130,
       desc: "Flowing forest singletrack",
+      unique: "The one every club rider learns on. Fast, flowing singletrack under the msasa trees, with just enough kickers to get you comfortable in the air, and hippos grazing the trail edges to keep you honest.",
+      feats: ["Flowing singletrack", "Grazing hippos", "Gentle gradient"],
       theme: {
         sky: 0xBFE8F2, skyLow: 0xFFF6D9, fog: 0xD8EFDC, fogNear: 60, fogFar: 420,
         sun: 0xFFF7DC, sunPos: [140, 220, -160], ambient: 0x9CC5A8,
         turbidity: 4, rayleigh: 1.4, mieCoeff: 0.003, mieG: 0.78, cloudCover: 0.42, exposure: 0.52,
-        grass: 0x4E9B58, grassDry: 0x7FAE5A, dirt: 0x8A6238, dirtDark: 0x6B4826, rock: 0x8B8570,
+        grass: 0x4E9B58, grassDry: 0x7FAE5A, dirt: 0x75522E, dirtDark: 0x5A3C1E, rock: 0x8B8570,
         trunk: 0x5A4028, canopy: 0x2F7A44, canopy2: 0x57944B, accent: 0xE8791D,
         water: 0x6FBFB4
       }
@@ -64,10 +66,13 @@
       hazards: [{ type: "elephant", from: 300, every: 340, lat: 3.0, spread: 1.6, r: 1.8 }],
       seed: 20261010, length: 1500, slope: 0.13, wobble: 1.0, kickerEvery: 110,
       desc: "Sunset savanna, big kickers",
+      unique: "Golden hour on the ridge, with the biggest kickers in the game and thousand-year-old baobabs to thread between. Elephants graze the open savanna. This is where you learn to jump properly.",
+      feats: ["Biggest air", "Ancient baobabs", "Elephants"],
       theme: {
         sky: 0xFFC969, skyLow: 0xF7B733, fog: 0xE09B55, fogNear: 80, fogFar: 480,
         sun: 0xFFE9B0, sunPos: [-200, 70, -280], ambient: 0xD9B08C,
-        sunI: 1.6, hemiI: 1.05, ambI: 0.45, hemiGround: 0x7A5A30, cloudTint: 0xFFD9C0,
+        sunI: 1.75, hemiI: 1.5, ambI: 0.8, hemiGround: 0x7A5A30, cloudTint: 0xFFD9C0,
+        hemiSky: 0xFFD9A8, ambient: 0xE0C0A0,
         turbidity: 7, rayleigh: 1.7, mieCoeff: 0.0035, mieG: 0.8, cloudCover: 0.22, exposure: 0.46,
         grass: 0xA8933E, grassDry: 0xC2A94E, dirt: 0x7E4A20, dirtDark: 0x5E3616, rock: 0x8A6A4C,
         trunk: 0x6E4A26, canopy: 0x6E5A2A, canopy2: 0x8A6F33, accent: 0xE8791D,
@@ -79,13 +84,18 @@
       seed: 20261121, length: 1400, slope: 0.05, wobble: 0.85, kickerEvery: 140,
       hazards: [{ type: "antelope", from: 240, every: 330, lat: 2.2, spread: 1.5, r: 1.0 }],
       desc: "Dusk in the swamp forest — ten million bats overhead",
+      unique: "Every November ten million straw-coloured fruit bats pour into one patch of Kasanka swamp forest, the largest mammal migration on Earth. You ride under it at dusk, through ground mist, with rivers of bats crossing the sky.",
+      feats: ["10 million bats", "Ground mist", "Dusk light"],
       theme: {
         sky: 0x4A3E68, skyLow: 0xF2A05C, fog: 0x9A8A96, fogNear: 45, fogFar: 300,
         sun: 0xFFB877, sunPos: [-170, 38, -250], ambient: 0xA89AB0,
         turbidity: 6, rayleigh: 3.2, mieCoeff: 0.009, mieG: 0.85, cloudCover: 0.25, exposure: 0.56,
         grass: 0x2E6E44, grassDry: 0x6E8448, dirt: 0x6B4E36, dirtDark: 0x4E3826, rock: 0x686458,
         trunk: 0x4A3828, canopy: 0x1F5438, canopy2: 0x2E6E44, accent: 0xE8791D,
-        water: 0x2E5E56, bats: true, groundMist: true, cloudTint: 0xD9A8A0, ridgeDim: 0.45
+        water: 0x2E5E56, bats: true, groundMist: true, cloudTint: 0xD9A8A0, ridgeDim: 0.45,
+        /* the deep purple above is the SKY; the ground is lit separately, or
+           dusk in the swamp forest is not moody, it is simply black */
+        hemiSky: 0xC6BCE8, hemiI: 2.05, ambient: 0xCCC4D8, ambI: 1.1, sunI: 2.0
       }
     },
     zambezi: {
@@ -93,6 +103,8 @@
       seed: 20261107, length: 1600, slope: 0.062, wobble: 0.8, kickerEvery: 150,
       river: { offset: 24, width: 70, depth: 2.2 },
       desc: "Riverside flow — mind the crocs",
+      unique: "A flowing riverside line beside the real Zambezi, with sandy beaches, reed beds and hippo pods out in the water. Crocodiles bask right on the trail edge, and the river is very much not a shortcut.",
+      feats: ["The real Zambezi", "Basking crocs", "Hippo pods"],
       theme: {
         sky: 0xC2E4EE, skyLow: 0xF5E6B8, fog: 0xD8E4C4, fogNear: 70, fogFar: 450,
         sun: 0xFFF2CC, sunPos: [-150, 130, -260], ambient: 0xB0C49A,
@@ -108,10 +120,15 @@
       /* the finale rides the Knife-Edge rim: a transverse chasm opens on +x
          and the mile-wide Victoria Falls curtain forms its far wall */
       gorge: { fromFrac: 0.84, offset: 32, width: 95, depth: 60 },
-      hazards: [{ type: "croc", from: 220, every: 300, lat: 2.0, spread: 1.7, r: 1.05 }],
+      /* Mosi-oa-Tunya National Park really does keep white rhino, and the
+         guides really do walk you up to them. Here you ride past. */
+      hazards: [{ type: "croc", from: 220, every: 300, lat: 2.0, spread: 1.7, r: 1.05 },
+                { type: "rhino", from: 420, every: 470, lat: 2.8, spread: 1.5, r: 1.7 }],
       desc: "Steep canyon to the thundering Victoria Falls",
+      unique: "The hero line. The steepest, longest descent in the game, finishing along the Knife-Edge rim with Victoria Falls thundering across the gorge beside you. Beat Armand here and you have beaten the mountain.",
+      feats: ["Victoria Falls", "The gorge", "Steepest drop"],
       theme: {
-        sky: 0xC6ECEF, skyLow: 0xEAF9F4, fog: 0xCDE9E2, fogNear: 45, fogFar: 380,
+        sky: 0xC6ECEF, skyLow: 0xEAF9F4, fog: 0xA6C4BE, fogNear: 110, fogFar: 620,
         sun: 0xF6FFF0, sunPos: [180, 260, -60], ambient: 0x8FB8A8,
         turbidity: 3, rayleigh: 1.0, mieCoeff: 0.003, mieG: 0.76, cloudCover: 0.5, exposure: 0.55,
         grass: 0x3F8A50, grassDry: 0x5E9B58, dirt: 0x74583A, dirtDark: 0x54402A, rock: 0x6E6A5E,
@@ -150,15 +167,16 @@
     return t * t * (3 - 2 * t);
   }
 
-  function buildWorld(def) {
-    var rng = mulberry32(def.seed);
-
-    /* ---- trail path: wandering descent, z strictly increasing ---- */
+  /* The trail spline is generated from the track definition alone, so the
+     menu's course map can draw the real line without building a heightfield.
+     `rng` supplies only the three phase offsets (its first three draws), which
+     keeps buildWorld's random stream identical to a bare mulberry32(seed). */
+  function buildTrailPath(def, rng) {
     var n = Math.floor(def.length / TRAIL_DS);
     var pts = new Array(n);
     var phi1 = rng() * 6.28, phi2 = rng() * 6.28, phi3 = rng() * 6.28;
-    var x = 0, z = 0;
-    for (var i = 0; i < n; i++) {
+    var x = 0, z = 0, i;
+    for (i = 0; i < n; i++) {
       var t = i * TRAIL_DS;
       var theta = def.wobble * (0.62 * Math.sin(t * 0.011 + phi1) +
         0.34 * Math.sin(t * 0.027 + phi2) + 0.18 * Math.sin(t * 0.052 + phi3));
@@ -169,7 +187,6 @@
       if (x < -(X_HALF - 60)) x = -(X_HALF - 60);
       pts[i] = { x: x, z: z, y: 0, yaw: theta, dist: t };
     }
-    var zEnd = pts[n - 1].z;
 
     /* trail heights from terrain, then smoothed hard so it's rideable */
     for (i = 0; i < n; i++) pts[i].y = baseHeight(def, pts[i].x, pts[i].z);
@@ -183,6 +200,34 @@
       if (pts[i].y > pts[i - 1].y + TRAIL_DS * 0.14) pts[i].y = pts[i - 1].y + TRAIL_DS * 0.14;
       if (pts[i].y < pts[i - 1].y - TRAIL_DS * 0.55) pts[i].y = pts[i - 1].y - TRAIL_DS * 0.55;
     }
+    return { pts: pts, n: n };
+  }
+
+  /* compact summary for the menu's course map — no grid, cheap to call */
+  function trailPreview(def) {
+    var path = buildTrailPath(def, mulberry32(def.seed));
+    var pts = path.pts, n = path.n;
+    var minX = Infinity, maxX = -Infinity, i;
+    for (i = 0; i < n; i++) {
+      if (pts[i].x < minX) minX = pts[i].x;
+      if (pts[i].x > maxX) maxX = pts[i].x;
+    }
+    return {
+      pts: pts, n: n,
+      minX: minX, maxX: maxX,
+      zEnd: pts[n - 1].z,
+      drop: Math.round(pts[0].y - pts[n - 1].y),
+      kickers: Math.max(1, Math.round(def.length / def.kickerEvery))
+    };
+  }
+
+  function buildWorld(def) {
+    var rng = mulberry32(def.seed);
+
+    /* ---- trail path: wandering descent, z strictly increasing ---- */
+    var path = buildTrailPath(def, rng);
+    var pts = path.pts, n = path.n, i;
+    var zEnd = pts[n - 1].z;
 
     /* kickers: shaped bumps that launch you; on falls, extra step-downs */
     var kickers = [];
@@ -252,13 +297,16 @@
           var wx2 = -X_HALF + gx * GRID_STEP;
           var dEdge = wx2 - edge;
           var vi2 = gz * nx + gx;
-          if (dEdge <= -14) {
+          if (dEdge <= -30) {
             /* the floodplain never dips under the waterline — the only
                place to get wet is the river itself */
             if (H[vi2] < wY + 1.3) H[vi2] = wY + 1.3;
           } else if (dEdge < 12) {
-            /* beach: ease the bank down toward the water */
-            var k = smoothstepN(dEdge, -14, 12);
+            /* The beach starts thirty metres inland, not fourteen. At
+               fourteen the bank crest stood above the rider's eye-to-water
+               sight line, so the Zambezi — the whole point of the track —
+               was a lozenge on the horizon instead of a river beside you. */
+            var k = smoothstepN(dEdge, -30, 12);
             var hLand = H[vi2] < wY + 1.3 ? wY + 1.3 : H[vi2];
             H[vi2] = hLand * (1 - k) + (wY - 1.2) * k;
           } else if (dEdge < def.river.width) {
@@ -357,8 +405,12 @@
       zambezi: [["palm", 3, 1.4], ["miombo", 3, 2.0], ["reed", 3, 0], ["bush", 2, 0], ["grass", 3, 0], ["rock", 1, 1.1]],
       falls: [["miombo", 4, 2.0], ["palm", 2, 1.4], ["rock", 4, 1.4], ["fern", 3, 0], ["grass", 3, 0], ["bush", 1, 0]]
     };
+    /* a track may bring its own planting list; otherwise use the one
+       registered for its id, falling back to open miombo */
     var pool = [];
-    POOLS[def.id].forEach(function (e) { for (var q = 0; q < e[1]; q++) pool.push([e[0], e[2]]); });
+    (def.pool || POOLS[def.id] || POOLS.miombo).forEach(function (e) {
+      for (var q = 0; q < e[1]; q++) pool.push([e[0], e[2]]);
+    });
 
     var propCount = Math.floor(def.length * 1.35);
     for (i = 0; i < propCount; i++) {
@@ -394,9 +446,11 @@
 
     /* ---- Lower Zambezi hazards & riverside life ---- */
     if (def.river) {
-      /* crocs sun themselves ON the trail edges — the racing line stays open,
+      /* Crocs sun themselves ON the trail edges — the racing line stays open,
          but a lazy line meets teeth. Straight-ish segments only, so the AI
-         ghosts' centre line never clips one. */
+         ghosts' centre line never clips one. The lateral offset is measured
+         so that even the nearest croc leaves most of a metre of clean line
+         beside it: tight enough to be frightening, wide enough to be fair. */
       var cz2 = 140;
       var side2 = 1;
       while (cz2 < def.length - 120) {
@@ -407,7 +461,7 @@
           var bend = Math.abs(yawA - yawB);
           if (bend < 0.14) {
             var cp = pts[ciT];
-            var lat = side2 * (1.7 + rng() * 1.9);
+            var lat = side2 * (2.05 + rng() * 1.9);
             world.props.push({
               type: "croc", x: cp.x + lat, z: cp.z, y: heightAt(world, cp.x + lat, cp.z),
               s: 0.85 + rng() * 0.4, rot: rng() * 6.28, r: 1.05
@@ -439,14 +493,15 @@
       }
     }
     /* wildlife, well away from the trail */
-    var FAUNA = { miombo: ["antelope", "antelope", "zebra"], baobab: ["giraffe", "elephant", "zebra", "antelope"], kasanka: ["antelope", "antelope", "elephant"], zambezi: ["elephant", "antelope", "zebra"], falls: ["antelope", "elephant"] };
+    var FAUNA = { miombo: ["antelope", "antelope", "zebra"], baobab: ["giraffe", "elephant", "zebra", "antelope", "rhino"], kasanka: ["antelope", "antelope", "elephant"], zambezi: ["elephant", "antelope", "zebra"], falls: ["antelope", "elephant", "rhino"] };
     var fz = 150;
     while (fz < zEnd - 150) {
       var side = rng() < 0.5 ? -1 : 1;
       var ti2 = trailRangeForZ(fz);
       var fx = pts[Math.min(n - 1, ti2)].x + side * (26 + rng() * 40);
       if (Math.abs(fx) < X_HALF - 20) {
-        var ft = FAUNA[def.id][Math.floor(rng() * FAUNA[def.id].length)];
+        var fl = def.fauna || FAUNA[def.id] || FAUNA.miombo;
+        var ft = fl[Math.floor(rng() * fl.length)];
         world.props.push({ type: ft, x: fx, z: fz, y: heightAt(world, fx, fz), s: 1, rot: rng() * 6.28, r: 2.2 });
       }
       fz += 260 + rng() * 240;
@@ -550,17 +605,73 @@
       t: 0, finished: false, finishT: 0,
       score: 0, coinCount: 0, bigAirs: 0,
       coinPtr: 0, wheelSpin: 0, lean: 0, power: 1, noCrash: false,
+      turboT: 0, turboCd: 0, throttle: 0, turboTaps: 0, turboUses: 0,
+      pitch: 0, pitchV: 0, spin: 0, spinV: 0, tricks: 0, trickPts: 0,
       offTrail: false
     };
   }
 
-  var DEFAULT_STATS = { pedal: 1, vcap: 1, brake: 1, steer: 1, roll: 1, rough: 1, landSoft: 0, hop: 1 };
+  /* --- turbo: hit the key once to open the window, then tap like mad --- */
+  var TURBO_WINDOW = 10;      /* seconds the window stays open */
+  var TURBO_COOLDOWN = 18;    /* seconds before another one is available */
+  var TURBO_TAP = 0.10;       /* throttle gained per tap (4/s -> half, 8/s -> full) */
+  var TURBO_DECAY = 0.8;      /* throttle bled off per second */
+  var TURBO_PEDAL = 0.8;      /* extra pedal force at full throttle */
+  var TURBO_VCAP = 0.34;      /* extra top speed at full throttle */
+  var TURBO_THRUST = 9;       /* m/s2 of push at full throttle, cap-limited */
+
+  /* --- air tricks: flips round the bars, spins round the sky --- */
+  var FLIP_ACC = 12;          /* how hard a flip winds up, rad/s2 */
+  var FLIP_MAX = 11;          /* fastest flip rate, rad/s */
+  var SPIN_ACC = 11;          /* how hard a spin winds up, rad/s2 */
+  var SPIN_MAX = 9;           /* fastest spin rate, rad/s */
+  var TAU = Math.PI * 2;
+  var TRICK_FLIP_PTS = 150;   /* per completed flip */
+  var TRICK_SPIN_PTS = 120;   /* per completed 360 spin */
+  var TRICK_SLOP = 2.0;       /* land beyond this off level and you go down */
+  var TRICK_ROUGH = 0.9;       /* beyond this it is merely an ugly landing */
+
+  var DEFAULT_STATS = { pedal: 1, vcap: 1, brake: 1, steer: 1, roll: 1, rough: 1, landSoft: 0, hop: 1,
+    turboTap: 1, turboWindow: 1, turboCool: 1, turboPow: 1 };
 
   function stepRider3(st, inp, world, ev, taken) {
     var speed, i, f;
     var S = st.stats || DEFAULT_STATS;
 
     st.hopCd -= DT;
+
+    /* --- turbo window: one press opens it, every tap after that feeds the
+       throttle, and the throttle bleeds away if the tapping slows down --- */
+    if (st.turboCd > 0) {
+      st.turboCd -= DT;
+      if (st.turboCd < 0) st.turboCd = 0;
+    }
+    if (inp.turbo) {
+      if (st.turboT <= 0 && st.turboCd <= 0 && st.crashT <= 0) {
+        st.turboT = TURBO_WINDOW * (S.turboWindow || 1);
+        st.throttle = 0;
+        st.turboTaps = 0;
+        st.turboUses++;
+        ev.push({ t: "turboOn" });
+      } else if (st.turboT > 0) {
+        st.throttle += TURBO_TAP * (S.turboTap || 1);
+        if (st.throttle > 1) st.throttle = 1;
+        st.turboTaps++;
+      }
+    }
+    if (st.turboT > 0) {
+      st.turboT -= DT;
+      /* decay proportional to the current throttle, so a steady tapping
+         rate settles at a steady level: taps/sec * TURBO_TAP / TURBO_DECAY */
+      st.throttle -= TURBO_DECAY * st.throttle * DT;
+      if (st.throttle < 0.004) st.throttle = 0;
+      if (st.turboT <= 0) {
+        st.turboT = 0;
+        st.throttle = 0;
+        st.turboCd = TURBO_COOLDOWN * (S.turboCool || 1);
+        ev.push({ t: "turboOff" });
+      }
+    }
 
     /* --- crash state: tumble briefly, then respawn at the last gate --- */
     if (st.crashT > 0) {
@@ -601,7 +712,14 @@
 
       /* forces along the trail direction */
       speed += (-GRAV * f.y) * DT;                       /* slope: f.y<0 going down */
-      if (inp.pedal && speed < VCAP * S.vcap) speed += PEDAL_A * S.pedal * (speed < 6 ? 1.55 : 1) * st.power * DT;
+      /* turbo raises the ceiling and pushes on its own, which is what makes
+         it felt on a descent where pedalling alone is already capped out */
+      var boost = st.turboT > 0 ? st.throttle * (S.turboPow || 1) : 0;
+      var vlim = VCAP * S.vcap * (1 + boost * TURBO_VCAP);
+      if (inp.pedal && speed < vlim) {
+        speed += PEDAL_A * S.pedal * (speed < 6 ? 1.55 : 1) * st.power * (1 + boost * TURBO_PEDAL) * DT;
+      }
+      if (boost > 0 && speed < vlim) speed += TURBO_THRUST * boost * DT;
       if (inp.brake) { speed -= BRAKE_A * S.brake * DT; if (speed < 0) speed = 0; }
       var offT = st.trailD > CARVE_R;
       st.offTrail = offT;
@@ -631,6 +749,7 @@
         st.y = yBallistic;                                /* just hopped */
       } else if (hNew < yBallistic - 0.32) {
         st.onGround = false; st.airT = 0;                 /* crest launch */
+        st.pitch = 0; st.pitchV = 0; st.spin = 0; st.spinV = 0;
         st.y = yBallistic;
         ev.push({ t: "takeoff" });
       } else {
@@ -642,6 +761,29 @@
       st.airT += DT;
       st.vy -= GRAV * DT;
       st.yaw += steer * 1.0 * DT;
+      /* Tricks are pure showmanship: flips and spins wind up their own
+         rotations and never touch velocity or heading, so where you land is
+         unchanged — and the AI, which never sets these inputs, is untouched. */
+      if (inp.flipF) st.pitchV += FLIP_ACC * DT;
+      if (inp.flipB) st.pitchV -= FLIP_ACC * DT;
+      if (st.pitchV > FLIP_MAX) st.pitchV = FLIP_MAX;
+      if (st.pitchV < -FLIP_MAX) st.pitchV = -FLIP_MAX;
+      st.pitch += st.pitchV * DT;
+      if (inp.spinR) st.spinV += SPIN_ACC * DT;
+      if (inp.spinL) st.spinV -= SPIN_ACC * DT;
+      if (st.spinV > SPIN_MAX) st.spinV = SPIN_MAX;
+      if (st.spinV < -SPIN_MAX) st.spinV = -SPIN_MAX;
+      st.spin += st.spinV * DT;
+      /* let go and the rider tucks back to level — that release is the skill:
+         hold long enough to come round, let go in time to land it */
+      if (!inp.flipF && !inp.flipB) {
+        st.pitchV *= Math.max(0, 1 - 4 * DT);
+        st.pitch += (Math.round(st.pitch / TAU) * TAU - st.pitch) * Math.min(1, 3.2 * DT);
+      }
+      if (!inp.spinL && !inp.spinR) {
+        st.spinV *= Math.max(0, 1 - 4 * DT);
+        st.spin += (Math.round(st.spin / TAU) * TAU - st.spin) * Math.min(1, 3.2 * DT);
+      }
       st.lean += ((-steer * 0.35) - st.lean) * Math.min(1, 5 * DT);
       st.x += st.vx * DT; st.y += st.vy * DT; st.z += st.vz * DT;
       var hg = heightAt(world, st.x, st.z);
@@ -650,22 +792,43 @@
         var nl = normalAt(world, st.x, st.z);
         var impact = -(st.vx * nl.x + st.vy * nl.y + st.vz * nl.z);
         var wasBig = st.airT > 0.9;
-        if (impact > CRASH_IMPACT * (1 + S.landSoft) && !st.noCrash) {
+        /* how far from level the bike is, after taking off whole rotations */
+        var resid = st.pitch - Math.round(st.pitch / TAU) * TAU;
+        var spun = Math.abs(st.pitch) > 0.6;
+        var sketchy = spun && Math.abs(resid) > TRICK_SLOP;
+        var untidy = spun && Math.abs(resid) > TRICK_ROUGH;
+        if ((impact > CRASH_IMPACT * (1 + S.landSoft) || sketchy) && !st.noCrash) {
           st.crashT = 1.0;
           st.crashes++;
-          ev.push({ t: "crash", why: "landing" });
+          ev.push({ t: "crash", why: sketchy ? "trick" : "landing" });
+          st.pitch = 0; st.pitchV = 0; st.spin = 0; st.spinV = 0;
         } else {
           /* keep the tangent component of velocity */
           var vn = st.vx * nl.x + st.vy * nl.y + st.vz * nl.z;
           st.vx -= nl.x * vn; st.vy -= nl.y * vn; st.vz -= nl.z * vn;
-          if (impact > 8.5 * (1 + 0.5 * S.landSoft)) {
-            var keep = 0.75 + 0.2 * S.landSoft;
+          if (impact > 8.5 * (1 + 0.5 * S.landSoft) || untidy) {
+            var keep = untidy ? 0.6 : 0.75 + 0.2 * S.landSoft;
             st.vx *= keep; st.vy *= keep; st.vz *= keep;
             ev.push({ t: "land", q: "hard" });
           } else {
             ev.push({ t: "land", q: "clean" });
           }
           if (wasBig) { st.bigAirs++; st.score += 75; ev.push({ t: "bigair" }); }
+          /* landed it: bank whatever was completed in the air */
+          var flips = untidy ? 0 : Math.floor(Math.abs(st.pitch) / TAU + 0.02);
+          var spins = Math.floor(Math.abs(st.spin) / TAU + 0.02);
+          if (flips || spins) {
+            var pts = flips * TRICK_FLIP_PTS + spins * TRICK_SPIN_PTS;
+            if (flips && spins) pts = Math.round(pts * 1.5);   /* combo */
+            st.score += pts;
+            st.tricks += flips + spins;
+            st.trickPts += pts;
+            ev.push({
+              t: "trick", flips: flips, spins: spins, pts: pts,
+              back: st.pitch < 0, combo: !!(flips && spins)
+            });
+          }
+          st.pitch = 0; st.pitchV = 0; st.spin = 0; st.spinV = 0;
         }
         st.onGround = true;
       }
@@ -822,7 +985,7 @@
     return {
       name: style.name, color: style.color,
       samples: samples, timeMs: Math.round(st.finishT * 1000),
-      score: st.score, crashes: st.crashes
+      score: st.score, crashes: st.crashes, coinCount: st.coinCount
     };
   }
 
@@ -909,7 +1072,9 @@
     buildWorld: buildWorld, heightAt: heightAt, normalAt: normalAt, trailDistAt: trailDistAt,
     newRider3: newRider3, stepRider3: stepRider3, simulateAI3: simulateAI3, AI3_STYLES: AI3_STYLES,
     ghostPosAt3: ghostPosAt3, packGhost3: packGhost3, unpackGhost3: unpackGhost3,
-    sanitizeName: sanitizeName, DT: DT, CARVE_R: CARVE_R, GHOST_HZ: GHOST_HZ, X_HALF: X_HALF
+    sanitizeName: sanitizeName, DT: DT, CARVE_R: CARVE_R, GHOST_HZ: GHOST_HZ, X_HALF: X_HALF,
+    trailPreview: trailPreview, TURBO_WINDOW: TURBO_WINDOW, TURBO_COOLDOWN: TURBO_COOLDOWN,
+    DEFAULT_STATS: DEFAULT_STATS
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = CORE;

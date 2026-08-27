@@ -70,6 +70,7 @@
         <canvas id="game-canvas" width="960" height="540" aria-label="Zambia Rush — downhill biking game. Use the keyboard or on-screen buttons to play."></canvas>
         <div class="stage-vignette" aria-hidden="true"></div>
         <button type="button" class="fs-btn" id="btn-fs" aria-label="Full screen" title="Full screen (F)" hidden>⛶</button>
+        <button type="button" class="fs-btn exit-btn" id="btn-exit" aria-label="Pause and exit the race" title="Pause / exit (Esc)" hidden>❚❚</button>
 
         <div class="controls-hint" id="controls-hint" hidden aria-hidden="true">
           <div class="ch-row" id="hint-keys">
@@ -77,12 +78,18 @@
             <span class="ch-item"><kbd>A</kbd><kbd>D</kbd> steer</span>
             <span class="ch-item"><kbd>S</kbd> brake</span>
             <span class="ch-item"><kbd>Space</kbd> jump</span>
+            <span class="ch-item"><kbd>K</kbd> turbo</span>
             <span class="ch-item"><kbd>Esc</kbd> pause</span>
           </div>
           <div class="ch-row" id="hint-touch" hidden>
             <span class="ch-item">hold ▲ to pedal</span>
             <span class="ch-item">◀ ▶ steer</span>
             <span class="ch-item">⤒ jump</span>
+            <span class="ch-item">K turbo</span>
+          </div>
+          <div class="ch-row ch-row--2p" id="hint-keys-2p" hidden>
+            <span class="ch-item"><b>P1</b> WASD · space jump · Q turbo</span>
+            <span class="ch-item"><b>P2</b> arrows · / jump · enter turbo</span>
           </div>
         </div>
 
@@ -93,19 +100,56 @@
             <span class="hud-chip" id="hud-speed">0 km/h</span>
           </div>
           <div class="trick-toast" id="trick-toast"></div>
+          <div class="turbo" id="turbo" data-state="ready">
+            <div class="turbo-top">
+              <span class="turbo-name">Turbo</span>
+              <span class="turbo-state" id="turbo-state">Press <kbd>K</kbd></span>
+            </div>
+            <div class="turbo-bar"><i id="turbo-fill"></i></div>
+            <div class="turbo-foot"><span id="turbo-hint">tap <kbd>K</kbd> fast for a speed boost</span><span id="turbo-gain"></span></div>
+          </div>
           <div class="hud-progress"><div class="hud-progress__fill" id="hud-progress-fill"></div><span class="hud-progress__flag" aria-hidden="true">🏁</span></div>
         </div>
 
+        <!-- two players on one screen: a compact strip at the top of each half -->
+        <div class="hud2" id="hud2" hidden>
+          <div class="hud2-side hud2-side--p1" id="hud2-p1">
+            <span class="hud2-tag" id="p1-tag">P1</span>
+            <span class="hud2-time" id="p1-time">0:00.0</span>
+            <span class="hud2-chip" id="p1-score">🪙 0</span>
+            <span class="hud2-chip" id="p1-speed">0 km/h</span>
+            <span class="hud2-turbo" id="p1-turbo" data-state="ready"><b id="p1-turbo-label">Q</b><i><em id="p1-turbo-fill"></em></i></span>
+            <span class="hud2-prog"><i id="p1-prog"></i></span>
+            <span class="hud2-flag" id="p1-flag" hidden></span>
+          </div>
+          <div class="hud2-side hud2-side--p2" id="hud2-p2">
+            <span class="hud2-tag" id="p2-tag">P2</span>
+            <span class="hud2-time" id="p2-time">0:00.0</span>
+            <span class="hud2-chip" id="p2-score">🪙 0</span>
+            <span class="hud2-chip" id="p2-speed">0 km/h</span>
+            <span class="hud2-turbo" id="p2-turbo" data-state="ready"><b id="p2-turbo-label">↵</b><i><em id="p2-turbo-fill"></em></i></span>
+            <span class="hud2-prog"><i id="p2-prog"></i></span>
+            <span class="hud2-flag" id="p2-flag" hidden></span>
+          </div>
+          <span class="hud2-seam" aria-hidden="true"></span>
+          <div class="trick-toast trick-toast--p2" id="trick-toast-2"></div>
+        </div>
+
+        <ol class="mp-board" id="mp-board" hidden></ol>
+        <div class="mp-tags" id="mp-tags" hidden></div>
+
         <div class="countdown" id="countdown" hidden>3</div>
+        <div class="countdown countdown--p2" id="countdown-2" hidden>3</div>
 
         <div class="touch-controls" id="touch-controls" hidden>
           <div class="tc-cluster">
             <button type="button" class="tc-btn" id="tc-left" aria-label="Steer left">◀</button>
             <button type="button" class="tc-btn" id="tc-right" aria-label="Steer right">▶</button>
           </div>
-          <div class="tc-cluster">
-            <button type="button" class="tc-btn tc-btn--brake" id="tc-brake" aria-label="Brake">▼</button>
+          <div class="tc-cluster tc-cluster--pad">
             <button type="button" class="tc-btn tc-btn--hop" id="tc-hop" aria-label="Jump">⤒</button>
+            <button type="button" class="tc-btn tc-btn--turbo" id="tc-turbo" aria-label="Turbo — tap fast">K</button>
+            <button type="button" class="tc-btn tc-btn--brake" id="tc-brake" aria-label="Brake">▼</button>
             <button type="button" class="tc-btn tc-btn--pedal" id="tc-pedal" aria-label="Pedal">▲</button>
           </div>
         </div>
@@ -114,6 +158,11 @@
           <h2>Zambia <em>Rush</em></h2>
           <p class="gr-tag">The official Zambia Bikes downhill game — free, forever.</p>
           <div class="gr-panel">
+            <div class="menu-side">
+            <div class="players-row" id="players-row" role="group" aria-label="How many riders">
+              <button type="button" class="pl-chip is-selected" data-players="1">🚵 1 player</button>
+              <button type="button" class="pl-chip" data-players="2">🚵🚵 2 players — same screen</button>
+            </div>
             <div class="rider-row">
               <label for="rider-name">Rider name</label>
               <input id="rider-name" maxlength="12" autocomplete="off" spellcheck="false" placeholder="Rider">
@@ -124,8 +173,21 @@
                 <button type="button" class="jersey" data-jersey="#8E44AD" style="background:#8E44AD" aria-label="Purple jersey"></button>
               </span>
             </div>
+            <div class="rider-row rider-row--p2" id="rider-row-2" hidden>
+              <label for="rider-name-2">Player 2</label>
+              <input id="rider-name-2" maxlength="12" autocomplete="off" spellcheck="false" placeholder="Rider 2">
+              <span class="jersey-swatches" role="group" aria-label="Player 2 jersey colour">
+                <button type="button" class="jersey jersey2" data-jersey2="#E8791D" style="background:#E8791D" aria-label="Copper jersey"></button>
+                <button type="button" class="jersey jersey2" data-jersey2="#8E44AD" style="background:#8E44AD" aria-label="Purple jersey"></button>
+                <button type="button" class="jersey jersey2" data-jersey2="#2A9D8F" style="background:#2A9D8F" aria-label="River teal jersey"></button>
+                <button type="button" class="jersey jersey2" data-jersey2="#F7B733" style="background:#F7B733" aria-label="Sun yellow jersey"></button>
+              </span>
+            </div>
+            <p class="two-up-keys" id="two-up-keys" hidden>
+              <b>Player 1</b> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> · jump <kbd>space</kbd> · turbo <kbd>Q</kbd>
+              &nbsp;&nbsp;<b>Player 2</b> <kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd> · jump <kbd>/</kbd> · turbo <kbd>enter</kbd>
+            </p>
             <p class="gr-tag" id="menu-bike" style="margin:0"></p>
-            <div class="track-cards" id="track-cards" role="group" aria-label="Choose a track"></div>
             <div class="tod-row" id="tod-row" role="group" aria-label="Time of day">
               <span class="tod-label">Ride at</span>
               <button type="button" class="tod-chip" data-tod="auto">✨ Track mood</button>
@@ -134,6 +196,12 @@
               <button type="button" class="tod-chip" data-tod="sunset">🌇 Sunset</button>
               <button type="button" class="tod-chip" data-tod="dusk">🌆 Dusk</button>
             </div>
+            <div class="tod-row" id="wx-row" role="group" aria-label="Weather">
+              <span class="tod-label">Weather</span>
+              <button type="button" class="tod-chip" data-wx="clear">☀️ Clear</button>
+              <button type="button" class="tod-chip" data-wx="rain">🌧️ Rain</button>
+              <button type="button" class="tod-chip" data-wx="storm">⛈️ Storm</button>
+            </div>
             <div class="menu-row">
               <label class="ghost-toggle"><input type="checkbox" id="ghost-toggle" checked> Race the ghosts 👻</label>
               <button type="button" class="btn btn--ghost btn--small" id="btn-howto">How to play</button>
@@ -141,8 +209,35 @@
               <button type="button" class="btn btn--ghost btn--small" id="btn-detail">✨ Detail: full</button>
               <a class="btn btn--ghost btn--small" href="garage.html">🔧 Garage</a>
             </div>
-            <div class="menu-row">
+            </div>
+            <div class="course-select">
+              <p class="cs-head"><span class="cs-blink" aria-hidden="true">▶</span> Select your course <span class="cs-blink" aria-hidden="true">◀</span></p>
+              <div class="cs-body">
+                <div class="cs-screen">
+                  <svg class="cs-map" id="cs-map" viewBox="0 0 200 210" role="img" aria-labelledby="cs-map-title"><title id="cs-map-title">Course map</title></svg>
+                  <span class="cs-scan" aria-hidden="true"></span>
+                  <span class="cs-screen-tag" aria-hidden="true">Course map</span>
+                </div>
+                <div class="cs-info">
+                  <h3 class="cs-name" id="cs-name"></h3>
+                  <p class="cs-meta"><span class="track-pill" id="cs-level"></span><span class="cs-len" id="cs-len"></span></p>
+                  <p class="cs-unique" id="cs-unique"></p>
+                  <ul class="cs-feats" id="cs-feats"></ul>
+                  <div class="cs-stats" id="cs-stats"></div>
+                  <p class="cs-best" id="cs-best"></p>
+                </div>
+              </div>
+              <div class="track-cards" id="track-cards" role="group" aria-label="Choose a track"></div>
+              <p class="cs-hint" aria-hidden="true">◀ ▶ arrow keys to browse</p>
+            </div>
+            <div class="menu-row menu-row--go">
               <button type="button" class="btn btn--copper btn--big" id="btn-start">Start the ride 🚵</button>
+              <button type="button" class="btn btn--big tour-cta" id="btn-tour-open">
+                <span>🇿🇲 The Great Zambia Tour</span><i>ten legs · 16.5 km · one clock</i>
+              </button>
+              <button type="button" class="btn btn--big mp-cta" id="btn-mp-open" hidden>
+                <span>📡 Race a friend, live</span><i>two devices · one hill</i>
+              </button>
             </div>
           </div>
         </div>
@@ -154,8 +249,15 @@
             <li><span class="key">▼ / S</span> — brake</li>
             <li><span class="key">◀ ▶ / A D</span> — steer down the mountain</li>
             <li><span class="key">Space</span> — bunny-hop (jump!)</li>
+            <li><span class="key">K</span> — <strong>TURBO!</strong> Press once to open a 10-second
+            window, then tap <span class="key">K</span> as fast as you can. The faster you tap, the
+            higher the throttle climbs and the faster you go. Then it needs 18 seconds to recharge.</li>
+            <li><strong>In the air — tricks!</strong> <span class="key">W</span>/<span class="key">S</span>
+            spin a front or back flip, <span class="key">A</span>/<span class="key">D</span> spin the bike
+            around. <em>Let go in time to land level</em> — a completed flip is 150 points, a 360 spin is
+            120, and doing both at once is worth half as much again. Land sideways and you lose the lot.</li>
             <li><span class="key">B</span> — ring your bell (if you fitted one in the Garage)</li>
-            <li><span class="key">P</span> or <span class="key">Esc</span> — pause</li>
+            <li><span class="key">P</span> or <span class="key">Esc</span> — pause, restart or quit back to the menu (or tap ❚❚ on the screen)</li>
           </ul>
           <p style="max-width:46ch">Follow the dirt trail — it's the fast line — or cut your own
           across the mountain. Hit the kickers for big air, collect copper coins, and don't hug the
@@ -164,9 +266,149 @@
           <button type="button" class="btn btn--copper" id="btn-howto-back">Got it!</button>
         </div>
 
+        <!-- ============ THE GREAT ZAMBIA TOUR ============ -->
+
+        <div class="overlay overlay--tour overlay--mp" id="screen-mp" hidden>
+          <div class="tour-sheet">
+            <div class="tour-head">
+              <h2>Race a <em>friend</em>, live</h2>
+              <p class="tour-sub" id="mp-sub">Two devices, one hill, at the same time.</p>
+            </div>
+
+            <div class="mp-body">
+              <section class="mp-col" id="mp-entry">
+                <h3>Start a race</h3>
+                <p class="mp-hint">You get a four-character code — letters and numbers. Read it to your
+                friend — a
+                grown-up can send it for you.</p>
+                <button type="button" class="btn btn--copper btn--small" id="btn-mp-create">Start a race 🏁</button>
+                <h3>Or join one</h3>
+                <p class="mp-hint">Type the code your friend read out.</p>
+                <div class="mp-join">
+                  <input id="mp-code" maxlength="4" autocomplete="off" spellcheck="false"
+                         inputmode="latin" placeholder="CODE" aria-label="Race code">
+                  <button type="button" class="btn btn--forest btn--small" id="btn-mp-join">Join</button>
+                </div>
+              </section>
+
+              <section class="mp-col" id="mp-lobby" hidden>
+                <h3>The start line</h3>
+                <p class="mp-code-shout">
+                  <span class="mp-code-lead">Your race code</span>
+                  <strong class="mp-code-tag" id="mp-code-tag"></strong>
+                  <span class="mp-code-say">read it out to your friend</span>
+                </p>
+                <ul class="mp-riders" id="mp-riders" aria-live="polite"></ul>
+                <p class="mp-hint" id="mp-hosthint"></p>
+                <div class="menu-row mp-actions">
+                  <button type="button" class="btn btn--forest btn--small" id="btn-mp-ready">I'm ready 👍</button>
+                  <button type="button" class="btn btn--copper btn--small" id="btn-mp-start" hidden>Drop the flag 🏁</button>
+                  <button type="button" class="btn btn--ghost btn--small" id="btn-mp-leave">Leave</button>
+                </div>
+              </section>
+
+              <p class="mp-err" id="mp-err" role="status"></p>
+            </div>
+
+            <p class="mp-safe">🛡️ A race is private to whoever has the code. There is no chat,
+            no messages and no way to be put in a race with a stranger. Live races don't set
+            personal bests or reach the club board — those come from riding on your own.</p>
+
+            <div class="menu-row">
+              <button type="button" class="btn btn--ghost btn--small" id="btn-mp-exit">Back to menu</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="overlay overlay--tour" id="screen-tour" hidden>
+          <div class="tour-sheet">
+            <div class="tour-head">
+              <h2>The Great <em>Zambia</em> Tour</h2>
+              <p class="tour-sub" id="tour-sub"></p>
+            </div>
+            <div class="tour-body">
+              <ol class="roadbook" id="tour-roadbook"></ol>
+              <aside class="tour-side">
+                <div class="tour-stat"><b>Total time</b><span id="tour-total">—</span></div>
+                <div class="tour-stat"><b>Kwacha</b><span id="tour-cash">—</span></div>
+                <div class="tour-stat"><b>Condition</b><span id="tour-cond">—</span></div>
+                <div class="cond-bar"><i id="tour-cond-bar"></i></div>
+                <div class="tour-stat"><b>Race number</b><span id="tour-number">—</span></div>
+                <div class="tour-stat"><b>Best tour</b><span id="tour-best">—</span></div>
+                <p class="tour-note" id="tour-note"></p>
+              </aside>
+            </div>
+            <div class="menu-row">
+              <button type="button" class="btn btn--copper btn--big" id="btn-tour-go">Start stage 1</button>
+              <button type="button" class="btn btn--ghost btn--small" id="btn-tour-restart">Start over</button>
+              <button type="button" class="btn btn--ghost btn--small" id="btn-tour-exit">Back to menu</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="overlay overlay--tour" id="screen-brief" hidden>
+          <div class="tour-sheet">
+            <div class="tour-head">
+              <p class="brief-kicker" id="brief-kicker"></p>
+              <h2 id="brief-name"></h2>
+              <p class="tour-sub" id="brief-route"></p>
+            </div>
+            <div class="brief-body">
+              <div class="cs-screen brief-map">
+                <svg class="cs-map" id="brief-map" viewBox="0 0 200 210" role="img" aria-label="Stage map"></svg>
+                <span class="cs-scan" aria-hidden="true"></span>
+                <span class="cs-screen-tag" aria-hidden="true">Stage map</span>
+              </div>
+              <div class="brief-info">
+                <p class="brief-blurb" id="brief-blurb"></p>
+                <div class="brief-grid" id="brief-grid"></div>
+                <p class="brief-risk" id="brief-risk"></p>
+                <p class="brief-bag" id="brief-bag"></p>
+              </div>
+            </div>
+            <div class="menu-row">
+              <button type="button" class="btn btn--copper btn--big" id="btn-brief-go">Roll out 🚵</button>
+              <button type="button" class="btn btn--ghost btn--small" id="btn-brief-shop">Workshop 🔧</button>
+              <button type="button" class="btn btn--ghost btn--small" id="btn-brief-back">Roadbook</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="overlay overlay--tour" id="screen-shop" hidden>
+          <div class="tour-sheet">
+            <div class="tour-head">
+              <h2>The <em>Workshop</em> 🔧</h2>
+              <p class="tour-sub" id="shop-sub"></p>
+            </div>
+            <div class="shop-body">
+              <section class="shop-col">
+                <h3>Repairs</h3>
+                <div class="cond-bar cond-bar--big"><i id="shop-cond-bar"></i></div>
+                <p class="shop-cond" id="shop-cond"></p>
+                <div class="menu-row shop-repair" id="shop-repair"></div>
+                <p class="shop-hint">A tired bike brakes worse, steers slower and drags. Below <span id="shop-floor">72</span>% things start to break.</p>
+                <p class="shop-van" id="shop-van"></p>
+              </section>
+              <section class="shop-col">
+                <h3>Your bag <span class="bag-count" id="bag-count"></span></h3>
+                <ul class="bag-list" id="bag-list"></ul>
+                <p class="shop-hint">Six slots, nine spares. What you leave behind is the whole game.</p>
+              </section>
+            </div>
+            <section class="shop-spares">
+              <h3>Spares for sale</h3>
+              <div class="spare-grid" id="spare-grid"></div>
+            </section>
+            <div class="menu-row">
+              <button type="button" class="btn btn--copper btn--big" id="btn-shop-done">Back to the stage</button>
+              <a class="btn btn--ghost btn--small" href="garage.html">Full Garage 🔧</a>
+            </div>
+          </div>
+        </div>
+
         <div class="overlay" id="screen-pause" hidden>
           <h2>Paused ⏸️</h2>
-          <p class="gr-tag">Even downhill heroes need a mango break.</p>
+          <p class="gr-tag" id="pause-sub">Even downhill heroes need a mango break.</p>
           <div class="menu-row">
             <button type="button" class="btn btn--copper" id="btn-resume">Keep riding</button>
             <button type="button" class="btn btn--ghost" id="btn-restart">Restart run</button>
@@ -183,10 +425,25 @@
 
         <div class="overlay" id="screen-results" hidden>
           <div id="results-content"></div>
-          <div class="menu-row" style="margin-top:0.6rem">
+          <div class="menu-row" id="results-row" style="margin-top:0.6rem">
             <button type="button" class="btn btn--copper" id="btn-retry">Ride it again</button>
             <button type="button" class="btn btn--ghost" id="btn-copy-ghost">Copy my Ghost Code</button>
             <button type="button" class="btn btn--ghost" id="btn-menu">Back to menu</button>
+          </div>
+          <div class="menu-row" id="results-row-mp" style="margin-top:0.6rem" hidden>
+            <button type="button" class="btn btn--copper btn--big" id="btn-mp-again">Race again 🏁</button>
+            <button type="button" class="btn btn--ghost btn--small" id="btn-mp-back">Back to the start line</button>
+            <button type="button" class="btn btn--ghost btn--small" id="btn-mp-quit">Back to menu</button>
+          </div>
+          <div class="menu-row" id="results-row-vs" style="margin-top:0.6rem" hidden>
+            <button type="button" class="btn btn--copper btn--big" id="btn-vs-again">Best of three? 🏁</button>
+            <button type="button" class="btn btn--ghost btn--small" id="btn-vs-menu">Back to menu</button>
+          </div>
+          <div class="menu-row" id="results-row-tour" style="margin-top:0.6rem" hidden>
+            <button type="button" class="btn btn--copper btn--big" id="btn-tour-next">Workshop, then the next stage 🔧</button>
+            <button type="button" class="btn btn--ghost btn--small" id="btn-tour-retry">Ride this stage again</button>
+            <button type="button" class="btn btn--ghost btn--small" id="btn-tour-road">Roadbook 📖</button>
+            <button type="button" class="btn btn--ghost btn--small" id="btn-tour-menu">Back to menu</button>
           </div>
         </div>
       </div>
@@ -210,6 +467,23 @@
           pressure, and the paint booth sprays every zone down to the tire walls —
           <a href="garage.html">wrench on it in the Garage 🔧</a>. Dream parts are earned by riding,
           never bought.</p>
+        </article>
+
+        <article class="card reveal">
+          <span class="card-emoji">🇿🇲</span>
+          <h3>The Great Zambia Tour</h3>
+          <p>Ten legs, 16.5 km and <strong>one clock that never stops</strong> — Livingstone to the Falls,
+          down the Zambezi, up through Choma and the Kafue flats to Lusaka, across the Copperbelt to
+          Kasanka's bats, over the Bangweulu marsh and the Luangwa valley, then the long road home.
+          About half an hour of riding if you're quick, closer to an hour the first time.</p>
+          <p>Between legs you stand in <strong>the workshop</strong>. Every leg wears the bike down; a tired
+          bike brakes worse, steers slower and eventually starts <em>breaking</em>. You have kwacha, a
+          six-slot bag and nine spares to choose from — and you can't have everything. Carry the right
+          spare and a snapped chain costs you twenty seconds instead of seventy.</p>
+          <p style="margin-bottom:0"><strong>Nothing here costs real money and nothing is locked behind a
+          payment</strong> — the whole tour is free, like the rest of the game. Your race number is your
+          start time, the way it was on the old road races, and the Grown-Up Crew's support van meets you
+          at every stage finish with a free once-over, so a bad day can never run away from you.</p>
         </article>
 
         <article class="card ghost-box reveal">
@@ -315,6 +589,9 @@
 <script src="js/tours-data.js"></script>
 <script src="js/main.js"></script>
 <script src="js/bikes.js"></script>
+<script src="js/tour.js"></script>
+<script src="js/mp-core.js"></script>
+<script src="js/net.js"></script>
 <script src="js/game3d-core.js"></script>
 <script type="importmap">{ "imports": { "three": "./js/vendor/three.module.min.js" } }</script>
 <script type="module" src="js/game3d.js"></script>
