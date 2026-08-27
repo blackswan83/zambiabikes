@@ -446,6 +446,10 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     var cRock = new THREE.Color(theme.rock);
     var tmp = new THREE.Color();
 
+    var rockiness = theme.rockiness === undefined ? 1 : theme.rockiness;
+    var rockLo = 0.8 / rockiness;
+    var rockHi = 1.55 / rockiness;
+
     /* the corridor is wider wherever a feature widened the carve, so ask the
        trail how wide it is at this z rather than assuming */
     var widForRow = new Float32Array(nz);
@@ -489,9 +493,16 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
           var dirt = cDirt.clone().lerp(cDark, rut * 0.55 + grain * 0.2);
           tmp.lerp(dirt, onTrail);
         }
-        /* anything genuinely steep is rock, trail or not */
-        var rocky = smoothstep01(slope, 0.72, 1.45) * (1 - onTrail * 0.75);
-        if (rocky > 0) tmp.lerp(cRock, rocky);
+        /* Steepness turns to rock, but how readily is the biome's own
+           character: a basalt gorge is mostly stone, a sand belt almost
+           never is. Rockier ground also breaks out in outcrops away from
+           the slope, so a gorge does not read as a green hillside. */
+        var rocky = smoothstep01(slope, rockLo, rockHi) * (1 - onTrail * 0.75);
+        if (rockiness > 1.15) {
+          var patch = CORE.vnoise(x / 26, z / 26, 7717) * 0.5 + 0.5;
+          rocky = Math.max(rocky, smoothstep01(patch, 0.6, 0.86) * 0.62 * (1 - onTrail * 0.85));
+        }
+        if (rocky > 0) tmp.lerp(cRock, Math.min(1, rocky));
         /* fake a little ambient occlusion into the gullies */
         var shade = 1 - smoothstep01(slope, 0.2, 2.0) * 0.16;
         col[i3] = tmp.r * shade; col[i3 + 1] = tmp.g * shade; col[i3 + 2] = tmp.b * shade;

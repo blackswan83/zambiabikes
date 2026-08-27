@@ -227,14 +227,19 @@
 
     isEnabled: function () { return enabled; },
 
+    /* Only records the preference — the context itself is not created until
+       a real gesture reaches unlock(), or the browser logs an autoplay
+       warning on every frame that touches it. */
     enable: function (on) {
       enabled = !!on;
-      if (!ready) { if (enabled) boot(); }
-      if (ready) at(master.gain, enabled ? 0.5 : 0, 0.05);
-      if (enabled && ctx && ctx.state === "suspended") ctx.resume();
+      if (ready) {
+        at(master.gain, enabled ? 0.5 : 0, 0.05);
+        if (enabled && ctx.state === "suspended") ctx.resume();
+      }
     },
 
     begin: function () {
+      if (!enabled) return;
       if (!boot()) return;
       if (ctx.state === "suspended") ctx.resume();
       running = true;

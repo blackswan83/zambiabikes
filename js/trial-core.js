@@ -78,7 +78,7 @@
         turbidity: 3.4, rayleigh: 1.2, mieCoeff: 0.003, mieG: 0.78, exposure: 0.54,
         grass: 0x63A45C, grassDry: 0x9DB65A, dirt: 0x8B6339, dirtDark: 0x6A4826,
         rock: 0x8C8874, trunk: 0x5A4028, canopy: 0x357F49, canopy2: 0x5C9A50,
-        accent: 0xE8791D
+        rockiness: 0.55, accent: 0xE8791D
       }
     },
     miombo: {
@@ -94,7 +94,7 @@
         turbidity: 4.2, rayleigh: 1.5, mieCoeff: 0.0035, mieG: 0.79, exposure: 0.52,
         grass: 0x4E9B58, grassDry: 0x7FAE5A, dirt: 0x8A6238, dirtDark: 0x6B4826,
         rock: 0x8B8570, trunk: 0x543C24, canopy: 0x2F7A44, canopy2: 0x4E9B58,
-        accent: 0xE8791D
+        rockiness: 0.7, accent: 0xE8791D
       }
     },
     batoka: {
@@ -110,7 +110,7 @@
         turbidity: 5.5, rayleigh: 1.1, mieCoeff: 0.004, mieG: 0.8, exposure: 0.5,
         grass: 0x7E8B4A, grassDry: 0xA79A52, dirt: 0x8A6440, dirtDark: 0x5E4128,
         rock: 0x6E6A62, trunk: 0x5E4630, canopy: 0x4E7A44, canopy2: 0x6E8E4A,
-        accent: 0x2A9D8F
+        rockiness: 2.4, accent: 0x2A9D8F
       }
     },
     kalahari: {
@@ -126,7 +126,7 @@
         turbidity: 7.5, rayleigh: 2.0, mieCoeff: 0.0045, mieG: 0.81, exposure: 0.46,
         grass: 0xB09A44, grassDry: 0xCBB157, dirt: 0xB98A46, dirtDark: 0x8A5F2E,
         rock: 0x9A7A56, trunk: 0x6E4A26, canopy: 0x7C6A32, canopy2: 0x96803A,
-        accent: 0xF7B733
+        rockiness: 0.3, accent: 0xF7B733
       }
     },
     mafinga: {
@@ -142,7 +142,7 @@
         turbidity: 4.0, rayleigh: 2.8, mieCoeff: 0.006, mieG: 0.82, exposure: 0.5,
         grass: 0x3E7A50, grassDry: 0x6E8A4E, dirt: 0x6E5238, dirtDark: 0x4E3826,
         rock: 0x74747A, trunk: 0x4A3828, canopy: 0x225C40, canopy2: 0x357F49,
-        accent: 0x9AD1E8
+        rockiness: 1.6, accent: 0x9AD1E8
       }
     }
   };

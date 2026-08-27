@@ -231,3 +231,21 @@ a time.
 ---
 
 Built with muddy hands by Armand & Arthur (both 10) and the Grown-Up Crew.
+
+### Playing Trial without a server
+
+`dist/trial-standalone.html` is the whole game in one file — the simulation,
+the renderer, the audio, Three.js and every stylesheet inlined, with each ES
+module carried as a `data:` URL and wired together by an import map. Open it
+straight off disk (`file://`) and it plays: no server, no build step, no
+network. Handy for a laptop with no internet, or for handing the game to
+somebody on a memory stick.
+
+Rebuild it after changing any game file:
+
+```bash
+python3 tools/bundle-trial.py
+```
+
+The generator is deliberately dumb about nothing: it walks the real import
+graph from `js/trial.js`, so a new addon or module is picked up automatically.
