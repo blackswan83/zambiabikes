@@ -1019,6 +1019,7 @@
                 var dl = Math.sqrt(dx * dx + dz * dz) || 1;
                 st.x -= (dx / dl) * 0.32; st.z -= (dz / dl) * 0.32;
                 st.vx *= 0.2; st.vz *= 0.2;
+                ev.push({ t: "bump", what: pr.type, speed: speed });
               }
               break;
             }

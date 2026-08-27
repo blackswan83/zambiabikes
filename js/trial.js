@@ -21,6 +21,11 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   "use strict";
 
   var CORE = window.TRIAL;
+  var AUDIO = window.TRIAL_AUDIO || {
+    unlock: function () {}, enable: function () {}, isEnabled: function () { return false; },
+    begin: function () {}, end: function () {}, update: function () {},
+    event: function () {}, countdown: function () {}, objectHit: function () {}
+  };
   var canvas = document.getElementById("trial-canvas");
   if (!canvas || !CORE) return;
 
@@ -992,7 +997,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       node: cfg.node || null,
       paused: false, over: false, countdown: 2.2,
       camPos: new THREE.Vector3(), camLook: new THREE.Vector3(),
-      shake: 0, fov: 64, events: []
+      shake: 0, fov: 64, events: [], input: null, countBeep: 3
     };
     /* park the camera behind the start line before the countdown runs out */
     var p0 = world.trail[2];
@@ -1002,12 +1007,14 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     showScreen(null);
     setHudVisible(true);
     drawMinimapBase(world);
+    AUDIO.begin();
     return run;
   }
 
   function endRun(reason) {
     if (!run || run.over) return;
     run.over = true;
+    AUDIO.end();
     var summary = CORE.summarise(run.st, run.world);
     summary.reason = reason;
     recordResult(summary);
@@ -1137,6 +1144,8 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
         /* the drop-in countdown is wall time, not simulated time — clamping it
            to the frame budget makes it crawl on a slow machine */
         run.countdown -= Math.min(0.4, raw);
+        var beep = Math.ceil(run.countdown);
+        if (beep < run.countBeep) { run.countBeep = beep; AUDIO.countdown(beep <= 0); }
         setCountdown(run.countdown);
       } else if (elCount && !elCount.hidden) {
         elCount.hidden = true;
@@ -1148,6 +1157,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
           run.events.length = 0;
           var wasDown = run.st.onGround;
           var inp = readInput(!run.st.onGround);
+          run.input = inp;
           CORE.stepRider(run.st, inp, run.world, run.events);
           if (wasDown && !run.st.onGround) latchOnTakeoff();
           handleEvents(run.events);
@@ -1158,6 +1168,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       updateRiderMesh(dt);
       updateCamera(dt);
       updateHud(dt);
+      AUDIO.update(run.st, run.world, dt, run.input || {});
 
       if (scenery && scenery.sun) {
         scenery.sun.target.position.set(run.st.x, run.st.y, run.st.z);
@@ -1284,6 +1295,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   function handleEvents(evs) {
     for (var i = 0; i < evs.length; i++) {
       var e = evs[i];
+      AUDIO.event(e, run.st);
       if (e.t === "trick") {
         showTrick(e.name, e.pts, e.mult, e.perfect);
       } else if (e.t === "bail") {
@@ -1359,8 +1371,9 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   function togglePause() {
     if (!run || run.over) return;
     run.paused = !run.paused;
-    if (run.paused) { showScreen("screen-pause"); }
-    else { showScreen(null); setHudVisible(true); }
+    if (run.paused) { showScreen("screen-pause"); AUDIO.end(); }
+    else if (run) AUDIO.begin();
+    if (!run.paused) { showScreen(null); setHudVisible(true); }
   }
 
   function toggleFullscreen() {
@@ -1371,6 +1384,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   }
 
   function quitToMap() {
+    AUDIO.end();
     disposeScenery();
     run = null;
     setHudVisible(false);
@@ -1560,6 +1574,11 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     }
     var d = $("btn-detail");
     if (d) d.textContent = "✨ Detail: " + save.settings.detail;
+    var snd = $("btn-sound");
+    if (snd) {
+      snd.textContent = save.settings.sound ? "🔊 Sound: on" : "🔇 Sound: off";
+      snd.setAttribute("aria-pressed", save.settings.sound ? "true" : "false");
+    }
   }
 
   /* ---------- wiring ---------- */
@@ -1584,6 +1603,12 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   on($("btn-howto"), "click", function () { showScreen("screen-howto"); });
   on($("btn-howto-back"), "click", function () { showScreen("screen-map"); });
 
+  on($("btn-sound"), "click", function () {
+    save.settings.sound = !save.settings.sound;
+    persist();
+    AUDIO.enable(save.settings.sound);
+    syncSettingButtons();
+  });
   on($("btn-assist"), "click", function () {
     save.settings.assist = !save.settings.assist;
     persist();
@@ -1615,6 +1640,14 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     var tc = $("touch-controls");
     if (tc) tc.hidden = false;
   }
+
+  AUDIO.enable(save.settings.sound !== false);
+  ["pointerdown", "keydown", "touchstart"].forEach(function (evName) {
+    window.addEventListener(evName, function once() {
+      AUDIO.unlock();
+      window.removeEventListener(evName, once);
+    }, { passive: true });
+  });
 
   buildComposer();
   resize();
