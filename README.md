@@ -155,6 +155,33 @@ which is exactly why **a live race sets no personal bests, wins no medals,
 unlocks nothing and never reaches the club board**. Records still come only from
 a solo run whose Ghost Code the server re-simulates through `js/game3d-core.js`.
 
+**The Tour, together** (`js/mp-core.js` tour rooms, `mpTourArm`/`mpTourFinish`
+in `js/game3d.js`). A room can ride the whole Great Zambia Tour instead of one
+hill: ten legs, one convoy. Each leg is an ordinary live race, except that the
+roadbook picks the track and the sky — in order, Livingstone outward — and no
+host can override it. Between legs everybody stops at their own workshop, then
+readies up and the convoy rolls out again.
+
+Each rider's purse, bike condition and bag stay entirely on their own machine;
+nothing about the workshop crosses the wire. What crosses is what the standings
+need: the time the server took at the line, and the seconds a mechanical cost.
+That second number is the one thing a rider reports about themselves, and it is
+safe in a way the rest is not — `lostMs` only ever *adds*, so the only thing
+lying about it can do is put you further down the tour.
+
+The times add up, which is the whole point: **the rider in front on the road is
+not always the rider in front on the tour.** Cross the line three seconds up and
+a twenty-second puncture still drops you a place. The classification shows every
+rider's total, the leader in the jersey and everyone else's gap to them, and it
+is redrawn after every leg and in the lobby before the next one.
+
+A tour is thirty-odd minutes, which is longer than a home wifi connection can be
+relied on, so a tour room keeps a dropped rider's seat: their name, jersey and
+general classification stay in the standings marked *back soon*, and coming back
+to the same code under the same name gives all of it back rather than starting
+them again from Livingstone. (Until tomorrow's database, that only survives while
+somebody is still in the room.)
+
 **When the wifi goes.** The socket is pinged every thirty seconds and a device
 that stops answering is dropped, because wifi does not always say goodbye — a
 closed lid or a walk out of range can leave a half-open connection holding a

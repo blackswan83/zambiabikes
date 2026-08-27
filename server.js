@@ -456,7 +456,8 @@ function handle(id, msg, now) {
     if (rooms.size >= MP.MAX_ROOMS) return sendTo(id, "err", { why: "the clubhouse is full — try again in a minute" });
     const code = MP.makeCode(function (c) { return rooms.has(c); });
     if (!code) return sendTo(id, "err", { why: "the clubhouse is full — try again in a minute" });
-    const room = MP.newRoom(code, { track: msg.track, tod: msg.tod, wx: msg.wx, now: now });
+    const room = MP.newRoom(code, { track: msg.track, tod: msg.tod, wx: msg.wx,
+                                    tour: msg.tour === true, now: now });
     const add = MP.addPlayer(room, id, msg.name, msg.jersey, now);
     if (add.error) return sendTo(id, "err", { why: add.error });
     rooms.set(code, room);

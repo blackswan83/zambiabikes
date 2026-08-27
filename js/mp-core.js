@@ -29,6 +29,7 @@
   "use strict";
 
   var CORE = typeof require !== "undefined" ? require("./game3d-core.js") : window.ZR3;
+  var TOUR = typeof require !== "undefined" ? require("./tour.js") : window.ZR_TOUR;
 
   /* ---------- limits ----------
      Every one of these exists to stop a room, a name or a message being used
@@ -73,9 +74,19 @@
     return c.length === CODE_LEN ? c : null;
   }
 
-  function cleanTrack(raw) {
+  /* The ten tour legs are real tracks, but they are not on the menu and they are
+     not something a host can pick: on a tour the roadbook says which leg is next,
+     in order, and nothing else may name one. So a leg id only passes inside a
+     tour room, and even there only startRoom sets it. */
+  function cleanTrack(raw, allowTour) {
     var t = String(raw == null ? "" : raw);
-    return CORE.TRACK3_ORDER.indexOf(t) >= 0 ? t : null;
+    if (CORE.TRACK3_ORDER.indexOf(t) >= 0) return t;
+    if (allowTour && TOUR) {
+      for (var i = 0; i < TOUR.STAGES.length; i++) {
+        if (TOUR.STAGES[i].id === t) return t;
+      }
+    }
+    return null;
   }
 
   var TODS = ["auto", "dawn", "day", "sunset", "dusk"];
@@ -107,8 +118,17 @@
       tod: cleanTod(opts.tod),
       wx: cleanWx(opts.wx),
       hostId: null,
-      players: [],          /* [{id, name, jersey, ready, finished, result, joinedAt}] */
-      state: "lobby",       /* lobby | countdown | racing | done */
+      players: [],          /* [{id, name, jersey, ready, finished, result, gcMs, legs, joinedAt}] */
+      /* THE TOUR, TOGETHER. A tour room rides all ten legs in one sitting: each
+         leg is an ordinary live race on that leg's own track and weather, and
+         between them everybody goes to their own workshop and readies up. What
+         makes it a tour rather than ten races is that the times add up — the
+         general classification — so the rider in front on the road is not
+         always the rider in front overall, which is the whole drama of it. */
+      tour: !!opts.tour,
+      stage: 0,             /* which leg, 0-based */
+      away: [],             /* seats kept warm for riders whose wifi went */
+      state: "lobby",       /* lobby | countdown | racing | done | tourover */
       startAt: 0,           /* server clock, when the flag drops */
       raceEndsAt: 0,
       finishOrder: [],
@@ -142,6 +162,7 @@
     /* Joining mid-race would drop you onto a hill with everyone gone. The
        room simply says "they have started" and the code stays valid for the
        next race, so a late friend waits rather than being turned away. */
+    /* A tour room is joinable between legs as well: the convoy waits. */
     if (room.state !== "lobby") return { error: "race already started" };
     var p = {
       id: id,
@@ -150,8 +171,24 @@
       ready: false,
       finished: false,
       result: null,
+      gcMs: 0,              /* the tour so far, added up */
+      legs: [],             /* one entry per leg they have finished */
       joinedAt: now || 0
     };
+    /* A seat kept warm: wifi drops mid-tour, and a rider who comes back to the
+       same code under the same name gets their own general classification back
+       rather than starting the tour again from Livingstone. */
+    if (room.tour) {
+      for (var i = 0; i < room.away.length; i++) {
+        if (room.away[i].name === p.name) {
+          p.gcMs = room.away[i].gcMs;
+          p.legs = room.away[i].legs;
+          p.jersey = room.away[i].jersey;
+          room.away.splice(i, 1);
+          break;
+        }
+      }
+    }
     room.players.push(p);
     if (!room.hostId) room.hostId = id;
     room.touchedAt = now || 0;
@@ -160,6 +197,13 @@
 
   function removePlayer(room, id, now) {
     var before = room.players.length;
+    var going = findPlayer(room, id);
+    if (room.tour && going && (going.gcMs > 0 || going.legs.length)) {
+      room.away = room.away.filter(function (a) { return a.name !== going.name; });
+      room.away.push({ name: going.name, jersey: going.jersey,
+                       gcMs: going.gcMs, legs: going.legs });
+      if (room.away.length > MAX_PLAYERS) room.away.shift();
+    }
     room.players = room.players.filter(function (p) { return p.id !== id; });
     /* Their finish is NOT struck from the order. A rider who wins and then shuts
        the lid still won: strike them out and the crown, which is handed out by
@@ -191,6 +235,7 @@
   }
 
   function setTrack(room, id, opts, now) {
+    if (room.tour) return { error: "the roadbook picks the tour legs" };
     if (room.hostId !== id) return { error: "only the host picks the mountain" };
     if (room.state !== "lobby") return { error: "the race has started" };
     var t = cleanTrack(opts.track);
@@ -217,6 +262,15 @@
   function startRoom(room, id, now) {
     var err = startCheck(room, id);
     if (err) return { error: err };
+    /* On a tour the roadbook decides where you are going and what the sky is
+       doing — not the host's chips. Livingstone at dawn, then the river. */
+    if (room.tour && TOUR) {
+      var leg = TOUR.STAGES[room.stage];
+      if (!leg) return { error: "the tour is over" };
+      room.track = leg.id;
+      room.wx = TOUR.stageWx(leg);
+      room.tod = "auto";
+    }
     room.state = "countdown";
     room.startAt = now + COUNTDOWN_MS;
     room.raceEndsAt = 0;
@@ -267,6 +321,18 @@
       coins: Math.max(0, Math.min(9999, Math.round(Number(result && result.coins) || 0))),
       crashes: Math.max(0, Math.min(999, Math.round(Number(result && result.crashes) || 0)))
     };
+    /* A mechanical costs time. It is the rider's own client that rolls it and
+       reports it, which is safe in a way the rest is not: lostMs only ever
+       ADDS, so the only thing a rider can do by lying about it is finish
+       further down the tour than they really are. */
+    if (room.tour) {
+      var lost = Math.max(0, Math.min(600000,
+        Math.round(Number(result && result.lostMs) || 0)));
+      p.result.lostMs = lost;
+      p.gcMs += p.result.timeMs + lost;
+      p.result.gcMs = p.gcMs;
+      p.legs.push({ stage: room.stage, timeMs: p.result.timeMs, lostMs: lost });
+    }
     room.finishOrder.push({ id: id, name: p.name, jersey: p.jersey, place: room.finishOrder.length + 1, result: p.result });
     room.touchedAt = now || 0;
     /* once the first rider is home the rest get a minute, so a race can never
@@ -286,6 +352,18 @@
        reaching for "race again" would otherwise yank their friend off the
        mountain mid-descent and bin the run they were in the middle of. */
     if (room.state !== "done") return { error: "wait for everybody to get down" };
+    /* On a tour this is the convoy moving on to the next leg rather than a
+       rematch of the same one, and after the tenth there is nowhere to move
+       on to: the tour is over and the standings stand. */
+    if (room.tour) {
+      room.stage += 1;
+      if (!TOUR || room.stage >= TOUR.STAGES.length) {
+        room.stage = TOUR ? TOUR.STAGES.length : room.stage;
+        room.state = "tourover";
+        room.touchedAt = now || 0;
+        return { ok: true, over: true };
+      }
+    }
     room.state = "lobby";
     room.startAt = 0;
     room.raceEndsAt = 0;
@@ -293,6 +371,27 @@
     room.players.forEach(function (p) { p.ready = false; p.finished = false; p.result = null; });
     room.touchedAt = now || 0;
     return { ok: true };
+  }
+
+  /* THE GENERAL CLASSIFICATION. Every leg's time added up, quickest first, with
+     the gap to the leader — the thing that makes ten races into one tour. Riders
+     who have not finished a leg yet are still in it; riders whose wifi went keep
+     their place until they come back. */
+  function standings(room) {
+    var rows = room.players.map(function (p) {
+      return { id: p.id, name: p.name, jersey: p.jersey, gcMs: p.gcMs,
+               legs: p.legs.length, away: false };
+    }).concat((room.away || []).map(function (a) {
+      return { id: null, name: a.name, jersey: a.jersey, gcMs: a.gcMs,
+               legs: a.legs.length, away: true };
+    }));
+    rows.sort(function (a, b) {
+      if (a.legs !== b.legs) return b.legs - a.legs;   /* more legs ridden leads */
+      return a.gcMs - b.gcMs;
+    });
+    var lead = rows.length ? rows[0].gcMs : 0;
+    rows.forEach(function (r, i) { r.place = i + 1; r.gapMs = r.gcMs - lead; });
+    return rows;
   }
 
   /* what a client is told about the room — no ids beyond the ephemeral
@@ -305,11 +404,15 @@
       wx: room.wx,
       hostId: room.hostId,
       state: room.state,
+      tour: room.tour,
+      stage: room.stage,
+      gc: room.tour ? standings(room) : null,
       startAt: room.startAt,
       players: room.players.map(function (p) {
         return {
           id: p.id, name: p.name, jersey: p.jersey,
-          ready: p.ready, finished: p.finished, result: p.result
+          ready: p.ready, finished: p.finished, result: p.result,
+          gcMs: p.gcMs, legs: p.legs.length
         };
       }),
       finishOrder: room.finishOrder
@@ -351,6 +454,7 @@
     cleanName: cleanName, cleanJersey: cleanJersey, cleanCode: cleanCode,
     cleanTrack: cleanTrack, cleanTod: cleanTod, cleanWx: cleanWx, cleanPos: cleanPos,
     makeCode: makeCode, newRoom: newRoom, findPlayer: findPlayer, freeJersey: freeJersey,
+    standings: standings, TOUR_LEGS: TOUR ? TOUR.STAGES.length : 0,
     addPlayer: addPlayer, removePlayer: removePlayer, setReady: setReady, setTrack: setTrack,
     startCheck: startCheck, startRoom: startRoom, tick: tick, recordFinish: recordFinish,
     backToLobby: backToLobby, roomView: roomView, isIdle: isIdle

@@ -1892,6 +1892,63 @@
   color: #FFC9BE;
 }
 
+/* ---------- the tour, together ----------
+   The lobby between two legs is a roadbook page: which leg is next, where it
+   runs, what the sky is doing, and the classification so far. */
+.mp-road {
+  display: grid;
+  gap: calc(var(--ts) * 0.25);
+  padding: calc(var(--ts) * 0.45) calc(var(--ts) * 0.6);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.28);
+  border-left: 4px solid var(--sun);
+  text-align: left;
+}
+.mp-road[hidden] { display: none; }
+.mp-road-leg { margin: 0; font-family: var(--font-display); font-size: calc(var(--ts) * 1.15); }
+.mp-road-line { margin: 0; font-size: calc(var(--ts) * 0.92); color: var(--sun-soft); }
+
+.gc-head {
+  margin: calc(var(--ts) * 0.5) 0 calc(var(--ts) * 0.2);
+  font-family: var(--font-display);
+  font-size: calc(var(--ts) * 1.05);
+  color: var(--sun);
+}
+.gc-head--lobby { font-size: calc(var(--ts) * 0.95); }
+
+/* The classification. Times are the whole point of a tour, so they are tabular
+   and right-aligned: a gap you cannot line up is a gap you cannot read. */
+.gc-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: calc(var(--ts) * 0.95);
+  font-variant-numeric: tabular-nums;
+}
+.gc-table th {
+  text-align: left;
+  font-family: var(--font-display);
+  font-size: calc(var(--ts) * 0.8);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--sun-soft);
+  opacity: 0.75;
+  padding: 0 0.4rem 0.15rem;
+}
+.gc-table td { padding: 0.18rem 0.4rem; border-top: 1px solid rgba(255, 246, 224, 0.14); }
+.gc-table td:first-child { width: 2.2em; text-align: center; }
+.gc-table td:nth-child(3), .gc-table th:nth-child(3),
+.gc-table td:last-child, .gc-table th:last-child { text-align: right; }
+.gc-table tr.gc-you td { color: var(--sun); font-weight: 700; }
+.gc-table tr.gc-away td { opacity: 0.55; }
+.gc-dot {
+  display: inline-block;
+  width: 0.62em;
+  height: 0.62em;
+  border-radius: 50%;
+  margin-right: 0.4em;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5);
+}
+
 .mp-riders { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
 .mp-riders li {
   display: flex;

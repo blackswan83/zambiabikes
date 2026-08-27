@@ -192,7 +192,8 @@
   /* ---------- what the game asks for ---------- */
 
   Net.prototype.create = function (name, jersey, setup) {
-    this.send("create", { name: name, jersey: jersey, track: setup.track, tod: setup.tod, wx: setup.wx });
+    this.send("create", { name: name, jersey: jersey, track: setup.track,
+                          tod: setup.tod, wx: setup.wx, tour: setup.tour === true });
   };
   Net.prototype.join = function (code, name, jersey) {
     this.send("join", { code: code, name: name, jersey: jersey });

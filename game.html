@@ -278,6 +278,10 @@
                 friend — a
                 grown-up can send it for you.</p>
                 <button type="button" class="btn btn--copper btn--small" id="btn-mp-create">Start a race 🏁</button>
+                <h3>Or ride the whole Tour</h3>
+                <p class="mp-hint">Ten legs across Zambia, one convoy. Every leg is a race,
+                the times all add up, and there is a workshop stop between them.</p>
+                <button type="button" class="btn btn--forest btn--small" id="btn-mp-tour">Start the Tour 🇿🇲</button>
                 <h3>Or join one</h3>
                 <p class="mp-hint">Type the code your friend read out.</p>
                 <div class="mp-join">
@@ -295,6 +299,7 @@
                   <span class="mp-code-say">read it out to your friend</span>
                 </p>
                 <ul class="mp-riders" id="mp-riders" aria-live="polite"></ul>
+                <div class="mp-road" id="mp-road" hidden></div>
                 <p class="mp-hint" id="mp-hosthint"></p>
                 <div class="menu-row mp-actions">
                   <button type="button" class="btn btn--forest btn--small" id="btn-mp-ready">I'm ready 👍</button>
@@ -336,6 +341,7 @@
             </div>
             <div class="menu-row">
               <button type="button" class="btn btn--copper btn--big" id="btn-tour-go">Start stage 1</button>
+              <button type="button" class="btn btn--forest btn--small" id="btn-tour-live" hidden>Ride it with friends 📡</button>
               <button type="button" class="btn btn--ghost btn--small" id="btn-tour-restart">Start over</button>
               <button type="button" class="btn btn--ghost btn--small" id="btn-tour-exit">Back to menu</button>
             </div>
@@ -592,10 +598,11 @@
 <script src="js/tours-data.js"></script>
 <script src="js/main.js"></script>
 <script src="js/bikes.js"></script>
+<!-- order matters: mp-core reads the engine and the roadbook at load time -->
+<script src="js/game3d-core.js"></script>
 <script src="js/tour.js"></script>
 <script src="js/mp-core.js"></script>
 <script src="js/net.js"></script>
-<script src="js/game3d-core.js"></script>
 <script type="importmap">{ "imports": { "three": "./js/vendor/three.module.min.js" } }</script>
 <script type="module" src="js/game3d.js"></script>
 </body>

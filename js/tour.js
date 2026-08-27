@@ -417,6 +417,15 @@
 
   function stageAt(i) { return STAGES[i] || null; }
 
+  /* What the sky does on a leg, in the game's own words. One rule, so the leg
+     you ride on your own and the leg you ride with three friends have the same
+     weather over them — and so the server and the browser cannot disagree about
+     what the roadbook said. */
+  function stageWx(stage) {
+    var w = (stage && WEATHER[stage.weather]) || {};
+    return w.bolts ? "storm" : w.rainK > 0 ? "rain" : "clear";
+  }
+
   var API = {
     STAGES: STAGES, SURFACES: SURFACES, WEATHER: WEATHER, SPARES: SPARES,
     FAULTS: FAULTS, BAG_SLOTS: BAG_SLOTS, TOTAL_M: TOTAL_M, KEY: KEY,
@@ -426,7 +435,7 @@
     stageEarnings: stageEarnings, targetMs: targetMs, stageWear: stageWear,
     faultRisk: faultRisk, conditionStats: conditionStats, rollFault: rollFault,
     freshTour: freshTour, raceNumber: raceNumber, startTimeLabel: startTimeLabel,
-    validTour: validTour, totalMs: totalMs, stageAt: stageAt,
+    validTour: validTour, totalMs: totalMs, stageAt: stageAt, stageWx: stageWx,
     /* fold the stages into the shared track table */
     register: function (CORE) {
       STAGES.forEach(function (s) { CORE.TRACKS3[s.id] = s; });

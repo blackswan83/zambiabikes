@@ -2932,7 +2932,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     /* abandoning a tour leg drops you back into the roadbook to try again —
        the mechanical is rolled from the stage, so you cannot re-roll your luck */
     var wasTour = tourMode;
-    if (mpMode) { mpLeaveAll(); if (NET && NET.room) NET.leave(); }
+    if (mpMode) { if (NET && NET.room) NET.leave(); mpLeaveAll(); }
     tourMode = false;
     pendingFault = null;
     mode = "menu";
@@ -3752,11 +3752,31 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     preTourTrack = null;
   }
 
-  function loadTour() {
-    var t = lsGet(TOUR.KEY, null);
+  /* A rider can be forty minutes into their own tour and still be invited into
+     a convoy. Those are two different tours — different legs, different purse,
+     different bike — so they are kept under two different keys and the solo one
+     is picked back up untouched when the convoy is over. */
+  var TOUR_LIVE_KEY = "zr3_tourlive";
+  var tourKey = null;            /* set once TOUR is known */
+
+  function loadTour(key) {
+    var t = lsGet(key || tourKey, null);
     return TOUR.validTour(t) ? t : null;
   }
-  function saveTour() { if (tour) lsSet(TOUR.KEY, tour); }
+  function saveTour() { if (tour) lsSet(tourKey, tour); }
+
+  /* step into the convoy's own tour, keeping the solo one where it was */
+  function useLiveTour() {
+    if (tourKey === TOUR_LIVE_KEY) return;
+    tourKey = TOUR_LIVE_KEY;
+    tour = loadTour() || TOUR.freshTour(profile.name);
+  }
+  /* and step back out of it */
+  function useSoloTour() {
+    if (tourKey === TOUR.KEY) return;
+    tourKey = TOUR.KEY;
+    tour = loadTour();
+  }
 
   /* the fastest lap of the whole country this device has ever done */
   function bestTour() {
@@ -3765,6 +3785,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   }
 
   function tourStage() { return tour ? TOUR.stageAt(tour.stage) : null; }
+  if (TOUR) tourKey = TOUR.KEY;
 
   function showOnly(which) {
     [el.menu, el.tour, el.brief, el.shop, el.results, el.howto, el.pause, el.mp].forEach(function (o) {
@@ -3777,6 +3798,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   function openTour() {
     if (!TOUR) return;
     setPlayers(1, false);          /* the tour is one rider, one clock */
+    useSoloTour();                 /* the roadbook is always your own tour */
     if (!tour) tour = loadTour() || TOUR.freshTour(profile.name);
     if (!preTourTrack) preTourTrack = CORE.TRACK3_ORDER.indexOf(selTrack) >= 0 ? selTrack : CORE.TRACK3_ORDER[0];
     tour.rider = profile.name || tour.rider;
@@ -3882,11 +3904,14 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   function openShop() {
     mode = "tour";
     renderShop();
+    var done = $("btn-shop-done");
+    if (done) done.textContent = mpInShop ? "Back to the convoy 📡" : "Back to the stage";
     showOnly(el.shop);
   }
 
   function renderShop() {
-    var st = tourStage();
+    var st = mpInShop && NET && NET.room && NET.room.tour && TOUR
+      ? TOUR.stageAt(NET.room.stage) : tourStage();
     $("shop-sub").textContent = st
       ? "Before stage " + st.n + " — " + st.name + ". You have K " + tour.kwacha + "."
       : "You have K " + tour.kwacha + ".";
@@ -3955,9 +3980,8 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
        their own and riding the same leg again meets the same mechanical.
        You can ride better; you cannot re-roll your luck. */
     /* the roadbook says 🌧️, so the roadbook gets rain */
-    var stW = TOUR.WEATHER[st.weather] || {};
-    wxForced = stW.rainK >= 0.8 ? "rain" : stW.rainK > 0 ? "rain" : null;
-    if (stW.rainK > 0 && stW.rainK < 0.8) wxForced = "rain";
+    var legWx = TOUR.stageWx(st);
+    wxForced = legWx === "clear" ? null : legWx;
     pendingFault = TOUR.rollFault(st, tour.condition, tour.bag, tour.number + tour.stage);
     selTrack = st.id;
     tourMode = true;
@@ -3973,8 +3997,11 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   }
 
   /* what the tour does with a finished stage, instead of the normal results */
-  function finishTourStage(st2, timeMs) {
-    var st = tourStage();
+  /* THE BOOKS FOR ONE LEG. What it paid, what it took out of the bike, what
+     broke on the road and whether the bag had the part. The solo tour and the
+     live one keep exactly the same books — only the screen around them differs,
+     so this is the one place the numbers are worked out. */
+  function tourStageBooks(st, st2, timeMs) {
     var coins = st2.coinCount, crashes = st2.crashes;
     var pay = TOUR.stageEarnings(st, timeMs, coins, crashes);
     var wear = TOUR.stageWear(st, crashes);
@@ -4005,8 +4032,17 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     tour.stage++;
     saveTour();
 
-    var beatPar = timeMs <= TOUR.targetMs(st);
-    var last = tour.stage >= TOUR.STAGES.length;
+    return { pay: pay, wear: wear, lostMs: lostMs, faultLine: faultLine, vanPts: vanPts,
+             coins: coins, crashes: crashes,
+             beatPar: timeMs <= TOUR.targetMs(st),
+             last: tour.stage >= TOUR.STAGES.length };
+  }
+
+  function finishTourStage(st2, timeMs) {
+    var st = tourStage();
+    var books = tourStageBooks(st, st2, timeMs);
+    var pay = books.pay, wear = books.wear, vanPts = books.vanPts;
+    var faultLine = books.faultLine, beatPar = books.beatPar, last = books.last;
 
     /* the payoff for forty minutes of riding: a whole-country time to beat */
     var finale = "";
@@ -4164,7 +4200,12 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     onTour("btn-brief-go", startTourStage);
     onTour("btn-brief-shop", openShop);
     onTour("btn-brief-back", openTour);
-    onTour("btn-shop-done", openBrief);
+    onTour("btn-shop-done", function () {
+      /* on a live tour the workshop leads back to the convoy, not to a briefing
+         only this rider can see */
+      if (mpInShop) { mpInShop = false; mode = "mp"; showOnly(el.mp); renderMp(); return; }
+      openBrief();
+    });
 
     $("shop-repair").addEventListener("click", function (e) {
       var b = e.target.closest("[data-repair]");
@@ -4200,6 +4241,16 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     onTour("btn-tour-next", openShop);
     onTour("btn-tour-retry", retryTourStage);
     onTour("btn-tour-road", openTour);
+    /* the roadbook's own way into a convoy — a rider looking at the Tour should
+       not have to know that "Race a friend" is where the Tour lives too */
+    onTour("btn-tour-live", function () {
+      if (!NET) return;
+      openMp();
+      var setup = mpSetup();
+      setup.tour = true;
+      if (NET.state === "open") NET.create(CORE.sanitizeName(profile.name), profile.jersey, setup);
+      else mpPendingTour = setup;
+    });
     onTour("btn-tour-menu", function () { leaveTour(); quitToMenu(); });
   }
 
@@ -4225,6 +4276,9 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   var mpPending = null;          /* your own result, until the server echoes it */
   var mpLost = false;            /* the club server went away mid-race */
   var mpSaved = null;            /* the rider's own track/light/weather, borrowed */
+  var mpTourBooks = null;        /* the leg just ridden, while its sheet is up */
+  var mpInShop = false;          /* at the workshop between two legs of a live tour */
+  var mpPendingTour = null;      /* a convoy asked for before the socket was up */
 
   function mpSetup() {
     return { track: selTrack, tod: todSel, wx: wxSel };
@@ -4265,7 +4319,8 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     var sub = $("mp-sub");
     if (sub) {
       sub.textContent = NET.state === "open"
-        ? (room ? "Everyone here rides the same hill at the same moment."
+        ? (room ? (room.tour ? "Ten legs, one convoy, one clock each."
+                             : "Everyone here rides the same hill at the same moment.")
                 : "Two devices, one hill, at the same time.")
         : NET.state === "connecting" ? "Finding the club server…"
         : "The club server is not answering — live racing needs it running.";
@@ -4289,8 +4344,35 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       }).join("");
     }
 
+    /* on a tour the lobby is a roadbook page: which leg is next, where it goes,
+       what the sky is doing, and where everybody stands overall */
+    var road = $("mp-road");
+    if (road) {
+      var leg = room.tour && TOUR ? TOUR.stageAt(room.stage) : null;
+      if (!leg) { road.hidden = true; road.innerHTML = ""; }
+      else {
+        var w = TOUR.WEATHER[leg.weather] || {};
+        var sf = TOUR.SURFACES[leg.surface] || {};
+        road.hidden = false;
+        road.innerHTML =
+          '<p class="mp-road-leg">Leg <b>' + leg.n + "</b> of " + TOUR.STAGES.length +
+            " · <b>" + leg.name + "</b></p>" +
+          '<p class="mp-road-line">' + leg.from + " → " + leg.to + " · " +
+            (leg.length / 1000).toFixed(2) + " km · " + (sf.icon || "") + " " +
+            (sf.label || leg.surface) + " · " + (w.icon || "") + " " + (w.label || leg.weather) + "</p>" +
+          (room.gc && room.gc.some(function (g) { return g.legs > 0; })
+            ? '<h4 class="gc-head gc-head--lobby">General classification</h4>' + mpGc(room)
+            : '<p class="mp-road-line">Livingstone, and the whole country to go.</p>');
+      }
+    }
+
     var hint = $("mp-hosthint");
-    if (hint) {
+    if (hint && room.tour) {
+      hint.innerHTML = room.players.length < 2
+        ? "<b>Read the code out — the convoy leaves when everybody is here.</b>"
+        : NET.isHost() ? "When everybody is ready, roll them out."
+                       : "Waiting for " + hostName(room) + " to roll the convoy out.";
+    } else if (hint) {
       var t = CORE.TRACKS3[room.track];
       hint.innerHTML = "Everyone rides <b>" + (t ? t.name : room.track) + "</b>" +
         (room.wx !== "clear" ? " in the " + room.wx : "") +
@@ -4313,6 +4395,9 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       startBtn.hidden = !NET.isHost();
       var can = room.players.length >= 2 && room.players.every(function (p) { return p.ready; });
       startBtn.disabled = !can;
+      startBtn.textContent = room.tour
+        ? (room.stage ? "Roll out for leg " + (room.stage + 1) + " 🇿🇲" : "Roll out of Livingstone 🇿🇲")
+        : "Drop the flag 🏁";
       startBtn.className = "btn btn--small " + (can ? "btn--copper" : "btn--ghost");
     }
   }
@@ -4429,7 +4514,8 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
        give it back when the race is over — otherwise a friend's choice of storm
        quietly follows them home and disqualifies their solo runs. */
     mpSaved = { track: selTrack, tod: todSel, wx: wxSel };
-    if (NET.room.track !== selTrack) selectTrack(NET.room.track, false);
+    if (NET.room.tour) { mpTourArm(); }
+    else if (NET.room.track !== selTrack) selectTrack(NET.room.track, false);
     todSel = NET.room.tod;
     wxSel = NET.room.wx;
     refreshTodChips();
@@ -4446,8 +4532,65 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     }
   }
 
+  /* ==================================================================
+     THE TOUR, TOGETHER
+
+     Ten legs, one convoy. Each leg is an ordinary live race on that leg's
+     own track and sky — the roadbook picks them, in order, not the host —
+     and between legs everybody goes to their own workshop and readies up.
+
+     Each rider's purse, bike condition and bag stay entirely on their own
+     machine: nothing about the workshop crosses the wire. What crosses is
+     what the standings need — the time the server took at the line, and
+     the seconds a mechanical cost, which is the one number a rider reports
+     about themselves and can only ever use to slow themselves down.
+
+     The times add up. That is the whole point: the rider in front on the
+     road is not always the rider in front on the tour.
+     ================================================================== */
+
+  function mpTourLeg() {
+    return NET.room && NET.room.tour && TOUR ? TOUR.stageAt(NET.room.stage) : null;
+  }
+
+  function mpTourArm() {
+    var leg = mpTourLeg();
+    if (!leg) return;
+    /* the rider's own tour: their purse, their bike, their bag. Only the leg
+       number is the room's to say. */
+    useLiveTour();
+    if (!tour || !TOUR.validTour(tour)) tour = TOUR.freshTour(profile.name);
+    if (NET.room.stage === 0 && tour.stage !== 0) tour = TOUR.freshTour(profile.name);
+    tour.stage = NET.room.stage;
+    saveTour();
+    var legWx = TOUR.stageWx(leg);
+    wxForced = legWx === "clear" ? null : legWx;
+    pendingFault = TOUR.rollFault(leg, tour.condition, tour.bag, tour.number + tour.stage);
+    selTrack = leg.id;
+    tourMode = true;
+  }
+
+  /* the classification, as a table: everybody's legs added up, leader first */
+  function mpGc(room) {
+    var gc = room.gc || [];
+    if (!gc.length) return "";
+    var rows = gc.map(function (r) {
+      var lead = r.place === 1 && r.legs > 0;
+      return '<tr class="' + (r.id === NET.you ? "gc-you " : "") + (r.away ? "gc-away" : "") + '">' +
+        "<td>" + (lead ? "👕" : r.place) + "</td>" +
+        '<td><span class="gc-dot" style="background:' + r.jersey + '"></span>' +
+          r.name + (r.id === NET.you ? " (you)" : "") + (r.away ? " · back soon" : "") + "</td>" +
+        "<td>" + (r.legs ? fmtTime(r.gcMs) : "—") + "</td>" +
+        "<td>" + (r.place === 1 || !r.legs ? "" : "+" + fmtTime(r.gapMs)) + "</td>" +
+        "</tr>";
+    }).join("");
+    return '<table class="gc-table"><thead><tr><th></th><th>Rider</th>' +
+      "<th>Tour</th><th>Gap</th></tr></thead><tbody>" + rows + "</tbody></table>";
+  }
+
   function mpFinishRace() {
     var st = run.st;
+    if (NET.room && NET.room.tour) { mpTourFinish(st); return; }
     var r = {
       timeMs: Math.round(st.finishT * 1000),
       coins: st.coinCount,
@@ -4460,6 +4603,87 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
        who just crossed the line reading their own name under "still out there". */
     mpPending = r;
     renderMpResults();
+  }
+
+  function mpTourFinish(st2) {
+    var leg = mpTourLeg() || tourStage();
+    var localMs = Math.round(st2.finishT * 1000);
+    /* the books first: the mechanical, the purse, the wear. Same numbers the
+       solo tour keeps, and they stay on this machine. */
+    var books = tourStageBooks(leg, st2, localMs);
+    tourMode = false;
+    wxForced = null;
+    mpTourBooks = { books: books, leg: leg, localMs: localMs };
+    if (!NET.room) { mpLost = true; renderMpResults(); return; }
+    NET.finish({ timeMs: localMs, coins: books.coins, crashes: books.crashes,
+                 lostMs: books.lostMs });
+    mpPending = { timeMs: localMs, coins: books.coins, crashes: books.crashes };
+    renderMpResults();
+  }
+
+  /* one leg of a live tour: the stage sheet a solo rider gets, with the
+     classification under it and the convoy's next move as the button */
+  function renderMpTourResults() {
+    var room = NET.room, tb = mpTourBooks;
+    if (!room || !tb) return false;
+    var leg = tb.leg, books = tb.books;
+    var mine = null;
+    (room.finishOrder || []).forEach(function (f) { if (f.id === NET.you) mine = f; });
+    /* the server's number once it lands; ours until then */
+    var timeMs = mine && mine.result ? mine.result.timeMs : tb.localMs;
+    var waiting = room.players.filter(function (p) {
+      return !p.finished && p.id !== NET.you;
+    });
+    var over = room.state === "tourover";
+    var last = room.stage >= (MPC && MPC.TOUR_LEGS ? MPC.TOUR_LEGS - 1 : 9);
+
+    el.results.classList.toggle("is-finale", over);
+    showResultsRow("results-row-mp");
+    var canGo = room.state === "done" || over;
+    var againBtn = $("btn-mp-again");
+    if (againBtn) {
+      againBtn.hidden = over;
+      againBtn.disabled = !canGo;
+      againBtn.className = "btn btn--big " + (canGo ? "btn--copper" : "btn--ghost");
+      againBtn.textContent = canGo
+        ? (last ? "Roll into Livingstone 🏁" : "Workshop, then leg " + (room.stage + 2) + " 🔧")
+        : waiting.length
+          ? "Waiting for " + waiting.map(function (p) { return p.name; }).join(" and ") + "…"
+          : "Waiting for the leg to finish…";
+    }
+    var backBtn = $("btn-mp-back");
+    if (backBtn) { backBtn.disabled = false; backBtn.textContent = "The convoy"; }
+
+    el.resultsContent.innerHTML =
+      '<div class="results-medal">' + (over ? "🏆" : books.beatPar ? "⏱️" : "🚵") + "</div>" +
+      "<h2>Leg " + leg.n + " — " + leg.name + "</h2>" +
+      '<p class="gr-tag">' + leg.from + " → " + leg.to + " · code " + room.code + "</p>" +
+      '<div class="res-stats">' +
+        resStat("Your leg", fmtTime(timeMs)) +
+        resStat("Par", fmtTime(TOUR.targetMs(leg)), books.beatPar ? "beaten" : "missed") +
+        resStat("Earned", "K " + books.pay.total) +
+      "</div>" +
+      books.faultLine +
+      '<h3 class="gc-head">' + (over ? "The Great Zambia Tour — final classification"
+                                     : "General classification after leg " + leg.n) + "</h3>" +
+      mpGc(room) +
+      (waiting.length
+        ? '<p class="vs-gap">Still out there: ' + waiting.map(function (p) { return p.name; }).join(", ") + "</p>"
+        : "") +
+      '<p class="res-wear">🔧 The leg took <b>' + books.wear + "%</b> out of the bike" +
+        (books.vanPts ? ", and the club van 🚐 put <b>" + books.vanPts + "%</b> back for free" : "") +
+        " — condition now <b>" + Math.round(tour.condition) + "%</b>. Purse: <b>K " +
+        tour.kwacha + "</b>.</p>" +
+      '<p class="results-note">A tour ridden together stays between the riders in the convoy: ' +
+      "the legs, the purse and the bike are yours, but no ⏱ bests, no Ghost Codes and nothing " +
+      "goes to the club board. Ride the tour on your own for those.</p>";
+
+    mode = "results";
+    el.results.hidden = false;
+    hideRideChrome();
+    stopRumble();
+    stopRain();
+    return true;
   }
 
   /* The club server went away while they were riding. They still rode it, and
@@ -4499,6 +4723,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   function renderMpResults() {
     var room = NET.room;
     if (!room) { mpLostResults(); return; }
+    if (room.tour && renderMpTourResults()) return;
     var order = room.finishOrder.slice();
     var mine = null;
     order.forEach(function (f) { if (f.id === NET.you) mine = f; });
@@ -4584,6 +4809,13 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     mpArmed = false;
     mpPending = null;
     mpLost = false;
+    mpTourBooks = null;
+    mpInShop = false;
+    tourMode = false;
+    wxForced = null;
+    /* Between two legs the convoy is still on, so the convoy's tour stays
+       loaded. Once the room is gone, the rider's own tour comes back. */
+    if (TOUR && (!NET || !NET.room || !NET.room.tour)) useSoloTour();
     if (mpSaved) {
       if (mpSaved.track !== selTrack) selectTrack(mpSaved.track, false);
       todSel = mpSaved.tod;
@@ -4610,7 +4842,15 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
         renderMp();
         return;
       }
-      if (type === "state") { renderMp(); return; }
+      if (type === "state") {
+        if (mpPendingTour && NET.state === "open" && !NET.room) {
+          var setup = mpPendingTour;
+          mpPendingTour = null;
+          NET.create(CORE.sanitizeName(profile.name), profile.jersey, setup);
+        }
+        renderMp();
+        return;
+      }
       if (type === "room") {
         mpErr("");
         renderMp();
@@ -4630,9 +4870,13 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
           /* the host lined everyone up again */
           stopRumble();
           stopRain();
+          var shopping = mpInShop;
           mpLeaveAll();
-          mode = "mp";
-          showOnly(el.mp);
+          mpInShop = shopping;      /* mid-repair: finish before rejoining the convoy */
+          if (!shopping) {
+            mode = "mp";
+            showOnly(el.mp);
+          }
           renderMp();
         }
         return;
@@ -4652,6 +4896,12 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
       mpErr("");
       NET.create(CORE.sanitizeName(profile.name), profile.jersey, mpSetup());
     });
+    onMp("btn-mp-tour", function () {
+      mpErr("");
+      var setup = mpSetup();
+      setup.tour = true;
+      NET.create(CORE.sanitizeName(profile.name), profile.jersey, setup);
+    });
     onMp("btn-mp-join", function () {
       var box = $("mp-code");
       var code = box ? box.value : "";
@@ -4665,7 +4915,17 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     });
     onMp("btn-mp-start", function () { NET.start(); });
     onMp("btn-mp-leave", function () { NET.leave(); mpLeaveAll(); renderMp(); });
-    onMp("btn-mp-again", function () { NET.again(); });
+    onMp("btn-mp-again", function () {
+      var room0 = NET.room;
+      var moreLegs = !!(room0 && room0.tour && TOUR &&
+                        room0.stage < TOUR.STAGES.length - 1);
+      NET.again();
+      /* On a tour this is the convoy moving on: everybody stops at their own
+         workshop before the next leg, so open it rather than dropping them
+         straight back at the start line. After the tenth there is no next leg
+         and no workshop — only the final classification. */
+      if (moreLegs && tour) { mpInShop = true; openShop(); }
+    });
     onMp("btn-mp-back", function () {
       /* This used to show the lobby without telling the server, which left the
          room finished for good: the flag could never drop again and the only way
@@ -4696,6 +4956,8 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     NET.probe(function (live) {
       var btn = $("btn-mp-open");
       if (btn) btn.hidden = !live;
+      var tbtn = $("btn-tour-live");
+      if (tbtn) tbtn.hidden = !live;
     });
   }
 
