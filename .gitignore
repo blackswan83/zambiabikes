@@ -1,3 +1,14 @@
 node_modules/
 *.log
 .env
+
+# Unreal Engine — generated build output and locally generated Content.
+# Content/ is produced by Tools/gen_assets.py; see docs/unreal-mac.md.
+unreal/ZambiaRush/Binaries/
+unreal/ZambiaRush/Intermediate/
+unreal/ZambiaRush/Saved/
+unreal/ZambiaRush/DerivedDataCache/
+unreal/ZambiaRush/Content/
+unreal/ZambiaRush/Build/
+*.xcworkspace
+*.xcodeproj
