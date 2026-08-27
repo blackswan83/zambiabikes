@@ -374,6 +374,11 @@
           tone(720, 0.1, "triangle", 0.13);
           tone(1080, 0.16, "triangle", 0.1, 0, 0.07);
           break;
+        case "portage":
+          burst({ type: "highpass", freq: 2200, freqTo: 900, dur: 0.34, vol: 0.16, attack: 0.05 });
+          tone(140, 0.11, "sine", 0.11, 96, 0.1);
+          tone(132, 0.11, "sine", 0.1, 92, 0.34);
+          break;
         case "respawn":
           tone(420, 0.14, "sine", 0.1, 620);
           break;

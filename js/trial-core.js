@@ -780,6 +780,7 @@
       spinV: 0, flipV: 0, airVel: 0,
 
       crashT: 0, crashKind: null, dead: false, invuln: 0, chatter: 0, offTrail: false,
+      bailIdx: -99, bailStreak: 0, portages: 0,
       health: MAX_HEALTH, maxHealth: MAX_HEALTH, bails: 0,
 
       style: 0, airStyle: 0, combo: 0, comboT: 0, comboBest: 0,
@@ -856,6 +857,14 @@
 
   function bail(st, why, severity, ev) {
     if (st.invuln > 0 || st.crashT > 0) return;
+    /* Going down in the same place twice is a rider who cannot get past
+       something, not a rider making fresh mistakes — so it costs less, and
+       the third time the mountain lets them through (see respawn). */
+    if (Math.abs(st.trailIdx - st.bailIdx) <= 8) st.bailStreak++;
+    else st.bailStreak = 1;
+    st.bailIdx = st.trailIdx;
+    if (st.bailStreak >= 2) severity *= 0.55;
+
     st.crashT = 1.15;
     st.crashKind = why;
     st.bails++;
@@ -988,6 +997,16 @@
       var flipTarget = flipIn * FLIP_RATE;
       st.flipV += (flipTarget - st.flipV) * Math.min(1, 6 * DT);
       st.flip += st.flipV * DT;
+
+      /* Let go and the rider spots the landing: rotation creeps back to the
+         nearest whole turn instead of hanging wherever the last input left
+         it. Without this, steering in the air to make a corner you were
+         launched over is a crash — and on a corner that always launches you,
+         a crash you repeat until the run is over. Holding the key still
+         out-turns the correction, so a committed 360 is still a 360. */
+      var straighten = (st.assist ? 1.8 : 0.9) * DT;
+      if (!steer) st.spin = creepToWholeTurn(st.spin, straighten);
+      if (!flipIn) st.flip = creepToWholeTurn(st.flip, straighten * 0.75);
 
       var whipIn = (inp.whipL ? 1 : 0) - (inp.whipR ? 1 : 0);
       var whipTarget = whipIn * WHIP_MAX;
@@ -1146,7 +1165,33 @@
     st.airT = 0;
   }
 
+  /* The feature covering a trail index, if any. */
+  function featureAt(world, idx) {
+    for (var i = 0; i < world.features.length; i++) {
+      var f = world.features[i];
+      if (idx >= f.i0 - 4 && idx <= f.i1 + 4) return f;
+    }
+    return null;
+  }
+
   function respawn(st, world, ev) {
+    /* Third go at the same spot: you walk it. Every mountain has to have a
+       bottom — a checkpoint that cannot deliver enough speed to clear the
+       feature in front of it would otherwise loop until the bail bar was
+       empty, with no way down at all. Walking costs the run its flow, not
+       its existence. */
+    if (st.bailStreak >= 3) {
+      var f = featureAt(world, st.bailIdx);
+      var past = f ? f.i1 + 4 : st.bailIdx + 14;
+      past = Math.max(st.respawnIdx, Math.min(world.trailN - 4, past));
+      if (past > st.respawnIdx) {
+        st.respawnIdx = past;
+        st.portages++;
+        ev.push({ t: "portage", to: past, feature: f ? f.name : null });
+      }
+      st.bailStreak = 0;
+    }
+
     var rp = world.trail[st.respawnIdx];
     var rq = world.trail[Math.min(world.trailN - 1, st.respawnIdx + 2)];
     st.x = rp.x; st.z = rp.z; st.y = rp.y + 0.05;
@@ -1158,6 +1203,22 @@
     st.invuln = 0.8;
     st.crashKind = null;
     ev.push({ t: "respawn" });
+  }
+
+  /* Move an angle toward the nearest whole turn, at most `rate` — but only
+     when it is already close to one. This tidies up the few degrees a rider
+     picks up steering in the air; it must never rescue a rotation they
+     actually started and failed to finish, or landing a trick would stop
+     meaning anything. */
+  var STRAIGHTEN_WINDOW = 0.8;
+
+  function creepToWholeTurn(angle, rate) {
+    var TAU = Math.PI * 2;
+    var target = Math.round(angle / TAU) * TAU;
+    var d = target - angle;
+    if (Math.abs(d) > STRAIGHTEN_WINDOW) return angle;
+    if (Math.abs(d) <= rate) return target;
+    return angle + (d > 0 ? rate : -rate);
   }
 
   function dist2(p, st) {
@@ -1176,6 +1237,7 @@
       topSpeed: st.topSpeed * 3.6,
       health: st.health,
       features: world.features.length, featHit: st.featHit, featBigHit: st.featBigHit,
+      portages: st.portages,
       progress: Math.min(1, st.trailIdx / world.finishIdx)
     };
   }

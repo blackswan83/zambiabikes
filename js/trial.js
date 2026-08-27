@@ -1355,7 +1355,8 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
         run.dust.emit(run.st.x, run.st.y, run.st.z, 8, 2.2);
       } else if (e.t === "land") {
         run.dust.emit(run.st.x, run.st.y, run.st.z, 4, 1.4);
-      } else if (e.t === "gate") {
+      } else if (e.t === "portage") {
+        showTrick(e.feature ? "Walked the " + e.feature : "Walked it", 0, 1, false);
         flash("is-gate");
       } else if (e.t === "takeoff") {
         run.dust.emit(run.st.x, run.st.y, run.st.z, 3, 1.6);
@@ -1493,6 +1494,10 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     }).join("");
 
     var extra = [];
+    if (sum.portages) {
+      extra.push('<p class="res-walk">' + sum.portages + " section" +
+        (sum.portages === 1 ? "" : "s") + " walked</p>");
+    }
     if (node) extra.push('<p class="res-obj">' + CORE.objectiveLabel(node) + " — " +
       (sum.objectiveMet ? '<b class="ok">cleared</b>' : '<b class="no">missed</b>') + "</p>");
     if (sum.repGained) extra.push('<p class="res-rep">+' + sum.repGained + " rep</p>");
