@@ -3901,8 +3901,9 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
 
   /* ---------- the workshop ---------- */
 
-  function openShop() {
+  function openShop(legAhead) {
     mode = "tour";
+    mpShopLeg = legAhead || null;
     renderShop();
     var done = $("btn-shop-done");
     if (done) done.textContent = mpInShop ? "Back to the convoy 📡" : "Back to the stage";
@@ -3910,8 +3911,13 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   }
 
   function renderShop() {
+    /* On a convoy the next leg is the room's to say — and for one round trip
+       after asking to move on, the room has not said it yet, so the leg we know
+       is coming stands in rather than the one just ridden. */
     var st = mpInShop && NET && NET.room && NET.room.tour && TOUR
-      ? TOUR.stageAt(NET.room.stage) : tourStage();
+      ? (TOUR.stageAt(NET.room.stage) || mpShopLeg)
+      : tourStage();
+    if (mpInShop && mpShopLeg && st && st.n < mpShopLeg.n) st = mpShopLeg;
     $("shop-sub").textContent = st
       ? "Before stage " + st.n + " — " + st.name + ". You have K " + tour.kwacha + "."
       : "You have K " + tour.kwacha + ".";
@@ -4279,6 +4285,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
   var mpTourBooks = null;        /* the leg just ridden, while its sheet is up */
   var mpInShop = false;          /* at the workshop between two legs of a live tour */
   var mpPendingTour = null;      /* a convoy asked for before the socket was up */
+  var mpShopLeg = null;          /* the leg we know is next, before the room says so */
 
   function mpSetup() {
     return { track: selTrack, tod: todSel, wx: wxSel };
@@ -4316,6 +4323,12 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     if (entry) entry.hidden = !!room;
     if (lobby) lobby.hidden = !room;
 
+    var title = $("mp-title");
+    if (title) {
+      title.innerHTML = room && room.tour
+        ? "The Great <em>Zambia</em> Tour"
+        : "Race a <em>friend</em>, live";
+    }
     var sub = $("mp-sub");
     if (sub) {
       sub.textContent = NET.state === "open"
@@ -4811,6 +4824,7 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
     mpLost = false;
     mpTourBooks = null;
     mpInShop = false;
+    mpShopLeg = null;
     tourMode = false;
     wxForced = null;
     /* Between two legs the convoy is still on, so the convoy's tour stays
@@ -4873,7 +4887,8 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
           var shopping = mpInShop;
           mpLeaveAll();
           mpInShop = shopping;      /* mid-repair: finish before rejoining the convoy */
-          if (!shopping) {
+          if (shopping) { mpShopLeg = null; renderShop(); }
+          else {
             mode = "mp";
             showOnly(el.mp);
           }
@@ -4924,7 +4939,10 @@ import { FXAAPass } from "./vendor/addons/postprocessing/FXAAPass.js";
          workshop before the next leg, so open it rather than dropping them
          straight back at the start line. After the tenth there is no next leg
          and no workshop — only the final classification. */
-      if (moreLegs && tour) { mpInShop = true; openShop(); }
+      if (moreLegs && tour) {
+        mpInShop = true;
+        openShop(TOUR.stageAt(room0.stage + 1));
+      }
     });
     onMp("btn-mp-back", function () {
       /* This used to show the lobby without telling the server, which left the

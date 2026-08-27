@@ -1920,6 +1920,8 @@
    and right-aligned: a gap you cannot line up is a gap you cannot read. */
 .gc-table {
   width: 100%;
+  max-width: 34rem;
+  margin-inline: auto;
   border-collapse: collapse;
   font-size: calc(var(--ts) * 0.95);
   font-variant-numeric: tabular-nums;
@@ -1935,7 +1937,7 @@
   padding: 0 0.4rem 0.15rem;
 }
 .gc-table td { padding: 0.18rem 0.4rem; border-top: 1px solid rgba(255, 246, 224, 0.14); }
-.gc-table td:first-child { width: 2.2em; text-align: center; }
+.gc-table td:first-child, .gc-table th:first-child { width: 2.4em; text-align: center; }
 .gc-table td:nth-child(3), .gc-table th:nth-child(3),
 .gc-table td:last-child, .gc-table th:last-child { text-align: right; }
 .gc-table tr.gc-you td { color: var(--sun); font-weight: 700; }
