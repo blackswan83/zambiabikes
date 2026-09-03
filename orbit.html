@@ -3,15 +3,18 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Trial — the freeride game — Zambia Bikes</title>
-<meta name="description" content="Trial is the free freeride mountain-bike game from Zambia Bikes. Every mountain is generated from one number: ride Nyika, Miombo, the Kalahari, Batoka Gorge and the Mafinga Hills, spin and flip off jumps that were never built the same way twice, and keep the bail bar full. No chat, ever.">
+<title>Orbit — the space game — Zambia Bikes</title>
+<meta name="description" content="Orbit is the free space game from Zambia Bikes. Fly a mining skiff through the Copperbelt, thread the survey frames, cut copper out of the rock and get home before the shield goes. Every belt is grown from one number. No chat, ever.">
 <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/styles.css">
 <link rel="stylesheet" href="css/game.css">
+<!-- the dark-screen furniture — screens, career map, briefing, results — was
+     written for Trial and is shared as-is; css/orbit.css only re-skins it -->
 <link rel="stylesheet" href="css/trial.css">
+<link rel="stylesheet" href="css/orbit.css">
 </head>
 <body class="page-game">
 <a class="skip-link" href="#main">Skip to content</a>
@@ -43,8 +46,8 @@
       <a href="index.html">Home</a>
       <a href="tours.html">Tours &amp; Events</a>
       <a href="game.html">Zambia Rush</a>
-      <a href="trial.html" class="is-active" aria-current="page">Trial</a>
-      <a href="orbit.html">Orbit</a>
+      <a href="trial.html">Trial</a>
+      <a href="orbit.html" class="is-active" aria-current="page">Orbit</a>
       <a href="about.html">Our Story</a>
       <a href="safety.html">Parents &amp; Safety</a>
       <a class="btn btn--copper btn--nav" href="join.html">Join the Club</a>
@@ -57,10 +60,10 @@
   <section class="page-hero">
     <div class="container">
       <p class="kicker">Free to play · No chat · No ads · No downloads</p>
-      <h1>Trial <em>freeride</em> 🏔️</h1>
-      <p class="lede">Pick a mountain and it grows itself — the ridge, the trail, the banked corners and
-      every jump cut into them, all from one number you can write down and share. Send the lips, spin
-      and flip on the way down, and keep the bail bar full: style is the only thing that patches you up.</p>
+      <h1>Orbit <em>the belt</em> 🛰️</h1>
+      <p class="lede">Zambia's sky is properly dark, so the club looked up and kept going. Fly a mining
+      skiff down a seeded asteroid belt, thread the survey frames the club bolted to the rocks, cut
+      copper out of the seams — and bring it home before the shield runs out.</p>
     </div>
     <div class="hero-hills" aria-hidden="true"><svg viewBox="0 0 1440 90" preserveAspectRatio="none" focusable="false"><path d="M0 60 Q 240 20 480 52 T 960 46 T 1440 40 L 1440 90 L 0 90 Z" fill="#FFF9EE"/></svg></div>
   </section>
@@ -68,53 +71,63 @@
   <section class="section">
     <div class="container game-shell">
 
-      <div class="game-stage trial-stage" id="trial-stage">
-        <canvas id="trial-canvas" width="960" height="540" aria-label="Trial — freeride mountain-biking game. Use the keyboard or the on-screen buttons to play."></canvas>
+      <div class="game-stage orbit-stage" id="orbit-stage">
+        <canvas id="orbit-canvas" width="960" height="540" aria-label="Orbit — asteroid belt flying game. Use the keyboard or the on-screen buttons to fly."></canvas>
+        <canvas class="o-overlay" id="hud-canvas" width="960" height="540" aria-hidden="true"></canvas>
         <div class="stage-vignette" aria-hidden="true"></div>
         <button type="button" class="fs-btn" id="btn-fs" aria-label="Full screen" title="Full screen (F)">⛶</button>
 
         <!-- ---------- HUD ---------- -->
-        <div class="hud trial-hud" id="hud" hidden>
+        <div class="hud orbit-hud" id="hud" hidden>
           <div class="hud-top">
             <span class="hud-chip" id="hud-time">0:00.0</span>
-            <span class="hud-chip" id="hud-speed">0 km/h</span>
+            <span class="hud-chip" id="hud-speed">0 m/s</span>
+            <span class="hud-chip" id="hud-gates">⭕ 0/0</span>
+            <span class="hud-chip" id="hud-ore">⛏️ 0</span>
           </div>
 
           <div class="t-style">
-            <span class="t-style__num" id="hud-style">0</span>
-            <span class="t-style__label">style</span>
+            <span class="t-style__num" id="hud-score">0</span>
+            <span class="t-style__label">score</span>
             <span class="t-combo" id="hud-combo" hidden>×1</span>
           </div>
 
-          <div class="t-bail" aria-label="Bail bar">
-            <div class="t-bail__fill" id="hud-bail-fill"></div>
-            <span class="t-bail__cap" aria-hidden="true"></span>
+          <div class="o-bars">
+            <div class="o-bar o-bar--shield" aria-label="Shield">
+              <div class="o-bar__fill" id="hud-shield-fill"></div>
+              <span class="o-bar__tag">SHD</span>
+            </div>
+            <div class="o-bar o-bar--heat" aria-label="Drive heat">
+              <div class="o-bar__fill" id="hud-heat-fill"></div>
+              <span class="o-bar__tag">HEAT</span>
+            </div>
           </div>
-
-          <canvas class="t-mini" id="minimap" width="150" height="210" aria-hidden="true"></canvas>
 
           <div class="t-objective" id="hud-objective">
             <div class="ob-fill"></div>
           </div>
 
-          <div class="t-trick" id="hud-trick" hidden></div>
+          <div class="o-warn" id="hud-warn" hidden>Off the survey — turn back</div>
+          <div class="t-trick" id="hud-toast" hidden></div>
           <div class="t-countdown" id="hud-countdown" hidden>Ready</div>
 
-          <div class="hud-progress"><div class="hud-progress__fill" id="hud-progress-fill"></div><span class="hud-progress__flag" aria-hidden="true">🏁</span></div>
+          <div class="hud-progress"><div class="hud-progress__fill" id="hud-progress-fill"></div><span class="hud-progress__flag" aria-hidden="true">🏭</span></div>
         </div>
 
         <!-- ---------- touch controls ---------- -->
-        <div class="touch-controls trial-touch" id="touch-controls" hidden>
+        <div class="touch-controls orbit-touch" id="touch-controls" hidden>
           <div class="tc-cluster tc-left-cluster">
-            <button type="button" class="tc-btn" id="tc-left" aria-label="Steer left / spin left">◀</button>
-            <button type="button" class="tc-btn" id="tc-right" aria-label="Steer right / spin right">▶</button>
+            <button type="button" class="tc-btn" id="tc-left" aria-label="Nose left">◀</button>
+            <button type="button" class="tc-btn" id="tc-up" aria-label="Nose up">▲</button>
+            <button type="button" class="tc-btn" id="tc-down" aria-label="Nose down">▼</button>
+            <button type="button" class="tc-btn" id="tc-right" aria-label="Nose right">▶</button>
           </div>
           <div class="tc-cluster tc-right-cluster">
-            <button type="button" class="tc-btn tc-btn--whip" id="tc-whipl" aria-label="Whip left">↰</button>
-            <button type="button" class="tc-btn tc-btn--whip" id="tc-whipr" aria-label="Whip right">↱</button>
-            <button type="button" class="tc-btn tc-btn--brake" id="tc-brake" aria-label="Brake / front flip">▼</button>
-            <button type="button" class="tc-btn tc-btn--hop" id="tc-hop" aria-label="Hop">⤒</button>
-            <button type="button" class="tc-btn tc-btn--pedal" id="tc-pedal" aria-label="Pedal / back flip">▲</button>
+            <button type="button" class="tc-btn tc-btn--roll" id="tc-rolll" aria-label="Roll left">↰</button>
+            <button type="button" class="tc-btn tc-btn--roll" id="tc-rollr" aria-label="Roll right">↱</button>
+            <button type="button" class="tc-btn tc-btn--beam" id="tc-beam" aria-label="Cutting beam">⛏️</button>
+            <button type="button" class="tc-btn tc-btn--brake" id="tc-brake" aria-label="Brake">⏸</button>
+            <button type="button" class="tc-btn tc-btn--boost" id="tc-boost" aria-label="Boost">🔥</button>
           </div>
         </div>
 
@@ -123,8 +136,8 @@
           <div class="screen-inner">
             <div class="map-head">
               <div>
-                <p class="kicker">The career</p>
-                <h2>Pick your mountain</h2>
+                <p class="kicker">The survey</p>
+                <h2>Pick your sector</h2>
               </div>
               <div class="rep"><b id="rep-total">0</b><span>rep</span></div>
             </div>
@@ -135,24 +148,28 @@
 
             <div class="map-side">
               <div class="side-card">
-                <h3>Free ride</h3>
-                <p>Any mountain, any weather, no objective. Leave the code blank for a brand new one.</p>
-                <label class="fld"><span>Where</span><select id="fr-biome"></select></label>
+                <h3>Free flight</h3>
+                <p>Any belt, any twist, no objective. Leave the code blank for a brand new one.</p>
+                <label class="fld"><span>Where</span><select id="fr-sector"></select></label>
                 <label class="fld"><span>Twist</span><select id="fr-mod"></select></label>
-                <label class="fld"><span>Trail code</span><input id="fr-code" type="text" placeholder="e.g. 5PR-MAP" maxlength="9" autocomplete="off" spellcheck="false"></label>
-                <button type="button" class="btn btn--copper btn--small" id="btn-freeride">Drop in</button>
+                <label class="fld"><span>Flight code</span><input id="fr-code" type="text" placeholder="e.g. 5PR-MAP" maxlength="9" autocomplete="off" spellcheck="false"></label>
+                <button type="button" class="btn btn--copper btn--small" id="btn-freeride">Launch</button>
               </div>
               <div class="side-card">
-                <h3>Today's mountain</h3>
-                <p>The same hill for everyone, everywhere, until midnight. One run, best style wins.</p>
-                <button type="button" class="btn btn--forest btn--small" id="btn-daily">Ride today's</button>
+                <h3>Today's belt</h3>
+                <p>The same rocks for everyone, everywhere, until midnight. One run, best score wins.</p>
+                <button type="button" class="btn btn--forest btn--small" id="btn-daily">Fly today's</button>
+              </div>
+              <div class="side-card">
+                <h3>On the pad</h3>
+                <div class="ship-picker" id="ship-picker"></div>
               </div>
               <div class="side-actions">
-                <button type="button" class="btn btn--ghost btn--small" id="btn-howto">How to play</button>
-                <button type="button" class="btn btn--ghost btn--small" id="btn-assist" aria-pressed="true">🪂 Landing assist: on</button>
+                <button type="button" class="btn btn--ghost btn--small" id="btn-howto">How to fly</button>
+                <button type="button" class="btn btn--ghost btn--small" id="btn-assist" aria-pressed="true">🪶 Flight assist: on</button>
                 <button type="button" class="btn btn--ghost btn--small" id="btn-sound" aria-pressed="true">🔊 Sound: on</button>
                 <button type="button" class="btn btn--ghost btn--small" id="btn-detail">✨ Detail: full</button>
-                <a class="btn btn--ghost btn--small" href="garage.html">🔧 The Garage</a>
+                <a class="btn btn--ghost btn--small" href="trial.html">🏔️ Trial</a>
                 <a class="btn btn--ghost btn--small" href="game.html">🎮 Zambia Rush</a>
               </div>
             </div>
@@ -162,16 +179,16 @@
         <!-- ---------- briefing ---------- -->
         <div class="screen screen--brief" id="screen-brief" hidden>
           <div class="screen-inner brief-inner">
-            <p class="kicker">Trail code <b id="brief-code">···-···</b></p>
-            <h2 id="brief-where">Nyika Plateau</h2>
+            <p class="kicker">Flight code <b id="brief-code">···-···</b></p>
+            <h2 id="brief-where">Kariba Shallows</h2>
             <p class="brief-desc" id="brief-desc"></p>
             <p class="brief-mod" id="brief-mod"></p>
             <p class="brief-obj-label">Your objective</p>
             <p class="brief-obj" id="brief-obj"></p>
             <p class="brief-meta" id="brief-meta"></p>
-            <p class="brief-bike" id="brief-bike"></p>
+            <p class="brief-bike" id="brief-ship"></p>
             <div class="brief-actions">
-              <button type="button" class="btn btn--copper btn--big" id="btn-start">Drop in 🚵</button>
+              <button type="button" class="btn btn--copper btn--big" id="btn-start">Launch 🚀</button>
               <button type="button" class="btn btn--ghost" id="btn-brief-back">Back to the map</button>
             </div>
           </div>
@@ -180,33 +197,34 @@
         <!-- ---------- how to play ---------- -->
         <div class="screen screen--howto" id="screen-howto" hidden>
           <div class="screen-inner howto-inner">
-            <h2>How to ride</h2>
+            <h2>How to fly</h2>
             <div class="howto-cols">
               <div>
-                <h3>On the ground</h3>
+                <h3>The stick</h3>
                 <ul class="howto-list">
-                  <li><kbd>W</kbd> pedal</li>
-                  <li><kbd>S</kbd> brake — the fix for every jump that scares you</li>
-                  <li><kbd>A</kbd> <kbd>D</kbd> steer, and lean into the berms</li>
-                  <li><kbd>Space</kbd> <em>hold</em> to squash the bike, <em>release</em> to hop. Let go right on a lip for extra height.</li>
+                  <li><kbd>W</kbd> <kbd>S</kbd> nose up and down</li>
+                  <li><kbd>A</kbd> <kbd>D</kbd> nose left and right</li>
+                  <li><kbd>Q</kbd> <kbd>E</kbd> roll — this is the one that matters</li>
+                  <li>Arrow keys do the same as <kbd>WASD</kbd>.</li>
                 </ul>
               </div>
               <div>
-                <h3>In the air</h3>
+                <h3>The frames</h3>
                 <ul class="howto-list">
-                  <li><kbd>A</kbd> <kbd>D</kbd> spin — 360, 720, keep going</li>
-                  <li><kbd>W</kbd> <kbd>S</kbd> backflip and frontflip</li>
-                  <li><kbd>Q</kbd> <kbd>E</kbd> whip the back end out</li>
-                  <li>Bring it all the way round before the wheels touch, or you go down.</li>
+                  <li>Survey frames are cut long one way and narrow the other, and every one is bolted on at a different angle.</li>
+                  <li><em>Roll until your wings lie along the slot</em>, then fly through the middle of it.</li>
+                  <li>Squared up and centred is a <b>clean</b> thread: more than double the points, and it patches the shield.</li>
+                  <li>Clip the frame and it hurts. Fly round the outside and you just lose the combo.</li>
                 </ul>
               </div>
               <div>
-                <h3>The bail bar</h3>
+                <h3>Copper &amp; shield</h3>
                 <ul class="howto-list">
-                  <li>Every crash takes a bite. At zero, the run is over.</li>
-                  <li>Landing tricks puts it back — the better the trick, the more you get.</li>
-                  <li>Checkpoints top you up a little and catch you when you go down.</li>
-                  <li>Chain tricks without crashing to stack the multiplier.</li>
+                  <li>Fly through loose copper to scoop it. The rich seams sit out at the edge of the corridor, where the tumbling rock is.</li>
+                  <li>Hold <kbd>X</kbd> to run the cutting beam: line up an orange-veined rock and it opens.</li>
+                  <li><kbd>Space</kbd> boosts and heats the drive; let it cook and it cuts out until it cools.</li>
+                  <li><kbd>Shift</kbd> brakes — the fix for every frame that scares you.</li>
+                  <li>Every knock takes a bite out of the shield. At zero the run is over.</li>
                 </ul>
               </div>
             </div>
@@ -220,7 +238,7 @@
           <div class="screen-inner narrow">
             <h2>Paused</h2>
             <div class="stack">
-              <button type="button" class="btn btn--copper" id="btn-resume">Keep riding</button>
+              <button type="button" class="btn btn--copper" id="btn-resume">Keep flying</button>
               <button type="button" class="btn btn--ghost" id="btn-restart">Restart run</button>
               <button type="button" class="btn btn--ghost" id="btn-quit">Back to the map</button>
             </div>
@@ -235,7 +253,7 @@
             <div class="res-stats" id="res-stats"></div>
             <div class="res-extra" id="res-extra"></div>
             <div class="stack">
-              <button type="button" class="btn btn--copper" id="btn-retry">Ride it again</button>
+              <button type="button" class="btn btn--copper" id="btn-retry">Fly it again</button>
               <button type="button" class="btn btn--ghost" id="btn-map">Back to the map</button>
             </div>
           </div>
@@ -244,20 +262,20 @@
         <div class="screen screen--fallback" id="webgl-fallback" hidden>
           <div class="screen-inner narrow">
             <h2>This browser can't do 3D</h2>
-            <p>Trial needs WebGL. Zambia Rush Classic runs on anything at all.</p>
+            <p>Orbit needs WebGL. Zambia Rush Classic runs on anything at all.</p>
             <a class="btn btn--copper btn--big" href="game2d.html">Play Zambia Rush Classic</a>
           </div>
         </div>
       </div>
 
       <div class="trial-blurb">
-        <h2>One number, one mountain</h2>
-        <p>Every run in Trial is grown from a seed, so a trail code like <b>5PR-MAP</b> is the whole hill:
-        the same ridge, the same corners, the same jumps in the same places, for anyone who types it in.
-        Beat a friend's score on their mountain, or send them yours.</p>
-        <p>The career runs five stages down the country — Nyika, the miombo woodland, the Kalahari sand
-        belt, Batoka Gorge and the Mafinga Hills — and the seeds come from <em>your</em> career number, so
-        your Batoka is nobody else's Batoka.</p>
+        <h2>One number, one belt</h2>
+        <p>Every run in Orbit is grown from a seed, so a flight code like <b>5PR-MAP</b> is the whole
+        sector: the same line through the rock, the same frames at the same angles, the same copper in
+        the same seams, for anyone who types it in.</p>
+        <p>The survey runs five stages out from the lake — Kariba, the Copperbelt, the Kafue dust, the
+        Mosi ice rings and Batoka Deep — and the seeds come from <em>your</em> survey number, so your
+        Batoka is nobody else's Batoka.</p>
       </div>
 
     </div>
@@ -308,10 +326,9 @@
 
 <script src="js/tours-data.js"></script>
 <script src="js/main.js"></script>
-<script src="js/bikes.js"></script>
-<script src="js/trial-core.js"></script>
-<script src="js/trial-audio.js"></script>
+<script src="js/orbit-core.js"></script>
+<script src="js/orbit-audio.js"></script>
 <script type="importmap">{ "imports": { "three": "./js/vendor/three.module.min.js" } }</script>
-<script type="module" src="js/trial.js"></script>
+<script type="module" src="js/orbit.js"></script>
 </body>
 </html>

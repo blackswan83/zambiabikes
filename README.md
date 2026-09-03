@@ -7,9 +7,11 @@ The website of Zambia Bikes — a kids' mountain-biking club founded by two
 (Chief Fun & Games Officer), and safeguarded by their Grown-Up Crew.
 
 The site organizes guided mountain-bike tours across Zambia for kids and
-hosts two free Descenders-inspired games: **Zambia Rush**, a downhill racer
-across five hand-built Zambian mountains, and **Trial**, a freeride game where
-every mountain is generated from a single number.
+hosts three free games: **Zambia Rush**, a Descenders-inspired downhill racer
+across five hand-built Zambian mountains; **Trial**, a freeride game where
+every mountain is generated from a single number; and **Orbit**, where the
+club leaves the ground altogether and flies a mining skiff through a seeded
+asteroid belt.
 
 ## What's inside
 
@@ -20,6 +22,7 @@ every mountain is generated from a single number.
 | `game.html` | **Zambia Rush 3D** — the full 3D downhill game |
 | `game2d.html` | **Zambia Rush Classic** — the 2D version, runs on anything |
 | `trial.html` | **Trial** — the freeride game: every mountain generated from one number |
+| `orbit.html` | **Orbit** — the space game: fly the belt, thread the survey frames |
 | `garage.html` | **The Garage** — build and mod your bike in 3D |
 | `join.html` | Membership request form (vetted, never automatic) |
 | `about.html` | The founders' story, values, the Grown-Up Crew |
@@ -155,6 +158,71 @@ jump sizes — and counts the crashes:
 
 Gaps and drops are *allowed* to punish you — but only for sending it flat
 out, which is what the brake is for.
+
+## The third game — Orbit
+
+Zambia's sky is properly dark, so the club looked up and kept going. **Orbit**
+is a flying game: you take a mining skiff down a seeded asteroid belt, thread
+the survey frames the club bolted to the rocks, cut copper out of the seams,
+and dock at the refinery before the shield gives out. Same split as the other
+two games, and the same promise — one number is one belt, so a flight code
+like `5PR-MAP` *is* the sector.
+
+- **`js/orbit-core.js`** — the headless simulation (`window.ORBIT`; exports
+  under node). Everything is sampled against a course that wanders in x and y
+  but never doubles back in z, so the whole world — which sample of the line
+  you are on, which frame is next, which bucket of rock you might hit — is a
+  lookup from the ship's z with no searching at all. Attitude is a quaternion,
+  because a belt has no horizon and Euler angles lock the first time somebody
+  loops. Pitch, yaw and roll are kept strictly separate; the bank you see in a
+  turn is the renderer leaning the hull inside its rig, never the physics
+  faking it.
+- **`js/orbit.js`** — the Three.js renderer, the HUD and the survey career.
+  Instanced asteroids around the line, additive point clouds for the copper
+  and the seam markers, extruded frames that flash when you thread them, a
+  planet below with a real fresnel limb, and a marker layer drawn over the
+  belt that projects the next two frames at their true angle, so which way a
+  slot lies is readable two hundred metres out. All textures are generated on
+  canvas — the game ships zero image assets.
+- **`js/orbit-audio.js`** — the drive, the dust going past the hull and every
+  one-shot, synthesised in the browser.
+
+**What makes it Orbit and not a space shooter**
+
+| | |
+| --- | --- |
+| Frames | Survey frames are cut long one way and narrow the other, and each is bolted on at its own angle. **Roll until your wings lie along the slot**, then fly through the middle: the hull's footprint in a frame is a real oriented box, so a quarter turn out costs most of the opening. |
+| Clean | Centred *and* squared up is a clean thread — more than double the points, and it patches the shield. It is the whole skill of the game. |
+| Copper | Loose copper is scooped by flying through it. The rich seams sit out at the edge of the corridor, where the tumbling rock is, so going for one is a decision rather than a detour. |
+| The beam | Some rock is veined, and glows. Line one up, hold <kbd>X</kbd>, and the cutting beam opens it. |
+| Heat | Boost is unlimited and heat is not. Cook the drive and it cuts out until it cools. |
+| Shield | A bar, not lives. Every knock takes a bite; frames and copper put it back; at zero the run is over. |
+| Hulls | Three, earned with rep and never bought: the forgiving **Chipata Kite**, the heavy **Copper Hauler** whose wingspan makes every slot matter, and the twitchy **Zambezi Needle**. |
+| Assist | Flight assist is on by default: the hull flies where it is aimed. Off, the belt is Newtonian and a hard turn is a drift — and every point is worth a quarter more. |
+
+Five sectors out from the lake: **Kariba Shallows** (the training water),
+**The Copperbelt** (dense metal, and more copper than you can carry), **Kafue
+Drift** (a dust river with cross-currents that push you off the line), **Mosi
+Rings** (ice, and the tightest frames), and **Batoka Deep** (a rift with walls
+you cannot see the top of). Seven twists rearrange any of them — Eclipse takes
+the sun away and leaves you the frame lights.
+
+**Tests.** `npm test` runs `test/orbit.test.js` under plain node alongside
+Trial's suite. The claims it pins down are the ones the game rests on: one
+seed is one belt, a flight code rebuilds exactly that belt, nothing solid ever
+stands in the flight corridor — *and nor does any tumbling rock, at any moment
+of any run* — copper is always inside the corridor and never inside a rock,
+every frame sits on the line, and every hull that lies along a slot fits
+through it with room to spare.
+
+**Flyability is measured, not assumed.** The core ships a reference pilot
+(`autoInput`) that flies by cross-track guidance: rather than chase a point on
+the line, it asks for the sideways speed that would null its own offset, which
+is what stops a fast hull weaving across the line and into the rock. The suite
+flies it through every sector × every twist × assist on and off, and requires
+it to reach the refinery every time with more than half its shield — and, with
+the assist on, to thread at least 70 % of the frames. The same pilot can take
+the stick mid-run from the console with `ORBIT_AUTOPILOT(true)`.
 
 ## Kid-safety design decisions
 
