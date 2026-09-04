@@ -326,3 +326,23 @@ python3 tools/bundle-trial.py
 
 The generator is deliberately dumb about nothing: it walks the real import
 graph from `js/trial.js`, so a new addon or module is picked up automatically.
+
+### Playing Orbit without a server
+
+`dist/orbit-standalone.html` does the same job for Orbit, but by a different
+route. Rather than carry each ES module as a `data:` URL, `tools/bundle-orbit.py`
+**flattens** the graph: every module becomes a function in a small registry, its
+imports become destructuring from that registry, and its exports become the
+object it returns. What comes out is one ordinary script with no `import`
+statements, no import map and no `data:` URLs anywhere.
+
+```bash
+python3 tools/bundle-orbit.py
+```
+
+That matters beyond tidiness. A `data:` URL is a script source, and any strict
+Content-Security-Policy that allows inline script still refuses it — so the
+flattened build is the one that runs from `file://`, off a memory stick, *and*
+anywhere the page is served under a policy it did not choose. Live bindings
+become a snapshot taken when each module runs, which costs nothing here:
+Three.js exports classes and constants and never reassigns them.
