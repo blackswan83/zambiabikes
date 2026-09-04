@@ -372,6 +372,12 @@
         case "bump":
           objectHit(ev.what === "tree" ? "tree" : (ev.what === "boulder" ? "rock" : "scrub"), 0.35);
           break;
+        case "wall":
+          /* a hollow, springy thud — you hit something that is not there */
+          tone(240, 0.16, "sine", 0.28, 90);
+          tone(360, 0.22, "triangle", 0.14, 150, 0.02);
+          burst({ freq: 700, q: 3, dur: 0.12, vol: 0.18 });
+          break;
         case "gate":
           tone(720, 0.1, "triangle", 0.13);
           tone(1080, 0.16, "triangle", 0.1, 0, 0.07);

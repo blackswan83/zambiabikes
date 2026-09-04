@@ -124,6 +124,8 @@ places for anyone who types it in.
 | Hops | Hold `Space` to preload, release to pop. Let go right on a lip for extra height. |
 | Scoring | Style points per landed trick, escalating with rotation, plus a combo multiplier that stacks while you keep landing them. |
 | Damage | A bail bar, not lives. Every crash takes a bite; style refills it; at zero the run is over. |
+| More air | Every mountain now carries more jumps, and **Jump Park** (🛫) packs them wall to wall. |
+| Ghost Walls | 👻 A twist that scatters invisible posts across the trail — you can't see them, you only feel them. They stop you dead but never hurt you, and you can always weave around. |
 | Never stuck | Go down in the same place three times and you walk that section. A checkpoint that cannot deliver enough speed to clear what is in front of it would otherwise loop until the bar was empty, with no way down at all. |
 | Progress | Five career stages, three nodes each, seeded from *your* career number — your Batoka is nobody else's Batoka. |
 | Assist | Landing assist is on by default (~115° of forgiveness). Off, it is ~55°. |

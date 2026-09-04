@@ -173,7 +173,17 @@
     marathon:{ id: "marathon", name: "Marathon", icon: "⏱️", desc: "A run half again as long, with the checkpoints spread thin.",
                apply: function (s) { s.length = Math.round(s.length * 1.55); s.gateEvery *= 1.5; } },
     sprint:  { id: "sprint", name: "Sprint", icon: "⚡", desc: "Short, mean and against the clock.",
-               apply: function (s) { s.length = Math.round(s.length * 0.62); s.featureGap *= 0.8; } }
+               apply: function (s) { s.length = Math.round(s.length * 0.62); s.featureGap *= 0.8; } },
+    jumps:   { id: "jumps", name: "Jump Park", icon: "🛫", desc: "Jump after jump after jump. Barely any flat between the lips.",
+               apply: function (s) {
+                 s.featureGap *= 0.62;
+                 s.weights.kicker = (s.weights.kicker || 10) * 2.2;
+                 s.weights.hip = (s.weights.hip || 4) * 2.2;
+                 s.weights.gap = (s.weights.gap || 4) * 1.3;
+                 s.weights.roller = (s.weights.roller || 8) * 0.4;
+               } },
+    ghost:   { id: "ghost", name: "Ghost Walls", icon: "👻", desc: "Invisible posts on the trail. You cannot see them — you only feel them. Weave!",
+               apply: function (s) { s.ghostWalls = true; } }
   };
 
   /* ================= objectives =================
@@ -236,6 +246,13 @@
       weights: {}
     };
     for (var k in b.weights) if (b.weights.hasOwnProperty(k)) spec.weights[k] = b.weights[k];
+    /* jumpier by default: features sit a little closer together, and the two
+       forgiving jumps show up more often. The punishing ones (gap, drop) are
+       left alone so the mountain stays as winnable as the tests demand. */
+    spec.featureGap *= 0.9;
+    if (spec.weights.kicker) spec.weights.kicker *= 1.45;
+    if (spec.weights.hip) spec.weights.hip *= 1.5;
+    spec.ghostWalls = false;
     var mod = MODIFIERS[spec.modifier];
     if (mod && mod.apply) mod.apply(spec);
     return spec;
@@ -589,7 +606,7 @@
       nx: nx, nz: nz, z0: z0, x0: -X_HALF, step: GRID_STEP,
       H: H, TD: TD, trail: pts, trailN: n, trailDS: TRAIL_DS,
       wid: F.wid, bank: F.bank, rough: F.rough,
-      features: features, gates: [], props: [], cover: [], hash: {}, hashCell: 8,
+      features: features, gates: [], props: [], cover: [], barriers: [], hash: {}, hashCell: 8,
       finishIdx: n - 3, lengthM: spec.length, xHalf: X_HALF
     };
 
@@ -610,8 +627,44 @@
 
     /* ---- props ---- */
     placeProps(world, spec, mulberry32(spec.seed + 991));
+    if (spec.ghostWalls) placeBarriers(world, spec, mulberry32(spec.seed + 7331));
 
     return world;
+  }
+
+  /* Invisible barriers: single posts you cannot see, dropped across the trail
+     corridor. You smack one by surprise and stop dead — but they are posts,
+     not walls, so you can always weave around them once you know they are
+     there, and no run is ever blocked. Kept clear of feature lips and
+     checkpoints so you never get walled mid-jump or on a respawn. */
+  function placeBarriers(world, spec, rng) {
+    var barriers = [];
+    var pts = world.trail, n = world.trailN;
+    var nearFeature = {};
+    world.features.forEach(function (f) {
+      for (var k = f.i0 - 4; k <= f.i1 + 4; k++) nearFeature[k] = 1;
+    });
+    world.gates.forEach(function (g) {
+      for (var k = g - 4; k <= g + 4; k++) nearFeature[k] = 1;
+    });
+    var d = 80;
+    var endD = spec.length - 90;
+    while (d < endD) {
+      var i = Math.round(d / TRAIL_DS);
+      if (i > 6 && i < n - 8 && !nearFeature[i]) {
+        var p = pts[i];
+        var wid = world.wid[i];
+        /* somewhere across the corridor, but not dead-centre every time */
+        var lat = (rng() * 1.7 - 0.85) * wid;
+        var bx = p.x + Math.cos(p.yaw) * lat;
+        var bz = p.z - Math.sin(p.yaw) * lat;
+        barriers.push({ x: bx, z: bz, y: heightAt(world, bx, bz), i: i, r: 1.15 });
+        d += 60 + rng() * 70;
+      } else {
+        d += 22;
+      }
+    }
+    world.barriers = barriers;
   }
 
   /* nearest trail index to a z, using the fact that trail z only increases */
@@ -780,7 +833,7 @@
       spinV: 0, flipV: 0, airVel: 0,
 
       crashT: 0, crashKind: null, dead: false, invuln: 0, chatter: 0, offTrail: false,
-      bailIdx: -99, bailStreak: 0, portages: 0,
+      bailIdx: -99, bailStreak: 0, portages: 0, barPtr: 0, wallHits: 0,
       health: MAX_HEALTH, maxHealth: MAX_HEALTH, bails: 0,
 
       style: 0, airStyle: 0, combo: 0, comboT: 0, comboBest: 0,
@@ -1059,6 +1112,31 @@
       }
     }
 
+    /* --- invisible barriers: smack a ghost post, stop dead --- */
+    if (world.barriers && world.barriers.length && st.crashT <= 0) {
+      var bar = world.barriers;
+      /* advance a pointer as z increases so we only ever check a few */
+      while (st.barPtr < bar.length && bar[st.barPtr].z < st.z - 4) st.barPtr++;
+      for (var bi = st.barPtr; bi < bar.length && bar[bi].z < st.z + 4; bi++) {
+        var b = bar[bi];
+        var bdx = b.x - st.x, bdz = b.z - st.z;
+        var br = b.r + 0.4;
+        if (bdx * bdx + bdz * bdz < br * br && st.y < b.y + 3.0) {
+          var bl = Math.sqrt(bdx * bdx + bdz * bdz) || 1;
+          /* shove back out of the post and kill the forward drive */
+          st.x -= (bdx / bl) * (br - bl + 0.05);
+          st.z -= (bdz / bl) * (br - bl + 0.05);
+          var wspeed = Math.sqrt(st.vx * st.vx + st.vz * st.vz);
+          st.vx *= 0.06; st.vz *= 0.06;
+          st.combo = 0; st.comboT = 0;
+          st.spin = st.flip = st.whip = st.whipMax = 0;
+          st.wallHits++;
+          ev.push({ t: "wall", speed: wspeed });
+          break;
+        }
+      }
+    }
+
     /* --- trail progress --- */
     var tr = world.trail;
     var best = st.trailIdx, bestD = dist2(tr[best], st);
@@ -1237,7 +1315,7 @@
       topSpeed: st.topSpeed * 3.6,
       health: st.health,
       features: world.features.length, featHit: st.featHit, featBigHit: st.featBigHit,
-      portages: st.portages,
+      portages: st.portages, wallHits: st.wallHits,
       progress: Math.min(1, st.trailIdx / world.finishIdx)
     };
   }
@@ -1249,9 +1327,9 @@
   var STAGE_PLAN = [
     { name: "Rookie Ridge", pool: ["nyika"], mods: ["none", "none", "bigair"], len: 1150, tier: 1 },
     { name: "Into the Miombo", pool: ["miombo", "nyika"], mods: ["none", "trees", "sprint"], len: 1350, tier: 2 },
-    { name: "Sand & Sun", pool: ["kalahari", "nyika"], mods: ["bigair", "none", "rain"], len: 1500, tier: 3 },
+    { name: "Sand & Sun", pool: ["kalahari", "nyika"], mods: ["bigair", "jumps", "rain"], len: 1500, tier: 3 },
     { name: "The Gorge", pool: ["batoka", "miombo"], mods: ["steep", "none", "marathon"], len: 1650, tier: 4 },
-    { name: "Mafinga Crown", pool: ["mafinga", "batoka"], mods: ["night", "steep", "bigair"], len: 1900, tier: 5 }
+    { name: "Mafinga Crown", pool: ["mafinga", "batoka"], mods: ["night", "ghost", "bigair"], len: 1900, tier: 5 }
   ];
 
   var OBJ_PLAN = [
